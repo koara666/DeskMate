@@ -39,6 +39,11 @@
   2. 重新打开 PowerShell，输入 `gh auth login` 回车，按提示选择：`GitHub.com` → `HTTPS` → `Login with a web browser`，然后在浏览器里登录并输入屏幕上显示的验证码。
   3. 告诉 agent「GitHub 已登录」。agent 会创建一个**私有**仓库并推送（不会设成公开，也不会发布 Release）。
 - **注意**：你电脑的 git 设置了代理 `127.0.0.1:7897`。推送时如果代理软件没开，可能会连不上——推送前请打开代理软件，或者告诉 agent。
+- **当前状态（2026-10-28）**：你已经建好了 https://github.com/koara666/DeskMate ，但它是**公开**的，agent 还没有推送。请把它改成私有：
+  1. 浏览器打开 https://github.com/koara666/DeskMate/settings ，翻到页面最下面红框「Danger Zone」。
+  2. 点「Change repository visibility」→「Change to private」，按提示确认（可能要输入仓库名 `koara666/DeskMate`）。
+  3. 告诉 agent「已改成私有」。agent 会再检查一次，确认是私有后才推送。不需要安装上面的 GitHub 命令行工具：第一次推送时 Windows 会弹出 GitHub 登录窗口，在里面登录即可。
+  - agent 检查私有的方法：不登录访问 `https://api.github.com/repos/koara666/DeskMate`，私有仓库会返回 404；返回 200 且 `"private": false` 就说明还是公开的，**不要推送**。
 
 ### [ ] 3. （可选）给角色换上你自己的图片
 - **为什么**：仓库里只能放原创的简单占位形象（角色大多是别人的版权作品，不能把官方图片放进 GitHub）。你自己电脑上用什么图片由你决定，程序会优先用你的图片，而且这些图片不会进入仓库。
