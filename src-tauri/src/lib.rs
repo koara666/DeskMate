@@ -10,6 +10,7 @@ pub mod desktop;
 pub mod filter;
 pub mod geometry;
 pub mod logging;
+pub mod memory;
 pub mod paths;
 pub mod prompt;
 pub mod redact;
@@ -18,6 +19,7 @@ pub mod settings;
 pub mod settings_cmds;
 pub mod state;
 pub mod usage;
+pub mod worker;
 
 use paths::DataPaths;
 use state::AppState;
@@ -48,14 +50,15 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     logging::init(&paths.logs());
     log::info!("DeskMate {} 启动", env!("CARGO_PKG_VERSION"));
 
-    let conn = db::open(&paths.db(), &paths.backups())?;
+    // 数据库损坏时自动从最近的备份恢复
+    let (conn, recovery_note) = memory::backup::open_with_recovery(&paths.db(), &paths.backups())?;
     let builtin = builtin_characters_dir(app);
-    app.manage(AppState::new(
-        paths,
-        conn,
-        builtin,
-        Box::new(secrets::KeyringStore),
-    ));
+    let state = AppState::new(paths, conn, builtin, Box::new(secrets::KeyringStore));
+    if let Some(note) = recovery_note {
+        log::warn!("{note}");
+        state.set_notice(note);
+    }
+    app.manage(state);
 
     let handle = app.handle().clone();
     desktop::create_pet(&handle)?;
@@ -63,6 +66,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(tab) = std::env::args().find_map(|a| desktop::parse_settings_arg(&a)) {
         desktop::open_settings_tab(&handle, tab)?;
     }
+
+    // 后台维护：备份、整理记忆（低频）
+    worker::spawn(handle.clone());
 
     // 桌宠出现后再在后台准备聊天窗口，不拖慢启动
     tauri::async_runtime::spawn(async move {

@@ -6,7 +6,8 @@ use crate::backends::{
 };
 use crate::character::{self, Character};
 use crate::filter::{BannedWords, StreamFilter};
-use crate::prompt::{self, PromptBudget, PromptParts};
+use crate::memory::{self, conversation, forget};
+use crate::prompt::{self, MemorySnippet, PromptBudget, PromptParts};
 use crate::state::AppState;
 use crate::usage;
 use serde::Serialize;
@@ -53,28 +54,13 @@ struct Active {
     cancel: CancellationToken,
 }
 
+/// 正在进行的生成（对话历史在数据库里，见 memory::conversation）
 #[derive(Default)]
 pub struct ChatState {
-    /// 本次运行的对话历史（M4 起改为存数据库）
-    history: Mutex<Vec<ChatMessage>>,
     active: Mutex<Option<Active>>,
 }
 
 impl ChatState {
-    pub fn history(&self) -> Vec<ChatMessage> {
-        self.history
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
-    }
-
-    fn push(&self, m: ChatMessage) {
-        self.history
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(m);
-    }
-
     /// 开始新一轮：取消正在进行的生成，登记新的取消令牌
     fn begin(&self, id: &str) -> CancellationToken {
         let mut a = self.active.lock().unwrap_or_else(|e| e.into_inner());
@@ -105,19 +91,6 @@ impl ChatState {
                 true
             }
             _ => false,
-        }
-    }
-
-    /// 重新生成前：去掉最后一条回复和最后一条用户消息，返回那条用户消息
-    pub fn pop_last_turn(&self) -> Option<String> {
-        let mut h = self.history.lock().unwrap_or_else(|e| e.into_inner());
-        while h.last().is_some_and(|m| m.role == Role::Assistant) {
-            h.pop();
-        }
-        if h.last().is_some_and(|m| m.role == Role::User) {
-            h.pop().map(|m| m.content)
-        } else {
-            None
         }
     }
 }
@@ -296,6 +269,115 @@ pub fn voiced_error(err: &BackendError, c: Option<&Character>) -> String {
     }
 }
 
+/// 一轮对话需要的上下文
+#[derive(Debug, Default)]
+pub struct TurnContext {
+    pub conversation_id: Option<i64>,
+    /// 本次会话之前的消息（不含本轮）
+    pub history: Vec<ChatMessage>,
+    /// 用户档案（稳定，进可缓存的系统提示词）
+    pub profile: Vec<String>,
+    /// 本轮相关记忆
+    pub memories: Vec<MemorySnippet>,
+    /// 程序给模型的提示（比如「刚才删除了记忆」）
+    pub notes: Vec<String>,
+    /// 存进聊天记录的用户消息（「忘掉」指令不原样保存，免得又被记住）
+    pub stored_user_text: String,
+}
+
+fn day_of(ts: i64) -> String {
+    chrono::DateTime::from_timestamp(ts, 0)
+        .map(|d| {
+            d.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d")
+                .to_string()
+        })
+        .unwrap_or_default()
+}
+
+/// 准备一轮对话：找到/新建会话、处理「忘掉这件事」、检索相关记忆
+pub fn prepare_turn(
+    state: &AppState,
+    character_id: &str,
+    user_text: &str,
+    now: i64,
+) -> TurnContext {
+    let paused = state.settings().memory_paused;
+    let db = state.db();
+    let mut t = TurnContext {
+        stored_user_text: user_text.to_string(),
+        ..Default::default()
+    };
+    let conv = match conversation::current_or_new(&db, character_id, now, paused) {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("打开会话失败：{e}");
+            return t;
+        }
+    };
+    t.conversation_id = Some(conv);
+
+    let forget_req = forget::detect(user_text);
+    if let Some(f) = &forget_req {
+        let mut dropped_turn = false;
+        let target = match &f.target {
+            Some(x) => Some(x.clone()),
+            // 「忘掉这件事」= 刚才那一轮
+            None => {
+                let last = conversation::forget_last_turn(&db, conv).ok().flatten();
+                dropped_turn = last.is_some();
+                last
+            }
+        };
+        let removed = target
+            .as_deref()
+            .map(|x| {
+                forget::forget_matching(&db, x)
+                    .map(|v| v.len())
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0);
+        log::info!("「忘掉」指令：删除了 {removed} 条记忆");
+        t.stored_user_text = "（我请你忘掉了一件事）".into();
+        t.notes.push(format!(
+            "用户要求你忘掉一件事。程序已经删除了 {removed} 条相关的长期记忆{}。请用你的口吻简短确认已经忘掉了，不要复述被忘掉的内容。",
+            if dropped_turn { "和刚才那段对话" } else { "" }
+        ));
+    }
+
+    t.history = conversation::messages(&db, conv).unwrap_or_default();
+
+    // 「忘掉」的这一轮不检索，免得把要忘的内容又带回来
+    if forget_req.is_none() {
+        match memory::retrieve(&db, user_text, character_id, now) {
+            Ok(r) => {
+                let mut used: Vec<i64> = r.profile.iter().map(|m| m.id).collect();
+                t.profile = r.profile.into_iter().map(|m| m.content).collect();
+                for (m, _) in r.related {
+                    used.push(m.id);
+                    let label = if m.kind == memory::KIND_SUMMARY {
+                        format!("{} 的聊天摘要", m.day)
+                    } else {
+                        format!(
+                            "{}，{}",
+                            memory::source::label(&m.source_kind),
+                            day_of(m.updated_at)
+                        )
+                    };
+                    t.memories.push(MemorySnippet {
+                        text: m.content,
+                        source: label,
+                        untrusted: !m.trusted,
+                    });
+                }
+                let _ = memory::mark_used(&db, &used, now);
+            }
+            Err(e) => log::warn!("检索记忆失败：{e}"),
+        }
+    }
+    t
+}
+
 pub fn emit_pet_state(app: &AppHandle, s: PetState) {
     let _ = app.emit_to("pet", "pet-state", s);
 }
@@ -310,33 +392,41 @@ pub async fn run_turn(
     let state = app.state::<AppState>();
     let cancel = state.chat.begin(&request_id);
     let character = state.current_character();
-    let history = state.chat.history();
     let character_id = character
         .as_ref()
         .map(|c| c.manifest.id.clone())
-        .unwrap_or_default();
+        .unwrap_or_else(|| "default".into());
     // 禁词和自定义要求 = 全局 + 当前角色专属
     let prefs = state.settings().effective_prefs(&character_id);
+    let now = memory::now_secs();
+    let turn = prepare_turn(&state, &character_id, &user_text, now);
 
     let req = {
         let (name, persona) = character
             .as_ref()
             .map(|c| (c.manifest.name.clone(), c.persona.clone()))
             .unwrap_or_else(|| ("小伙伴".into(), String::new()));
-        let now = now_text();
+        let now_text = now_text();
         let parts = PromptParts {
             character_name: &name,
             persona: &persona,
             user_rules: &prefs.custom_rules,
             banned_words: &prefs.banned_words,
-            history: &history,
+            profile_facts: &turn.profile,
+            memories: &turn.memories,
+            notes: &turn.notes,
+            history: &turn.history,
             user_text: &user_text,
-            now: &now,
-            ..Default::default()
+            now: &now_text,
         };
         prompt::build(&parts, PromptBudget::default())
     };
-    state.chat.push(ChatMessage::user(user_text.clone()));
+    if let Some(conv) = turn.conversation_id
+        && let Err(e) =
+            conversation::append(&state.db(), conv, Role::User, &turn.stored_user_text, now)
+    {
+        log::warn!("保存聊天记录失败：{e}");
+    }
     emit_pet_state(&app, PetState::Thinking);
 
     let chat_id = state.settings().chat_backend;
@@ -378,8 +468,17 @@ pub async fn run_turn(
 
     match result {
         Ok(out) => {
-            if !out.text.is_empty() {
-                state.chat.push(ChatMessage::assistant(out.text.clone()));
+            if !out.text.is_empty()
+                && let Some(conv) = turn.conversation_id
+                && let Err(e) = conversation::append(
+                    &state.db(),
+                    conv,
+                    Role::Assistant,
+                    &out.text,
+                    memory::now_secs(),
+                )
+            {
+                log::warn!("保存聊天记录失败：{e}");
             }
             log::info!(
                 "对话完成：输入 {} / 输出 {} token，结束原因 {:?}",
@@ -463,21 +562,6 @@ mod tests {
         assert!(c2.is_cancelled());
         s.end("b");
         assert!(!s.stop("b"));
-    }
-
-    #[test]
-    fn pop_last_turn_for_regenerate() {
-        let s = ChatState::default();
-        s.push(ChatMessage::user("一"));
-        s.push(ChatMessage::assistant("回一"));
-        s.push(ChatMessage::user("二"));
-        s.push(ChatMessage::assistant("回二"));
-        assert_eq!(s.pop_last_turn().as_deref(), Some("二"));
-        assert_eq!(s.history().len(), 2);
-        // 上一轮失败（没有回复）时也能重试
-        s.push(ChatMessage::user("三"));
-        assert_eq!(s.pop_last_turn().as_deref(), Some("三"));
-        assert_eq!(s.history().len(), 2);
     }
 
     #[test]

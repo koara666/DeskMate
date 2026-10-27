@@ -22,6 +22,8 @@ pub struct AppState {
     pub http: reqwest::Client,
     /// API Key 存储（系统凭据管理器）
     pub secrets: Box<dyn SecretStore>,
+    /// 下次打开聊天窗口时要告诉用户的一句话（比如数据库从备份恢复了）
+    notice: Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -44,6 +46,7 @@ impl AppState {
             desktop: DesktopState::default(),
             http: crate::backends::http::client(),
             secrets,
+            notice: Mutex::new(None),
         }
     }
 
@@ -77,6 +80,14 @@ impl AppState {
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
+    }
+
+    pub fn set_notice(&self, text: String) {
+        *self.notice.lock().unwrap_or_else(|e| e.into_inner()) = Some(text);
+    }
+
+    pub fn take_notice(&self) -> Option<String> {
+        self.notice.lock().unwrap_or_else(|e| e.into_inner()).take()
     }
 
     pub fn reload_characters(&self) {

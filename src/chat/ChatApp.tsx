@@ -35,6 +35,7 @@ export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
   const [side, setSide] = useState<Side>('left');
   const [character, setCharacter] = useState<CharacterView>({ id: '', name: '', color: '' });
   const [greeting, setGreeting] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [focusSignal, setFocusSignal] = useState(0);
@@ -46,6 +47,7 @@ export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
     const init = await api.init();
     setCharacter(init.character);
     setGreeting(init.greeting);
+    if (init.notice) setNotice(init.notice);
     setModeState(init.mode);
     setSide(init.side);
     setMessages(
@@ -178,6 +180,14 @@ export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
         </div>
       </header>
 
+      {notice && (
+        <div class="banner banner-notice" role="status">
+          {notice}
+          <button type="button" class="link-btn" onClick={() => setNotice(null)}>
+            知道了
+          </button>
+        </div>
+      )}
       {!online && <div class="banner banner-offline">网络断开了，恢复后可以重试</div>}
       {showReconnect && (
         <div class="banner banner-online">

@@ -6,6 +6,7 @@ use crate::character::{self, Appearance};
 use crate::chat::{self, ChatEvent};
 use crate::desktop::{self, ChatMode};
 use crate::geometry::Side;
+use crate::memory::conversation;
 use crate::state::AppState;
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -90,10 +91,28 @@ pub struct ChatInit {
     pub history: Vec<ChatMessage>,
     /// 没有聊天记录时角色说的开场白
     pub greeting: String,
+    /// 需要告诉用户的系统提示（比如数据库从备份恢复了），只显示一次
+    pub notice: Option<String>,
+}
+
+fn current_character_id(state: &AppState) -> String {
+    state
+        .current_character()
+        .map(|c| c.manifest.id)
+        .unwrap_or_else(|| "default".into())
 }
 
 #[tauri::command]
 pub fn chat_init(state: State<'_, AppState>) -> ChatInit {
+    let history =
+        conversation::recent_for_character(&state.db(), &current_character_id(&state), 60)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| ChatMessage {
+                role: m.role,
+                content: m.content,
+            })
+            .collect();
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -107,7 +126,8 @@ pub fn chat_init(state: State<'_, AppState>) -> ChatInit {
         character: character_view(&state),
         mode: state.desktop.chat_mode(),
         side: state.desktop.chat_side(),
-        history: state.chat.history(),
+        history,
+        notice: state.take_notice(),
     }
 }
 
@@ -138,10 +158,14 @@ pub fn chat_regenerate(
     on_event: Channel<ChatEvent>,
 ) -> CmdResult<()> {
     check_request_id(&request_id)?;
-    let text = state
-        .chat
-        .pop_last_turn()
-        .ok_or_else(|| "没有可以重新生成的消息".to_string())?;
+    let text = {
+        let db = state.db();
+        conversation::latest(&db, &current_character_id(&state))
+            .ok()
+            .flatten()
+            .and_then(|conv| conversation::pop_last_turn(&db, conv).ok().flatten())
+    }
+    .ok_or_else(|| "没有可以重新生成的消息".to_string())?;
     tauri::async_runtime::spawn(chat::run_turn(app, text, request_id, on_event));
     Ok(())
 }

@@ -15,6 +15,7 @@ function fakeApi() {
       side: 'left',
       history: [],
       greeting: '你好呀～',
+      notice: null,
     }),
     send: async (text, rid, onEvent) => {
       calls.send.push({ text, rid });

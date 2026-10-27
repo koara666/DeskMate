@@ -87,6 +87,13 @@ body,
   background: var(--danger-bg);
   color: var(--danger);
 }
+.banner-notice {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  color: var(--text);
+}
+.banner-notice .link-btn {
+  margin-left: 6px;
+}
 .banner-online {
   background: color-mix(in srgb, var(--ok) 14%, var(--panel));
   color: var(--ok);

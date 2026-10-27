@@ -69,8 +69,63 @@ fn mock_error(arg: &str) -> Option<BackendError> {
     })
 }
 
+/// 截取到第一个标点为止
+fn until_punct(s: &str) -> String {
+    s.chars()
+        .take_while(|c| !"，。,.!！?？;；~～ \n".contains(*c))
+        .take(20)
+        .collect()
+}
+
+/// 记忆提取请求的假回复：用简单规则从「我叫…」「我喜欢…」「我住在…」里抽事实
+fn mock_extraction(req: &ChatRequest) -> String {
+    let text = req
+        .messages
+        .first()
+        .map(|m| m.content.as_str())
+        .unwrap_or("");
+    let log = text.split("【聊天记录】").nth(1).unwrap_or("");
+    let user_lines: Vec<&str> = log
+        .lines()
+        .filter_map(|l| l.strip_prefix("用户："))
+        .collect();
+    let mut facts = Vec::new();
+    for l in &user_lines {
+        for (key, fmt, importance) in [
+            ("我叫", "用户叫", 5),
+            ("我喜欢", "用户喜欢", 3),
+            ("我住在", "用户住在", 3),
+        ] {
+            if let Some(i) = l.find(key) {
+                let v = until_punct(&l[i + key.len()..]);
+                if !v.is_empty() {
+                    facts.push(serde_json::json!({
+                        "content": format!("{fmt}{v}"),
+                        "about": "user",
+                        "category": "profile",
+                        "importance": importance,
+                    }));
+                }
+            }
+        }
+    }
+    let summary = user_lines
+        .first()
+        .map(|l| {
+            format!(
+                "用户聊了「{}」等话题",
+                l.chars().take(20).collect::<String>()
+            )
+        })
+        .unwrap_or_default();
+    serde_json::json!({ "summary": summary, "facts": facts, "updates": [] }).to_string()
+}
+
 /// 根据请求生成假回复
 pub fn reply_for(req: &ChatRequest) -> Result<(String, Duration), BackendError> {
+    if req.system_text().contains(crate::memory::extract::MARKER) {
+        return Ok((mock_extraction(req), Duration::ZERO));
+    }
     let last = req
         .messages
         .iter()

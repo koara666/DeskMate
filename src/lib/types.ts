@@ -37,6 +37,8 @@ export interface ChatInit {
   history: ChatMessage[];
   /** 没有聊天记录时角色说的开场白 */
   greeting: string;
+  /** 需要告诉用户的系统提示（比如数据库从备份恢复了），只出现一次 */
+  notice: string | null;
 }
 
 export interface ErrorInfo {

@@ -35,6 +35,54 @@ pub const MIGRATIONS: &[&str] = &[
     CREATE INDEX usage_day ON usage(day);
     CREATE INDEX usage_month ON usage(month);
     "#,
+    // v3：记忆系统——会话与消息（短期记忆）、摘要与事实（长期记忆）、全文索引
+    r#"
+    CREATE TABLE conversations (
+        id               INTEGER PRIMARY KEY,
+        character_id     TEXT NOT NULL,
+        started_at       INTEGER NOT NULL,
+        last_at          INTEGER NOT NULL,
+        -- 暂停记忆期间的会话：不提取记忆，结束后删除
+        no_memory        INTEGER NOT NULL DEFAULT 0,
+        -- 0 待提取，1 已完成，2 多次失败后放弃
+        extract_state    INTEGER NOT NULL DEFAULT 0,
+        extract_attempts INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX conv_char ON conversations(character_id, last_at);
+    CREATE INDEX conv_pending ON conversations(extract_state, last_at);
+
+    CREATE TABLE messages (
+        id              INTEGER PRIMARY KEY,
+        conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        role            TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        content         TEXT NOT NULL,
+        created_at      INTEGER NOT NULL
+    );
+    CREATE INDEX msg_conv ON messages(conversation_id, id);
+
+    CREATE TABLE memories (
+        id            INTEGER PRIMARY KEY,
+        kind          TEXT NOT NULL CHECK (kind IN ('fact', 'summary')),
+        content       TEXT NOT NULL,
+        scope         TEXT NOT NULL,
+        category      TEXT NOT NULL DEFAULT 'other',
+        source_kind   TEXT NOT NULL,
+        source_ref    TEXT NOT NULL DEFAULT '',
+        trusted       INTEGER NOT NULL DEFAULT 1,
+        importance    INTEGER NOT NULL DEFAULT 3 CHECK (importance BETWEEN 1 AND 5),
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL,
+        last_used_at  INTEGER,
+        use_count     INTEGER NOT NULL DEFAULT 0,
+        status        TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'superseded')),
+        superseded_by INTEGER REFERENCES memories(id),
+        day           TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX mem_lookup ON memories(status, kind, scope);
+
+    -- tokens 列存「单字 + 二字组合」切分后的文本（见 memory/tokenize.rs），rowid = memories.id
+    CREATE VIRTUAL TABLE memory_fts USING fts5(tokens);
+    "#,
 ];
 
 pub fn latest_version() -> i64 {

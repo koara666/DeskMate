@@ -92,6 +92,8 @@ pub struct Settings {
     pub background_backend: String,
     /// 花费上限
     pub budget: Budget,
+    /// 暂停记忆：不记录新的长期记忆（已有记忆仍可使用）
+    pub memory_paused: bool,
 }
 
 impl Default for Settings {
@@ -110,6 +112,7 @@ impl Default for Settings {
             chat_backend: "mock".into(),
             background_backend: String::new(),
             budget: Budget::default(),
+            memory_paused: false,
         }
     }
 }
