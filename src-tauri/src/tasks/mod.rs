@@ -176,24 +176,38 @@ pub struct Program {
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-fn where_exe(name: &str) -> Vec<PathBuf> {
-    let mut cmd = std::process::Command::new("where.exe");
-    cmd.arg(name);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+/// 在 PATH（以及 npm 全局目录）里查找程序。
+/// 不用 where.exe：它的输出是控制台代码页（中文系统是 GBK），用户名带中文时路径会被解码坏。
+/// 这里直接用系统给的 Unicode 路径拼接、检查文件是否存在。
+pub fn find_in_path(
+    path_var: &std::ffi::OsStr,
+    extra_dirs: &[PathBuf],
+    name: &str,
+) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = std::env::split_paths(path_var).collect();
+    dirs.extend(extra_dirs.iter().cloned());
+    let mut found = Vec::new();
+    for d in dirs {
+        if d.as_os_str().is_empty() {
+            continue;
+        }
+        for ext in ["exe", "cmd", "bat"] {
+            let p = d.join(format!("{name}.{ext}"));
+            if p.is_file() && !found.contains(&p) {
+                found.push(p);
+            }
+        }
     }
-    cmd.output()
-        .ok()
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .map(|l| PathBuf::from(l.trim()))
-                .filter(|p| p.is_file())
-                .collect()
-        })
-        .unwrap_or_default()
+    found
+}
+
+fn where_exe(name: &str) -> Vec<PathBuf> {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    // 从开始菜单启动时 PATH 可能不含 npm 全局目录，额外看一眼
+    let extra: Vec<PathBuf> = std::env::var_os("APPDATA")
+        .map(|a| vec![PathBuf::from(a).join("npm")])
+        .unwrap_or_default();
+    find_in_path(&path, &extra, name)
 }
 
 fn is_ext(p: &Path, ext: &str) -> bool {
@@ -630,6 +644,31 @@ mod tests {
             "以 - 开头的模型名会被当成参数，必须拒绝"
         );
         assert_eq!(s.codex_model, "gpt-5.5");
+    }
+
+    #[test]
+    fn finds_npm_shims_in_unicode_paths() {
+        // 用户名带中文的目录（之前用 where.exe 时就是这种路径解码出错，找不到程序）
+        let t = tempfile::tempdir().unwrap();
+        let npm = t.path().join("京东").join("npm");
+        let pkg = npm.join(r"node_modules\@anthropic-ai\claude-code\bin");
+        std::fs::create_dir_all(&pkg).unwrap();
+        std::fs::write(npm.join("claude.cmd"), "@echo off").unwrap();
+        std::fs::write(pkg.join("claude.exe"), "fake").unwrap();
+        let path_var = std::env::join_paths([PathBuf::from(r"C:\nope"), npm.clone()]).unwrap();
+        let found = find_in_path(&path_var, &[], "claude");
+        assert_eq!(found, vec![npm.join("claude.cmd")]);
+        let prog = resolve_shim(Executor::Claude, found[0].parent().unwrap()).unwrap();
+        assert_eq!(prog.exe, pkg.join("claude.exe"));
+        assert!(prog.pre_args.is_empty());
+        // 手动指定 .cmd 路径也能解析
+        let p = locate(
+            Executor::Claude,
+            &npm.join("claude.cmd").display().to_string(),
+        )
+        .unwrap();
+        assert_eq!(p.exe, pkg.join("claude.exe"));
+        assert!(find_in_path(&path_var, &[], "codex").is_empty());
     }
 
     #[test]

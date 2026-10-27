@@ -94,16 +94,20 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn run() {
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+    let mut builder = tauri::Builder::default();
+    // 测试模式下不加单实例锁，才能和正在使用的 DeskMate 同时运行
+    if !paths::test_mode() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             // 第二个实例启动时：把已有的桌宠显示出来；带 --settings 时打开设置
             if let Some(w) = desktop::pet(app) {
                 let _ = w.show();
             }
             if let Some(tab) = argv.iter().find_map(|a| desktop::parse_settings_arg(a)) {
-                let _ = desktop::open_settings_tab(app, tab);
+                desktop::open_settings_tab_async(app, tab);
             }
-        }))
+        }));
+    }
+    let app = builder
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--autostart"]),

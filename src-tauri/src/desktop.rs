@@ -70,6 +70,25 @@ fn window_config(app: &AppHandle, label: &str) -> tauri::utils::config::WindowCo
         .unwrap_or_else(|| panic!("tauri.conf.json 缺少 {label} 窗口配置"))
 }
 
+/// 按配置准备窗口；测试模式下使用独立的 WebView 数据目录（以及可选的调试端口）
+fn window_builder<'a>(
+    app: &'a AppHandle,
+    label: &str,
+) -> tauri::Result<WebviewWindowBuilder<'a, Wry, AppHandle>> {
+    let mut b = WebviewWindowBuilder::from_config(app, &window_config(app, label))?;
+    if crate::paths::test_mode() {
+        let root = app.state::<AppState>().paths.root().to_path_buf();
+        b = b.data_directory(root.join("EBWebView"));
+        if let Some(port) = crate::paths::cdp_port() {
+            // 同一个数据目录下所有窗口的浏览器参数必须一致
+            b = b.additional_browser_args(&format!(
+                "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"
+            ));
+        }
+    }
+    Ok(b)
+}
+
 fn work_rect(m: &tauri::Monitor) -> Rect {
     let wa = m.work_area();
     Rect::new(
@@ -119,7 +138,7 @@ pub fn chat(app: &AppHandle) -> Option<WebviewWindow> {
 /// 启动时创建桌宠窗口：恢复上次位置（显示器不在了就回到主屏默认角落）
 pub fn create_pet(app: &AppHandle) -> tauri::Result<()> {
     let s = app.state::<AppState>().settings();
-    let w = WebviewWindowBuilder::from_config(app, &window_config(app, "pet"))?
+    let w = window_builder(app, "pet")?
         .always_on_top(s.always_on_top)
         .build()?;
     w.set_size(LogicalSize::new(
@@ -148,7 +167,7 @@ pub fn ensure_chat(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         return Ok(w);
     }
     let s = app.state::<AppState>().settings();
-    WebviewWindowBuilder::from_config(app, &window_config(app, "chat"))?
+    window_builder(app, "chat")?
         .always_on_top(s.always_on_top)
         .build()
 }
@@ -348,7 +367,17 @@ pub fn parse_settings_arg(arg: &str) -> Option<Option<String>> {
     Some(SETTINGS_TABS.contains(&tab).then(|| tab.to_string()))
 }
 
-/// 打开设置窗口并跳到指定页面
+/// 打开设置窗口并跳到指定页面。可能从主线程调用（启动参数、第二个实例），所以放到后台执行。
+pub fn open_settings_tab_async(app: &AppHandle, tab: Option<String>) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = open_settings_tab(&app, tab) {
+            log::warn!("打开设置窗口失败：{e}");
+        }
+    });
+}
+
+/// 打开设置窗口并跳到指定页面（不要在主线程上直接调用）
 pub fn open_settings_tab(app: &AppHandle, tab: Option<String>) -> tauri::Result<()> {
     if let Some(t) = tab {
         *app.state::<AppState>()
@@ -367,7 +396,7 @@ pub fn open_settings(app: &AppHandle) -> tauri::Result<()> {
         w.unminimize()?;
         return w.set_focus();
     }
-    WebviewWindowBuilder::from_config(app, &window_config(app, "settings"))?.build()?;
+    window_builder(app, "settings")?.build()?;
     Ok(())
 }
 
@@ -515,6 +544,13 @@ pub fn popup_pet_menu(app: &AppHandle) -> tauri::Result<()> {
 
 /// 托盘菜单和右键菜单的点击处理
 pub fn handle_menu(app: &AppHandle, id: &str) {
+    // 菜单回调在主线程：放到后台执行，避免在主线程里创建窗口导致死锁
+    let app = app.clone();
+    let id = id.to_string();
+    tauri::async_runtime::spawn(async move { handle_menu_now(&app, &id) });
+}
+
+fn handle_menu_now(app: &AppHandle, id: &str) {
     let st = app.state::<AppState>();
     let r: tauri::Result<()> = (|| {
         match id {

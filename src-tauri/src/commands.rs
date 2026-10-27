@@ -51,6 +51,9 @@ fn character_view(state: &AppState) -> CharacterView {
 }
 
 // ---------------- 桌宠窗口 ----------------
+//
+// 注意：凡是可能创建窗口或操作窗口的命令都必须是 async。
+// 同步命令在 Windows 上跑在主线程，此时创建 WebView 窗口会死锁，整个程序卡住（关不掉、点不动）。
 
 #[derive(Serialize)]
 pub struct PetInit {
@@ -72,13 +75,13 @@ pub fn pet_init(state: State<'_, AppState>) -> PetInit {
 }
 
 #[tauri::command]
-pub fn pet_click(app: AppHandle) -> CmdResult<()> {
+pub async fn pet_click(app: AppHandle) -> CmdResult<()> {
     app.state::<AppState>().daily.touch();
     desktop::toggle_chat(&app).map_err(err)
 }
 
 #[tauri::command]
-pub fn pet_menu(app: AppHandle) -> CmdResult<()> {
+pub async fn pet_menu(app: AppHandle) -> CmdResult<()> {
     desktop::popup_pet_menu(&app).map_err(err)
 }
 
@@ -178,19 +181,19 @@ pub fn chat_stop(state: State<'_, AppState>, request_id: String) -> bool {
 }
 
 #[tauri::command]
-pub fn chat_set_mode(app: AppHandle, mode: ChatMode) -> CmdResult<()> {
+pub async fn chat_set_mode(app: AppHandle, mode: ChatMode) -> CmdResult<()> {
     desktop::set_chat_mode(&app, mode).map_err(err)
 }
 
 #[tauri::command]
-pub fn chat_hide(app: AppHandle) -> CmdResult<()> {
+pub async fn chat_hide(app: AppHandle) -> CmdResult<()> {
     desktop::hide_chat(&app).map_err(err)
 }
 
 // ---------------- 通用 ----------------
 
 #[tauri::command]
-pub fn open_settings(app: AppHandle) -> CmdResult<()> {
+pub async fn open_settings(app: AppHandle) -> CmdResult<()> {
     desktop::open_settings(&app).map_err(err)
 }
 

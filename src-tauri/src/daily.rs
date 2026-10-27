@@ -177,6 +177,11 @@ pub fn pop_chat(app: &AppHandle) {
 
 pub fn apply_autostart(app: &AppHandle, on: bool) -> Result<(), String> {
     use tauri_plugin_autostart::ManagerExt;
+    if crate::paths::test_mode() {
+        // 测试实例不能改注册表里的开机启动项（会覆盖正式安装的设置）
+        log::info!("测试模式：跳过开机自启设置（{on}）");
+        return Ok(());
+    }
     let al = app.autolaunch();
     let now = al.is_enabled().unwrap_or(false);
     if on && !now {
@@ -217,7 +222,11 @@ pub fn on_hotkey(app: &AppHandle, state: ShortcutState) {
         let _ = p.show();
     }
     app.state::<AppState>().daily.touch();
-    let _ = desktop::toggle_chat(app);
+    // 快捷键回调在主线程：放到后台执行，避免创建聊天窗口时死锁
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = desktop::toggle_chat(&app);
+    });
 }
 
 // ---------------- 后台循环 ----------------

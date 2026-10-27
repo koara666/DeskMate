@@ -6,6 +6,22 @@ use std::path::{Path, PathBuf};
 pub const APP_DIR_NAME: &str = "DeskMate";
 pub const DB_FILE: &str = "deskmate.db";
 
+/// 开发 / 自动化测试模式：设置了 `DESKMATE_DATA_DIR`。
+/// 此时数据目录、系统凭据（服务名 DeskMate-dev）、WebView 数据都和正式安装的 DeskMate 隔离，
+/// 不注册单实例锁、不改开机自启，可以和正在使用的 DeskMate 同时运行。
+pub fn test_mode() -> bool {
+    std::env::var_os("DESKMATE_DATA_DIR").is_some_and(|v| !v.is_empty())
+}
+
+/// 只在测试模式下、且显式设置了 `DESKMATE_CDP_PORT` 时，打开 WebView 调试端口（供自动化测试驱动界面）。
+/// 正式使用时永远不会打开。
+pub fn cdp_port() -> Option<u16> {
+    if !test_mode() {
+        return None;
+    }
+    std::env::var("DESKMATE_CDP_PORT").ok()?.parse().ok()
+}
+
 #[derive(Debug, Clone)]
 pub struct DataPaths {
     pub root: PathBuf,

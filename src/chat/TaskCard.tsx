@@ -148,17 +148,21 @@ export function TaskCard({ api, initialGoal, onClose, onFinished }: Props) {
           </label>
           <label class="task-field">
             在哪个文件夹做（必须在任务文件夹里）
-            <input value={workdir} aria-label="工作目录" spellcheck={false} onInput={(e) => setWorkdir((e.currentTarget as HTMLInputElement).value)} />
+            <input value={workdir} aria-label="工作目录" placeholder="默认：任务文件夹" spellcheck={false} onInput={(e) => setWorkdir((e.currentTarget as HTMLInputElement).value)} />
           </label>
           <div class="task-row">
-            <select aria-label="执行工具" value={executor} onChange={(e) => setExecutor((e.currentTarget as HTMLSelectElement).value as Executor)}>
-              <option value="claude" disabled={!canRun('claude')}>
-                Claude Code{canRun('claude') ? '' : '（未找到）'}
-              </option>
-              <option value="codex" disabled={!canRun('codex')}>
-                Codex{canRun('codex') ? '' : '（未找到）'}
-              </option>
-            </select>
+            {!defaults ? (
+              <span class="muted small">正在检测本机的 Claude Code / Codex…</span>
+            ) : (
+              <select aria-label="执行工具" value={executor} onChange={(e) => setExecutor((e.currentTarget as HTMLSelectElement).value as Executor)}>
+                <option value="claude" disabled={!canRun('claude')}>
+                  Claude Code{canRun('claude') ? '' : '（未找到）'}
+                </option>
+                <option value="codex" disabled={!canRun('codex')}>
+                  Codex{canRun('codex') ? '' : '（未找到）'}
+                </option>
+              </select>
+            )}
             {defaults && (
               <span class="muted small">
                 最长 {defaults.settings.timeout_minutes} 分钟
@@ -176,6 +180,9 @@ export function TaskCard({ api, initialGoal, onClose, onFinished }: Props) {
                 允许 Codex 修改文件（包括新建和删除）。Codex 不能逐条询问，所以开始前会先把整个文件夹备份一份。
               </label>
             </>
+          )}
+          {defaults && !defaults.claude.found && !defaults.codex.found && (
+            <div class="task-error">没有找到 Claude Code 或 Codex。请先安装并在命令行里登录一次，或者在「设置 → 任务执行」里指定程序位置。</div>
           )}
           {error && <div class="task-error">{error}</div>}
           <div class="task-actions">

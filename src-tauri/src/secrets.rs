@@ -4,7 +4,14 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-const SERVICE: &str = "DeskMate";
+/// 凭据管理器里的服务名；测试模式下用另一个名字，绝不碰正式安装保存的 Key
+fn service() -> &'static str {
+    if crate::paths::test_mode() {
+        "DeskMate-dev"
+    } else {
+        "DeskMate"
+    }
+}
 
 pub trait SecretStore: Send + Sync {
     fn get(&self, id: &str) -> Result<Option<String>, String>;
@@ -21,7 +28,7 @@ pub struct KeyringStore;
 
 impl SecretStore for KeyringStore {
     fn get(&self, id: &str) -> Result<Option<String>, String> {
-        let e = keyring::Entry::new(SERVICE, &account(id)).map_err(|e| e.to_string())?;
+        let e = keyring::Entry::new(service(), &account(id)).map_err(|e| e.to_string())?;
         match e.get_password() {
             Ok(s) => Ok(Some(s)),
             Err(keyring::Error::NoEntry) => Ok(None),
@@ -30,13 +37,13 @@ impl SecretStore for KeyringStore {
     }
 
     fn set(&self, id: &str, secret: &str) -> Result<(), String> {
-        let e = keyring::Entry::new(SERVICE, &account(id)).map_err(|e| e.to_string())?;
+        let e = keyring::Entry::new(service(), &account(id)).map_err(|e| e.to_string())?;
         e.set_password(secret)
             .map_err(|e| format!("保存凭据失败：{e}"))
     }
 
     fn delete(&self, id: &str) -> Result<(), String> {
-        let e = keyring::Entry::new(SERVICE, &account(id)).map_err(|e| e.to_string())?;
+        let e = keyring::Entry::new(service(), &account(id)).map_err(|e| e.to_string())?;
         match e.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(format!("删除凭据失败：{e}")),
