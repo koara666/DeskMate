@@ -85,6 +85,7 @@ npm run build:app           # 打 release 安装包（NSIS）
 - git 全局有 `http.proxy=127.0.0.1:7897`；cargo 已在 `D:\dev\cargo\config.toml` 设为直连。
 - 用户可能正在用这台电脑：**不要模拟鼠标点击和键盘输入**。看界面用 `deskmate.exe --settings` 等启动参数 + 按窗口标题截图。
 - 单实例：测 release 前先关掉 `tauri dev` 启动的实例（同一个 identifier）。
+- 启动任何可见窗口（实测、截图）前先确认用户没有在全屏玩游戏/看视频（`SHQueryUserNotificationState` 返回 2~4 就先别启动）。
 
 ## 9. 文档地图
 | 文件 | 内容 |

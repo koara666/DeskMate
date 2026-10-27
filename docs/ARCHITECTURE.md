@@ -66,6 +66,7 @@ src-tauri/src/
   tasks/                       任务执行：mod.rs（查找 CLI、运行进程、超时结束进程树、日志、备份）、
                                sandbox.rs（工作目录检查）、claude.rs / codex.rs（参数与输出解析）
   task_cmds.rs task_marker.rs  任务流程编排与命令；聊天回复里 [[任务：…]] 标记的识别与隐藏
+  daily.rs                     日常体验：开机自启、全局快捷键、全屏检测、睡眠、主动搭话（低频循环）
   character_cmds.rs memory_cmds.rs  设置窗口「角色」「记忆」页的命令
   logging.rs redact.rs         轮换日志、密钥脱敏
 src-tauri/capabilities/        每个窗口一份最小权限
