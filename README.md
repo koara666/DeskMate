@@ -30,6 +30,13 @@
 
 也支持 Google Gemini、Claude API，以及任何「OpenAI 兼容接口」的服务（填地址、模型名、价格即可）。Gemini 和 Claude 在国内一般需要开代理，DeskMate 会自动使用系统代理设置。
 
+### 没有 API Key，但有 Claude 订阅（Pro / Max）？
+1. 先安装 Claude Code，在命令行里运行一次 `claude` 完成登录。
+2. 「设置 → 模型」最上面「日常聊天使用」选「Claude Code（用订阅额度）」。
+- 每条回复都要启动一次 claude，会比 API 慢几秒。
+- 用的是订阅里单独的 Agent SDK 额度；DeskMate 只调用官方命令行，不会读取你的登录信息。
+- 这种模式只能聊天，不能读写文件或执行命令（要干活请用聊天框的 🛠）。
+
 ## 三、换角色、换形象
 
 - 右键角色 →「切换角色」，或者「设置 → 角色」。

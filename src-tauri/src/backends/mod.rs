@@ -7,6 +7,7 @@
 //! 默认值来自各家官方文档（查阅日期写在各后端文件开头）。
 
 pub mod anthropic;
+pub mod claude_cli;
 pub mod deepseek;
 pub mod gemini;
 pub mod http;
@@ -193,6 +194,9 @@ pub enum BackendError {
     BudgetExceeded(String),
     #[error("模型拒绝回答：{0}")]
     Refused(String),
+    /// 本机命令行程序（claude）没找到、没登录或运行出错
+    #[error("Claude Code 命令行：{0}")]
+    Cli(String),
 }
 
 impl BackendError {
@@ -210,6 +214,7 @@ impl BackendError {
             Self::Protocol(_) => "protocol",
             Self::BudgetExceeded(_) => "budget_exceeded",
             Self::Refused(_) => "refused",
+            Self::Cli(_) => "cli",
         }
     }
 
@@ -229,6 +234,9 @@ impl BackendError {
             Self::Protocol(_) => "接口返回了意料之外的数据，检查接口地址是否正确。",
             Self::BudgetExceeded(_) => "可以在「设置 → 用量」里调高上限，或者等到明天/下个月。",
             Self::Refused(_) => "换个说法试试。",
+            Self::Cli(_) => {
+                "确认已安装 Claude Code，并在命令行里运行过一次 claude 完成登录；也可以在「设置 → 模型」换回其他模型。"
+            }
         }
     }
 
@@ -317,15 +325,30 @@ impl BackendConfig {
         }
         if kind.needs_key {
             validate_base_url(&self.base_url)?;
-            if self.model.trim().is_empty() || self.model.len() > 100 {
-                return Err("模型名不能为空，且不超过 100 个字符".into());
+            if self.model.trim().is_empty() {
+                return Err("模型名不能为空".into());
             }
-            if !self
+        }
+        if self.model.len() > 100 {
+            return Err("模型名不能超过 100 个字符".into());
+        }
+        if self.model.starts_with('-')
+            || !self
                 .model
                 .chars()
-                .all(|c| c.is_ascii_alphanumeric() || "-._:/@".contains(c))
-            {
-                return Err("模型名里有不支持的字符".into());
+                .all(|c| c.is_ascii_alphanumeric() || "-._:/@[]".contains(c))
+        {
+            return Err("模型名里有不支持的字符".into());
+        }
+        if self.kind == "claude_code" {
+            // 这里的「接口地址」是 claude 程序的位置（留空 = 自动查找）
+            let p = self.base_url.trim();
+            let lower = p.to_lowercase();
+            if !p.is_empty() && !(lower.ends_with(".exe") || lower.ends_with(".cmd")) {
+                return Err(
+                    "claude 程序位置应该是 claude.exe 或 claude.cmd 的完整路径（一般留空即可）"
+                        .into(),
+                );
             }
         }
         if self.reasoning.len() > 20
@@ -394,6 +417,7 @@ pub fn kinds() -> &'static [BackendKind] {
             gemini::kind(),
             anthropic::kind(),
             openai_compat::kind(),
+            claude_cli::kind(),
         ]
     })
 }
@@ -516,6 +540,19 @@ mod tests {
         c.price.output = 1.0;
         c.id = "../x".into();
         assert!(c.validate().is_err());
+
+        // 命令行后端：模型名会作为参数传给 claude，不能伪装成别的参数
+        let mut c = BackendConfig::from_kind(find_kind("claude_code").unwrap());
+        assert!(c.validate().is_ok());
+        c.model = String::new();
+        assert!(c.validate().is_ok(), "留空 = claude 默认模型");
+        c.model = "--dangerously-skip-permissions".into();
+        assert!(c.validate().is_err());
+        c.model = "opus".into();
+        c.base_url = r"C:\Windows\System32\cmd".into();
+        assert!(c.validate().is_err());
+        c.base_url = r"C:\Users\a\AppData\Roaming\npm\claude.cmd".into();
+        assert!(c.validate().is_ok());
     }
 
     #[test]

@@ -111,6 +111,7 @@ function BackendCard({ api, b, active, onChanged }: CardProps) {
   const [test, setTest] = useState<TestResult | null>(null);
   const { status, run } = useStatus();
   const isMock = cfg.kind === 'mock';
+  const isCli = cfg.kind === 'claude_code';
   const dirty = JSON.stringify(cfg) !== JSON.stringify(b.config);
 
   const field = (k: keyof BackendConfig) => (e: Event) =>
@@ -157,19 +158,29 @@ function BackendCard({ api, b, active, onChanged }: CardProps) {
                 </label>
                 <label>
                   模型名
-                  <input value={cfg.model} onInput={field('model')} spellcheck={false} />
+                  <input value={cfg.model} onInput={field('model')} placeholder={isCli ? 'sonnet / opus / haiku' : ''} spellcheck={false} />
                 </label>
                 <label class="span2">
-                  接口地址
-                  <input value={cfg.base_url} onInput={field('base_url')} spellcheck={false} />
+                  {isCli ? 'claude 程序位置' : '接口地址'}
+                  <input
+                    value={cfg.base_url}
+                    onInput={field('base_url')}
+                    placeholder={isCli ? '留空 = 自动查找（一般不用填）' : ''}
+                    spellcheck={false}
+                  />
                 </label>
                 <label>
                   思考强度
-                  <input value={cfg.reasoning} onInput={field('reasoning')} placeholder="留空 = 接口默认" spellcheck={false} />
+                  <input
+                    value={cfg.reasoning}
+                    onInput={field('reasoning')}
+                    placeholder={isCli ? 'low / medium / high' : '留空 = 接口默认'}
+                    spellcheck={false}
+                  />
                 </label>
               </div>
               <fieldset class="prices">
-                <legend>价格（美元 / 每百万 token，用于估算花费）</legend>
+                <legend>{isCli ? '估算价格（订阅不按 token 收费；按 API 价格估算消耗，用于花费上限）' : '价格（美元 / 每百万 token，用于估算花费）'}</legend>
                 <label>
                   输入
                   <input type="number" min={0} step="0.001" value={cfg.price.input} onInput={price('input')} />

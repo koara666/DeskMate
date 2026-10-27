@@ -77,6 +77,7 @@ npm run check               # 全部检查（提交前必跑）
 npm test                    # 只跑前端测试
 cargo test --manifest-path src-tauri/Cargo.toml   # 只跑 Rust 测试
 npm run build:app           # 打 release 安装包（NSIS）
+npx tauri build --no-bundle && npm run e2e   # 端到端界面测试（隔离的测试实例，会短暂出现窗口；先确认用户没在全屏）
 ```
 
 ## 8.1 本机开发环境注意事项
@@ -84,7 +85,8 @@ npm run build:app           # 打 release 安装包（NSIS）
 - `.ps1` 脚本只写 ASCII（Windows PowerShell 5.1 会把无 BOM 的 UTF-8 中文注释读坏，连带吞掉下一行）。
 - git 全局有 `http.proxy=127.0.0.1:7897`；cargo 已在 `D:\dev\cargo\config.toml` 设为直连。
 - 用户可能正在用这台电脑：**不要模拟鼠标点击和键盘输入**。看界面用 `deskmate.exe --settings` 等启动参数 + 按窗口标题截图。
-- 单实例：测 release 前先关掉 `tauri dev` 启动的实例（同一个 identifier）。
+- 单实例：测 release 前先关掉 `tauri dev` 启动的实例（同一个 identifier）。设置了 `DESKMATE_DATA_DIR` 的测试实例不受单实例限制，可以和用户正在用的 DeskMate 同时运行。
+- 会创建或操作窗口的 Tauri 命令必须是 async，主线程回调（菜单、快捷键）里要放到后台执行，否则 Windows 上会死锁（DECISIONS #22）。
 - 启动任何可见窗口（实测、截图）前先确认用户没有在全屏玩游戏/看视频（`SHQueryUserNotificationState` 返回 2~4 就先别启动）。
 
 ## 9. 文档地图

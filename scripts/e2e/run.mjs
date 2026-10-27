@@ -276,6 +276,14 @@ async function main() {
       await settings.eval(`[...document.querySelectorAll('.card.backend')].find(c => c.innerText.includes('OpenAI 兼容接口（自定义） 2')).querySelectorAll('button').forEach(b => { if (b.innerText === '删除') b.click(); })`);
       await settings.waitNoText('OpenAI 兼容接口（自定义） 2');
     });
+    await test('模型：「Claude Code（用订阅额度）」卡片显示程序位置而不是接口地址（不点测试，不花额度）', async () => {
+      await settings.eval(`[...document.querySelectorAll('.card-head')].find(h => h.innerText.startsWith('Claude Code（用订阅额度）')).click()`);
+      await sleep(200);
+      const t = await settings.eval(`[...document.querySelectorAll('.card.backend')].find(c => c.innerText.startsWith('Claude Code（用订阅额度）')).innerText`);
+      if (!t.includes('claude 程序位置') || t.includes('接口地址')) throw new Error('字段名不对');
+      if (t.includes('未填 Key')) throw new Error('不需要 Key 的后端显示了「未填 Key」');
+      await settings.eval(`[...document.querySelectorAll('.card-head')].find(h => h.innerText.startsWith('Claude Code（用订阅额度）')).click()`);
+    });
     await test('模型：切换日常聊天模型', async () => {
       await settings.input('select[aria-label="日常聊天使用的模型"]', 'deepseek');
       await settings.waitFor(`document.querySelector('select[aria-label="日常聊天使用的模型"]').value === 'deepseek'`, '选中 deepseek');

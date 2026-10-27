@@ -93,7 +93,7 @@
 - [x] 里程碑实测 + 安全复查（安装包已测；运行时实测因用户在玩全屏游戏推迟，见 PROGRESS）
 
 ## 之后（可选）
-- [ ] 用 Claude Code / Codex 当聊天后端的模式（只读、无工具权限，给只有订阅、没有 API Key 的用户；见 DECISIONS #14）
+- [x] 用 Claude Code 当聊天后端（订阅额度，无工具；DECISIONS #23）。Codex 版暂不做（`codex exec` 没有无工具模式）
 - [ ] 嵌入向量检索（需求说第一版不做）
 - [ ] Live2D 插件（需要评估体积和授权）
 - [ ] Linux / macOS 支持（keyring 后端、全屏检测、空闲检测需要各自实现）

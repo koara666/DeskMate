@@ -15,7 +15,7 @@
 │  commands/  ── 只做参数校验和转发，不写业务逻辑                                    │
 │  chat/      ── 一轮对话的编排：组装提示词 → 选后端 → 流式 → 禁词过滤 → 记录用量/记忆   │
 │  prompt/    ── 提示词组装（角色设定、自定义要求、记忆、最近对话），token 预算           │
-│  backends/  ── 模型后端 trait + 注册表：mock / openai_compat(DeepSeek) / gemini / anthropic │
+│  backends/  ── 模型后端 trait + 注册表：mock / openai_compat(DeepSeek) / gemini / anthropic / claude_cli(订阅) │
 │  character/ ── 角色包加载与校验（内置 + 用户目录），只读                              │
 │  filter/    ── 禁词：提示词注入 + 流式输出过滤                                     │
 │  memory/    ── SQLite：迁移、短期/摘要/长期事实、FTS5 检索、敏感信息过滤、备份          │
@@ -57,7 +57,7 @@ src-tauri/src/
   chat.rs prompt.rs filter.rs  一轮对话编排、提示词组装、禁词流式过滤
   character.rs                 角色包加载与校验（只读）
   backends/                    mod.rs（trait、注册表、配置、价格）、http.rs、sse.rs、
-                               mock / openai_compat / deepseek / gemini / anthropic
+                               mock / openai_compat / deepseek / gemini / anthropic / claude_cli
   usage.rs secrets.rs          用量与花费上限、系统凭据管理器
   memory/                      记忆：mod.rs（存取、检索打分）、conversation.rs（会话与消息）、
                                tokenize.rs（中文切分）、sensitive.rs（敏感信息）、extract.rs（摘要/事实提取）、
@@ -71,7 +71,7 @@ src-tauri/src/
   character_cmds.rs memory_cmds.rs  设置窗口「角色」「记忆」页的命令
   logging.rs redact.rs         轮换日志、密钥脱敏
 src-tauri/capabilities/        每个窗口一份最小权限
-scripts/                       check.mjs（提交前检查）、dev-app.mjs、env.mjs、measure.ps1（性能实测）
+scripts/                       check.mjs（提交前检查）、dev-app.mjs、env.mjs、measure.ps1（性能实测）、e2e/（端到端界面测试，npm run e2e）
 .githooks/pre-commit           gitleaks 密钥扫描
 .github/workflows/ci.yml       CI
 ```
