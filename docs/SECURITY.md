@@ -26,6 +26,13 @@
 
 ## 3. 复查记录
 - 2026-10-27：初版威胁清单（M0）。
+- 2026-10-27：M7 安全总复查——
+  - 前端：没有 innerHTML / dangerouslySetInnerHTML / eval；CSP `default-src 'self'`、`script-src 'self'`、`connect-src` 只有 IPC；没有启用 shell / fs / asset 协议插件；每个窗口只授权自己用到的命令（DECISIONS #9）。
+  - 密钥：只在凭据管理器；前端只拿末 4 位；所有 HTTP 错误和日志行脱敏；gitleaks pre-commit 在每次提交时运行（本项目所有提交均通过）。
+  - 日志：不记录对话、任务内容和请求体；应用日志 1 MB × 3 份轮换；任务日志每个任务一份、只保留最近 100 份（worker 每天清理）。
+  - 任务执行：没有任何地方使用 dangerously / bypassPermissions / danger-full-access（只出现在拒绝它们的测试里）；不经 cmd.exe；路径检查有测试。
+  - 角色包：用户自己的 persona 可以影响模型说什么，但模型最多只能「提议」任务，执行必须用户在卡片上确认，所以恶意角色包无法直接造成操作。
+  - 剩余风险：真实 CLI 未实测（NEEDS_USER #4）；安装包未签名（NEEDS_USER #5，需要花钱）；Linux 上 keyring 后端未启用（目前只面向 Windows）。
 - 2026-10-27：M5 复查——T2、T4、T5、T8 更新。剩余风险：真实 CLI 的输出格式未在本机实测（按规定不调用付费任务）；Codex 写模式下删除不能逐条确认（以「明确勾选 + 完整备份」替代，见 DECISIONS #18）。
 - 2026-10-27：M4 复查——T3 记忆投毒、T9 数据丢失已实现；新增风险：聊天记录本身是隐私数据，已在入库前脱敏、删除为真删除、暂停记忆的会话结束即删除。
 - 2026-10-27：M1/M2 复查——更新 T1、T5、T6、T7、T10 的措施和代码位置。发现并记录：freezePrototype 与 Preact 冲突已关闭（主要防线仍是 CSP + 纯文本渲染）。

@@ -35,7 +35,14 @@ pub async fn run_once(app: &AppHandle) {
         let (day, _) = usage::today();
         let db = state.db();
         match backup::daily_backup(&db, &state.paths.backups(), &day) {
-            Ok(Some(p)) => log::info!("已备份数据库：{}", p.display()),
+            Ok(Some(p)) => {
+                log::info!("已备份数据库：{}", p.display());
+                // 每天一次：任务日志只保留最近的
+                let removed = prune_task_logs(&state.paths.tasks(), KEEP_TASK_LOGS);
+                if removed > 0 {
+                    log::info!("清理了 {removed} 个旧任务日志");
+                }
+            }
             Ok(None) => {}
             Err(e) => log::warn!("备份数据库失败：{e}"),
         }
@@ -44,6 +51,31 @@ pub async fn run_once(app: &AppHandle) {
     if n > 0 {
         log::info!("整理了 {n} 次会话的记忆");
     }
+}
+
+/// 任务日志保留的个数（每个任务一个文件）
+const KEEP_TASK_LOGS: usize = 100;
+
+/// 只保留最近 `keep` 个任务日志（文件名以时间开头，按名字排序即按时间排序），返回删除的数量
+pub fn prune_task_logs(dir: &std::path::Path, keep: usize) -> usize {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut files: Vec<std::path::PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+        .collect();
+    files.sort();
+    let mut removed = 0;
+    if files.len() > keep {
+        for f in &files[..files.len() - keep] {
+            if std::fs::remove_file(f).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    removed
 }
 
 /// 处理已结束的会话，返回成功整理的数量
@@ -244,6 +276,34 @@ mod tests {
         let all = memory::list(&state.db(), &memory::ListFilter::default()).unwrap();
         assert!(!all.items.iter().any(|m| m.content.contains("住在杭州")));
         assert!(all.items.iter().any(|m| m.content.contains("小林")));
+    }
+
+    #[test]
+    fn task_logs_are_pruned() {
+        let dir = tempfile::tempdir().unwrap();
+        for i in 0..5 {
+            std::fs::write(
+                dir.path().join(format!("t20261027-12000{i}-00001.jsonl")),
+                "x",
+            )
+            .unwrap();
+        }
+        std::fs::write(dir.path().join("other.txt"), "x").unwrap();
+        assert_eq!(prune_task_logs(dir.path(), 3), 2);
+        let left: Vec<String> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            left.contains(&"t20261027-120004-00001.jsonl".to_string()),
+            "保留最新的"
+        );
+        assert!(
+            !left.contains(&"t20261027-120000-00001.jsonl".to_string()),
+            "删掉最旧的"
+        );
+        assert!(left.contains(&"other.txt".to_string()));
     }
 
     #[tokio::test]
