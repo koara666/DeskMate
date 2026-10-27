@@ -33,23 +33,37 @@
      logs\（轮换）  tasks\<id>.jsonl（任务记录）
 ```
 
-## 2. 目录结构（规划，随实现更新）
+## 2. 目录结构（当前）
 
 ```
-AGENTS.md / CLAUDE.md       agent 规则
-docs/                       文档（见 AGENTS.md 文档地图）
-characters/<id>/            内置角色包（character.json、persona.md、assets/placeholder.svg）
-src/                        前端
-  pet/                      桌宠窗口
-  chat/                     聊天窗口（气泡 + 面板）
-  settings/                 设置窗口
-  lib/                      IPC 封装、类型、工具函数
-src-tauri/                  Rust
-  src/lib.rs                应用装配（插件、窗口、托盘、命令注册）
-  src/<模块>/               见上图
-  capabilities/             Tauri 权限（最小化）
-.githooks/pre-commit        gitleaks 密钥扫描
-.github/workflows/ci.yml    CI
+AGENTS.md / CLAUDE.md          agent 规则
+docs/                          文档（见 AGENTS.md 文档地图）
+characters/<id>/               内置角色包（character.json、persona.md、assets/placeholder.svg）
+characters/_fallback.svg       没有任何图片时的通用占位形象
+pet.html chat.html settings.html   三个窗口的入口
+src/
+  pet/Pet.tsx                  桌宠：形象、状态、点击/拖动/右键
+  chat/ChatApp.tsx Composer.tsx    聊天：气泡/面板、流式打字机、停止/重试/复制、错误详情、IME
+  settings/*.tsx               设置：常规、模型（Key/测试连接）、用量、关于
+  lib/ipc.ts                   唯一的 IPC 封装（组件通过接口调用，测试时换成假实现）
+  lib/types.ts typewriter.ts clipboard.ts
+  styles/*.css                 设计变量在 base.css（含深色模式）
+src-tauri/src/
+  lib.rs                       装配：插件、状态、窗口事件、命令注册
+  state.rs                     AppState：数据库、设置、角色列表、HTTP 客户端、密钥存储
+  paths.rs db.rs settings.rs   数据目录、SQLite 迁移、设置读写（kv 表）
+  desktop.rs geometry.rs       窗口创建/摆放/吸附（几何是纯函数）、托盘与右键菜单
+  commands.rs settings_cmds.rs 前端命令（只做校验和转发）
+  chat.rs prompt.rs filter.rs  一轮对话编排、提示词组装、禁词流式过滤
+  character.rs                 角色包加载与校验（只读）
+  backends/                    mod.rs（trait、注册表、配置、价格）、http.rs、sse.rs、
+                               mock / openai_compat / deepseek / gemini / anthropic
+  usage.rs secrets.rs          用量与花费上限、系统凭据管理器
+  logging.rs redact.rs         轮换日志、密钥脱敏
+src-tauri/capabilities/        每个窗口一份最小权限
+scripts/                       check.mjs（提交前检查）、dev-app.mjs、env.mjs、measure.ps1（性能实测）
+.githooks/pre-commit           gitleaks 密钥扫描
+.github/workflows/ci.yml       CI
 ```
 
 ## 3. 关键数据流
@@ -72,4 +86,7 @@ src-tauri/                  Rust
 
 ## 5. 存储
 单个 SQLite 文件 `%APPDATA%\DeskMate\deskmate.db`，`PRAGMA user_version` 记录结构版本，启动时按顺序执行迁移（迁移前自动备份）。
-表结构见 `src-tauri/src/memory/migrations.rs`（实现后在此补充摘要）。
+表结构见 `src-tauri/src/db.rs` 的 `MIGRATIONS`：
+- v1 `settings(key, value JSON)`：全部设置（不含 Key）
+- v2 `usage`：每次模型调用的 token 与估算费用（按日/月索引）
+- M4 起会加入记忆相关表

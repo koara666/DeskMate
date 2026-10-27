@@ -1,12 +1,14 @@
 // 桌宠：显示角色形象和表情状态；左键点击开关聊天、拖动移动、右键菜单。
-// 待机动画用「低频定时器 + 一次性 CSS 动画」：每隔 5~11 秒播一次约 1 秒的呼吸/眨眼，
-// 其余时间没有任何动画在跑，空闲 CPU 不上涨（见 DECISIONS #7）。
+// 待机动画用「低频定时器 + 离散姿势」：每隔 8~20 秒切换 2~4 次姿势（呼吸/眨眼），
+// 每次切换只渲染一帧，其余时间没有任何动画在跑，空闲 CPU 不上涨（见 DECISIONS #7、#12）。
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import type { PetApi } from '../lib/ipc';
 import type { PetInit, PetState } from '../lib/types';
 
 const DRAG_THRESHOLD = 4;
 const REVERT_MS: Partial<Record<PetState, number>> = { happy: 2500, sad: 4000 };
+
+type Pose = '' | 'breathe1' | 'breathe2' | 'blink';
 
 interface Props {
   api: PetApi;
@@ -16,7 +18,7 @@ interface Props {
 export function Pet({ api, random = Math.random }: Props) {
   const [init, setInit] = useState<PetInit | null>(null);
   const [state, setState] = useState<PetState>('idle');
-  const [fx, setFx] = useState<'' | 'breathe' | 'blink'>('');
+  const [pose, setPose] = useState<Pose>('');
   const revert = useRef<ReturnType<typeof setTimeout> | null>(null);
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
 
@@ -40,26 +42,29 @@ export function Pet({ api, random = Math.random }: Props) {
     };
   }, [api, load]);
 
-  // 低频待机动画
+  // 低频待机动画：几次离散的姿势切换（每次只渲染 1 帧），不用连续的 CSS 动画
   const animate = init?.idle_animation ?? false;
   useEffect(() => {
     if (!animate || state !== 'idle') return;
-    let t1: ReturnType<typeof setTimeout> | undefined;
-    let t2: ReturnType<typeof setTimeout> | undefined;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const play = (poses: Pose[], stepMs: number) => {
+      poses.forEach((p, i) => timers.push(setTimeout(() => setPose(p), i * stepMs)));
+    };
     const schedule = () => {
-      t1 = setTimeout(() => {
-        if (!document.hidden) {
-          setFx(random() < 0.5 ? 'breathe' : 'blink');
-          t2 = setTimeout(() => setFx(''), 1200);
-        }
-        schedule();
-      }, 5000 + random() * 6000);
+      timers.push(
+        setTimeout(() => {
+          if (!document.hidden) {
+            if (random() < 0.5) play(['breathe1', 'breathe2', 'breathe1', ''], 260);
+            else play(['blink', ''], 140);
+          }
+          schedule();
+        }, 8000 + random() * 12000),
+      );
     };
     schedule();
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      setFx('');
+      timers.forEach(clearTimeout);
+      setPose('');
     };
   }, [animate, state, random]);
 
@@ -92,7 +97,7 @@ export function Pet({ api, random = Math.random }: Props) {
 
   return (
     <div
-      class={`pet state-${state} ${placeholder ? 'placeholder' : ''} ${fx ? `fx-${fx}` : ''}`}
+      class={`pet state-${state} ${placeholder ? 'placeholder' : ''} ${pose ? `pose-${pose}` : ''}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

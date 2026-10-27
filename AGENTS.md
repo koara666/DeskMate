@@ -79,6 +79,13 @@ cargo test --manifest-path src-tauri/Cargo.toml   # 只跑 Rust 测试
 npm run build:app           # 打 release 安装包（NSIS）
 ```
 
+## 8.1 本机开发环境注意事项
+- 用 Bash 工具写含反斜杠 `\` 的文件时**不要用 heredoc**（反斜杠会被吞掉），用文件写入工具。
+- `.ps1` 脚本只写 ASCII（Windows PowerShell 5.1 会把无 BOM 的 UTF-8 中文注释读坏，连带吞掉下一行）。
+- git 全局有 `http.proxy=127.0.0.1:7897`；cargo 已在 `D:\dev\cargo\config.toml` 设为直连。
+- 用户可能正在用这台电脑：**不要模拟鼠标点击和键盘输入**。看界面用 `deskmate.exe --settings` 等启动参数 + 按窗口标题截图。
+- 单实例：测 release 前先关掉 `tauri dev` 启动的实例（同一个 identifier）。
+
 ## 9. 文档地图
 | 文件 | 内容 |
 |---|---|

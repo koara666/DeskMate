@@ -25,25 +25,17 @@ body,
   object-position: 50% 100%;
   pointer-events: none;
   transform-origin: 50% 100%;
-  transition: filter 0.4s ease, transform 0.4s ease;
 }
 
-/* —— 一次性待机动画 —— */
-.fx-breathe .pet-img {
-  animation: pet-breathe 1.2s ease-in-out 1;
+/* —— 待机姿势（离散切换，没有过渡动画，每次只渲染一帧） —— */
+.pose-breathe1 .pet-img {
+  transform: scale(1.012, 0.994);
 }
-.fx-blink .pet-img {
-  animation: pet-blink 0.4s ease-in-out 1;
+.pose-breathe2 .pet-img {
+  transform: scale(1.024, 0.988);
 }
-@keyframes pet-breathe {
-  50% {
-    transform: scale(1.025, 0.985);
-  }
-}
-@keyframes pet-blink {
-  50% {
-    transform: scaleY(0.97);
-  }
+.pose-blink .pet-img {
+  transform: scaleY(0.975);
 }
 
 /* —— 状态 —— */
@@ -66,11 +58,14 @@ body,
 }
 
 .placeholder.state-sad .pet-img {
+  /* 只有进入难过/睡觉状态时才做一次过渡 */
+  transition: filter 0.4s ease, transform 0.4s ease;
   filter: saturate(0.5) brightness(0.93);
   transform: translateY(4px) rotate(-4deg);
 }
 
 .state-sleep .pet-img {
+  transition: filter 0.8s ease, transform 0.8s ease;
   filter: brightness(0.85) saturate(0.7);
   transform: scale(1, 0.97);
 }
