@@ -59,6 +59,11 @@ src-tauri/src/
   backends/                    mod.rs（trait、注册表、配置、价格）、http.rs、sse.rs、
                                mock / openai_compat / deepseek / gemini / anthropic
   usage.rs secrets.rs          用量与花费上限、系统凭据管理器
+  memory/                      记忆：mod.rs（存取、检索打分）、conversation.rs（会话与消息）、
+                               tokenize.rs（中文切分）、sensitive.rs（敏感信息）、extract.rs（摘要/事实提取）、
+                               forget.rs（「忘掉这件事」）、backup.rs（备份与损坏恢复）
+  worker.rs                    后台维护：每 5 分钟——每日备份、整理已结束会话的记忆
+  character_cmds.rs memory_cmds.rs  设置窗口「角色」「记忆」页的命令
   logging.rs redact.rs         轮换日志、密钥脱敏
 src-tauri/capabilities/        每个窗口一份最小权限
 scripts/                       check.mjs（提交前检查）、dev-app.mjs、env.mjs、measure.ps1（性能实测）
@@ -89,4 +94,11 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 表结构见 `src-tauri/src/db.rs` 的 `MIGRATIONS`：
 - v1 `settings(key, value JSON)`：全部设置（不含 Key）
 - v2 `usage`：每次模型调用的 token 与估算费用（按日/月索引）
-- M4 起会加入记忆相关表
+- v3 记忆：`conversations`（每个角色的会话，含提取状态、是否暂停记忆）、`messages`（脱敏后的原文）、
+  `memories`（fact/summary，scope、来源、可信度、重要度、使用次数、状态与取代关系）、
+  `memory_fts`（FTS5，rowid = memories.id，tokens = 切分后的文本）
+
+### 记忆数据流
+1. 每轮：`chat::prepare_turn` 找/建会话 → 处理「忘掉」→ 取本次会话历史 → `memory::retrieve`（用户档案 + 相关记忆）→ 组装提示词。
+2. 用户消息和回复脱敏后写入 `messages`。
+3. 会话结束 30 分钟后：`worker` 用后台模型提取摘要和事实 → `extract::apply`（过滤、去重、冲突取代）。

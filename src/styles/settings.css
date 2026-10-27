@@ -445,3 +445,9 @@ input[type='search'] {
 .link-btn.danger {
   color: var(--danger);
 }
+.row > label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+}

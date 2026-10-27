@@ -127,7 +127,7 @@ export function MemoryPage({ api }: { api: SettingsApi }) {
               </option>
             ))}
           </select>
-          <label class="row small">
+          <label class="inline small">
             <input
               type="checkbox"
               checked={filter.include_history}
