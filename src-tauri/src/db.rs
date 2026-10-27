@@ -83,6 +83,21 @@ pub const MIGRATIONS: &[&str] = &[
     -- tokens 列存「单字 + 二字组合」切分后的文本（见 memory/tokenize.rs），rowid = memories.id
     CREATE VIRTUAL TABLE memory_fts USING fts5(tokens);
     "#,
+    // v4：任务执行记录（完整日志在 tasks\<id>.jsonl）
+    r#"
+    CREATE TABLE tasks (
+        id          TEXT PRIMARY KEY,
+        created_at  INTEGER NOT NULL,
+        finished_at INTEGER,
+        executor    TEXT NOT NULL,
+        goal        TEXT NOT NULL,
+        workdir     TEXT NOT NULL,
+        status      TEXT NOT NULL,
+        summary     TEXT NOT NULL DEFAULT '',
+        cost_usd    REAL NOT NULL DEFAULT 0
+    );
+    CREATE INDEX tasks_created ON tasks(created_at);
+    "#,
 ];
 
 pub fn latest_version() -> i64 {

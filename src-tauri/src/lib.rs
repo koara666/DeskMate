@@ -19,6 +19,7 @@ pub mod secrets;
 pub mod settings;
 pub mod settings_cmds;
 pub mod state;
+pub mod tasks;
 pub mod usage;
 pub mod worker;
 

@@ -94,6 +94,8 @@ pub struct Settings {
     pub budget: Budget,
     /// 暂停记忆：不记录新的长期记忆（已有记忆仍可使用）
     pub memory_paused: bool,
+    /// 任务执行（Claude Code / Codex）
+    pub tasks: crate::tasks::TaskSettings,
 }
 
 impl Default for Settings {
@@ -113,6 +115,7 @@ impl Default for Settings {
             background_backend: String::new(),
             budget: Budget::default(),
             memory_paused: false,
+            tasks: Default::default(),
         }
     }
 }
@@ -125,6 +128,7 @@ impl Settings {
         }
         self.pet_scale = self.pet_scale.clamp(0.6, 2.0);
         self.budget = self.budget.sanitize();
+        self.tasks = std::mem::take(&mut self.tasks).sanitize();
         self.global_prefs = std::mem::take(&mut self.global_prefs).sanitize();
         self.character_prefs = std::mem::take(&mut self.character_prefs)
             .into_iter()
