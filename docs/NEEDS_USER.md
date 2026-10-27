@@ -32,19 +32,6 @@
 - **安全说明**：Key 只保存在 Windows 自带的「凭据管理器」里，不会写进任何文件，界面上只显示最后 4 位。不要把 Key 发给任何人（包括聊天里发给角色）。
 - 想用 Gemini 或 Claude 也一样，在对应卡片里填写；它们在国内通常需要开代理。
 
-### [ ] 2. 把代码备份到 GitHub（私有仓库）——需要你登录一次
-- **为什么**：需求要求代码放到 GitHub 的**私有**仓库。登录 GitHub 必须由你本人完成。目前代码只在本机 `D:\DeskMate` 里（已经用 git 保存了每一步的历史）。
-- **怎么做**：
-  1. 安装 GitHub 命令行工具：打开「开始菜单」→ 搜索「PowerShell」→ 打开后输入 `winget install GitHub.cli` 回车，等它装完，关掉窗口。
-  2. 重新打开 PowerShell，输入 `gh auth login` 回车，按提示选择：`GitHub.com` → `HTTPS` → `Login with a web browser`，然后在浏览器里登录并输入屏幕上显示的验证码。
-  3. 告诉 agent「GitHub 已登录」。agent 会创建一个**私有**仓库并推送（不会设成公开，也不会发布 Release）。
-- **注意**：你电脑的 git 设置了代理 `127.0.0.1:7897`。推送时如果代理软件没开，可能会连不上——推送前请打开代理软件，或者告诉 agent。
-- **当前状态（2026-10-28）**：你已经建好了 https://github.com/koara666/DeskMate ，但它是**公开**的，agent 还没有推送。请把它改成私有：
-  1. 浏览器打开 https://github.com/koara666/DeskMate/settings ，翻到页面最下面红框「Danger Zone」。
-  2. 点「Change repository visibility」→「Change to private」，按提示确认（可能要输入仓库名 `koara666/DeskMate`）。
-  3. 告诉 agent「已改成私有」。agent 会再检查一次，确认是私有后才推送。不需要安装上面的 GitHub 命令行工具：第一次推送时 Windows 会弹出 GitHub 登录窗口，在里面登录即可。
-  - agent 检查私有的方法：不登录访问 `https://api.github.com/repos/koara666/DeskMate`，私有仓库会返回 404；返回 200 且 `"private": false` 就说明还是公开的，**不要推送**。
-
 ### [ ] 3. （可选）给角色换上你自己的图片
 - **为什么**：仓库里只能放原创的简单占位形象（角色大多是别人的版权作品，不能把官方图片放进 GitHub）。你自己电脑上用什么图片由你决定，程序会优先用你的图片，而且这些图片不会进入仓库。
 - **怎么做**：
@@ -79,3 +66,9 @@
 - **说明**：消耗的是订阅里单独的 Agent SDK 额度（不是 claude.ai 网页聊天的额度）；只能聊天，不能读写文件或执行命令；花费按 API 价格估算，计入「用量与花费」里的上限。
 
 ## 已完成
+
+### [x] 2. 把代码放到 GitHub（**公开**仓库，用户已确认）
+- 2026-10-28 用户建好了 https://github.com/koara666/DeskMate （公开），并明确确认：「邮箱都匿名。然后直接公开」。
+- agent 已做：推送前把全部提交的作者邮箱改成 GitHub 匿名地址 `249128192+koara666@users.noreply.github.com`（只改了这个项目的 git 设置，电脑全局设置不变）；推送前用 gitleaks 扫描了全部历史，没有密钥。
+- 仓库公开后：**任何提交都会立刻被所有人看到**，提交前的密钥扫描更要坚持；仍然**不发布 Release**（要发布需要用户另外确认）。
+- 推送时 git 走代理 `127.0.0.1:7897`，代理软件没开会连不上。
