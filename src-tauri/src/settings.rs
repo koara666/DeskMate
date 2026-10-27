@@ -96,6 +96,8 @@ pub struct Settings {
     pub memory_paused: bool,
     /// 任务执行（Claude Code / Codex）
     pub tasks: crate::tasks::TaskSettings,
+    /// 开机自启、快捷键、全屏、睡眠、主动搭话
+    pub daily: crate::daily::DailySettings,
 }
 
 impl Default for Settings {
@@ -116,6 +118,7 @@ impl Default for Settings {
             budget: Budget::default(),
             memory_paused: false,
             tasks: Default::default(),
+            daily: Default::default(),
         }
     }
 }
@@ -129,6 +132,7 @@ impl Settings {
         self.pet_scale = self.pet_scale.clamp(0.6, 2.0);
         self.budget = self.budget.sanitize();
         self.tasks = std::mem::take(&mut self.tasks).sanitize();
+        self.daily = std::mem::take(&mut self.daily).sanitize();
         self.global_prefs = std::mem::take(&mut self.global_prefs).sanitize();
         self.character_prefs = std::mem::take(&mut self.character_prefs)
             .into_iter()

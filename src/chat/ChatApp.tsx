@@ -66,6 +66,10 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
       api.onPlacement(setSide),
       api.onFocusInput(() => setFocusSignal((n) => n + 1)),
       api.onCharacterChanged(() => load().catch(() => {})),
+      api.onProactive((text) => {
+        stickToBottom.current = true;
+        setMessages((ms) => [...ms, { id: nextId(), role: 'assistant', text, status: 'done' }]);
+      }),
     ];
     const onOnline = () => setOnline(true);
     const onOffline = () => setOnline(false);

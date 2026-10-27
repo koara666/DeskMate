@@ -34,6 +34,16 @@ const view: SettingsView = {
   data_dir: 'C:\\data',
   version: '0.1.0',
   initial_tab: null,
+  daily: {
+    autostart: false,
+    hotkey_enabled: true,
+    hotkey: 'Alt+Shift+D',
+    hide_in_fullscreen: true,
+    sleep_minutes: 10,
+    proactive: false,
+    proactive_minutes: 90,
+    proactive_daily_max: 3,
+  },
 };
 
 function fakeApi() {

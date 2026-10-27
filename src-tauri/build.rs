@@ -45,6 +45,7 @@ const COMMANDS: &[&str] = &[
     "task_list",
     "task_open_log",
     "chat_task_report",
+    "daily_save",
 ];
 
 fn main() {

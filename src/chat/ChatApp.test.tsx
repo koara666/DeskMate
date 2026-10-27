@@ -35,6 +35,7 @@ function fakeApi() {
     onPlacement: off,
     onFocusInput: off,
     onCharacterChanged: off,
+    onProactive: off,
   };
   const emit = (e: ChatEvent) => act(() => handler!(e));
   return { api, calls, emit };

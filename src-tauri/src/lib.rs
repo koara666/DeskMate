@@ -5,6 +5,7 @@ pub mod character;
 pub mod character_cmds;
 pub mod chat;
 pub mod commands;
+pub mod daily;
 pub mod db;
 pub mod desktop;
 pub mod filter;
@@ -73,6 +74,14 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // 后台维护：备份、整理记忆（低频）
     worker::spawn(handle.clone());
+    // 日常体验：全屏检测、睡眠、主动搭话（低频）
+    daily::spawn(handle.clone());
+    {
+        let d = handle.state::<AppState>().settings().daily;
+        if let Err(e) = daily::apply_hotkey(&handle, d.hotkey_enabled, &d.hotkey) {
+            log::warn!("{e}");
+        }
+    }
 
     // 桌宠出现后再在后台准备聊天窗口，不拖慢启动
     tauri::async_runtime::spawn(async move {
@@ -95,6 +104,15 @@ pub fn run() {
                 let _ = desktop::open_settings_tab(app, tab);
             }
         }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--autostart"]),
+        ))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| daily::on_hotkey(app, event.state))
+                .build(),
+        )
         .setup(setup)
         .on_menu_event(|app, e| desktop::handle_menu(app, e.id().as_ref()))
         .on_window_event(|w, e| match (w.label(), e) {
@@ -151,6 +169,7 @@ pub fn run() {
             task_cmds::task_list,
             task_cmds::task_open_log,
             task_cmds::chat_task_report,
+            settings_cmds::daily_save,
         ])
         .build(tauri::generate_context!())
         .expect("DeskMate 启动失败");

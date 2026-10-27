@@ -10,7 +10,7 @@ use crate::memory::conversation;
 use crate::state::AppState;
 use serde::Serialize;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -73,6 +73,7 @@ pub fn pet_init(state: State<'_, AppState>) -> PetInit {
 
 #[tauri::command]
 pub fn pet_click(app: AppHandle) -> CmdResult<()> {
+    app.state::<AppState>().daily.touch();
     desktop::toggle_chat(&app).map_err(err)
 }
 
@@ -146,6 +147,7 @@ pub fn chat_send(
     if text.chars().count() > MAX_INPUT_CHARS {
         return Err(format!("消息太长了（上限 {MAX_INPUT_CHARS} 字）"));
     }
+    app.state::<AppState>().daily.touch();
     tauri::async_runtime::spawn(chat::run_turn(app, text, request_id, on_event));
     Ok(())
 }

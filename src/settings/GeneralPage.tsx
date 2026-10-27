@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { SettingsApi } from '../lib/ipc';
-import type { General, SettingsView } from '../lib/types';
+import type { DailySettings, General, SettingsView } from '../lib/types';
 import { StatusLine, useStatus } from './SettingsApp';
 
 interface Props {
@@ -70,6 +70,100 @@ export function GeneralPage({ api, view, onChanged }: Props) {
         </div>
       </div>
       <StatusLine status={status} />
+      <DailySection api={api} initial={view.daily} />
     </section>
+  );
+}
+
+function DailySection({ api, initial }: { api: SettingsApi; initial: DailySettings }) {
+  const [d, setD] = useState<DailySettings>(initial);
+  const { status, run } = useStatus();
+  const save = (next: DailySettings) => {
+    setD(next);
+    run(() => api.saveDaily(next));
+  };
+  const check = (k: keyof DailySettings) => (e: Event) => save({ ...d, [k]: (e.currentTarget as HTMLInputElement).checked });
+  return (
+    <>
+      <div class="card">
+        <h2>启动与快捷键</h2>
+        <label class="row">
+          <input type="checkbox" checked={d.autostart} onChange={check('autostart')} />
+          <span>
+            开机自动启动
+            <small>默认关闭</small>
+          </span>
+        </label>
+        <label class="row">
+          <input type="checkbox" checked={d.hotkey_enabled} onChange={check('hotkey_enabled')} />
+          <span>
+            全局快捷键：随时唤出 / 收起聊天框
+            <small>格式比如 Alt+Shift+D、Ctrl+Alt+K；被其他程序占用时会提示</small>
+          </span>
+        </label>
+        <div class="row">
+          <span class="label">快捷键</span>
+          <input value={d.hotkey} aria-label="快捷键" onInput={(e) => setD({ ...d, hotkey: (e.currentTarget as HTMLInputElement).value })} />
+          <button type="button" class="btn btn-small" onClick={() => save(d)}>
+            应用
+          </button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>不打扰</h2>
+        <label class="row">
+          <input type="checkbox" checked={d.hide_in_fullscreen} onChange={check('hide_in_fullscreen')} />
+          <span>
+            玩游戏、看全屏视频、演示时自动隐藏
+            <small>退出全屏后自动回来</small>
+          </span>
+        </label>
+        <div class="row">
+          <span class="label">多久没操作就睡觉</span>
+          <select
+            aria-label="睡觉时间"
+            value={d.sleep_minutes}
+            onChange={(e) => save({ ...d, sleep_minutes: Number((e.currentTarget as HTMLSelectElement).value) })}
+          >
+            {[0, 5, 10, 20, 30, 60].map((m) => (
+              <option key={m} value={m}>
+                {m === 0 ? '不睡觉' : `${m} 分钟`}
+              </option>
+            ))}
+          </select>
+        </div>
+        <label class="row">
+          <input type="checkbox" checked={d.proactive} onChange={check('proactive')} />
+          <span>
+            主动搭话
+            <small>很久没聊天时角色会主动打个招呼（勿扰、全屏时不会）。默认关闭；使用模型时会产生少量费用</small>
+          </span>
+        </label>
+        {d.proactive && (
+          <div class="row">
+            <label>
+              多久没聊天才搭话（分钟）
+              <input
+                type="number"
+                min={30}
+                value={d.proactive_minutes}
+                onChange={(e) => save({ ...d, proactive_minutes: Number((e.currentTarget as HTMLInputElement).value) || 90 })}
+              />
+            </label>
+            <label>
+              每天最多几次
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={d.proactive_daily_max}
+                onChange={(e) => save({ ...d, proactive_daily_max: Number((e.currentTarget as HTMLInputElement).value) || 3 })}
+              />
+            </label>
+          </div>
+        )}
+        <StatusLine status={status} />
+      </div>
+    </>
   );
 }

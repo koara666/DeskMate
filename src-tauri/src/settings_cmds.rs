@@ -53,6 +53,7 @@ pub struct SettingsView {
     pub version: String,
     /// 打开设置窗口时要直接显示的页面（只生效一次）
     pub initial_tab: Option<String>,
+    pub daily: crate::daily::DailySettings,
 }
 
 fn is_builtin_id(id: &str) -> bool {
@@ -110,6 +111,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         data_dir: state.paths.root().display().to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         initial_tab: state.desktop.take_settings_tab(),
+        daily: s.daily.clone(),
     }
 }
 
@@ -349,4 +351,22 @@ pub fn open_data_dir(state: State<'_, AppState>, sub: Option<String>) -> CmdResu
             .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// 保存日常体验设置：开机自启、快捷键（检测冲突）、全屏、睡眠、主动搭话
+#[tauri::command]
+pub fn daily_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    daily: crate::daily::DailySettings,
+) -> CmdResult<()> {
+    if daily.hotkey_enabled {
+        crate::daily::parse_hotkey(&daily.hotkey)?;
+    }
+    let d = daily.sanitize();
+    crate::daily::apply_autostart(&app, d.autostart)?;
+    let hotkey_result = crate::daily::apply_hotkey(&app, d.hotkey_enabled, &d.hotkey);
+    state.update_settings(|s| s.daily = d);
+    desktop::broadcast_settings_changed(&app);
+    hotkey_result
 }

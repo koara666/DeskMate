@@ -5,6 +5,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
   BackendConfig,
   Budget,
+  DailySettings,
   CharacterPrefs,
   CharactersView,
   ChatEvent,
@@ -38,6 +39,8 @@ export interface ChatApi {
   onPlacement(cb: (side: Side) => void): Promise<UnlistenFn>;
   onFocusInput(cb: () => void): Promise<UnlistenFn>;
   onCharacterChanged(cb: () => void): Promise<UnlistenFn>;
+  /** 角色主动搭话 */
+  onProactive(cb: (text: string) => void): Promise<UnlistenFn>;
 }
 
 function channel(onEvent: (e: ChatEvent) => void): Channel<ChatEvent> {
@@ -59,6 +62,7 @@ export const chatApi: ChatApi = {
   onPlacement: (cb) => listen<Side>('chat-placement', (e) => cb(e.payload)),
   onFocusInput: (cb) => listen('chat-focus-input', () => cb()),
   onCharacterChanged: (cb) => listen('character-changed', () => cb()),
+  onProactive: (cb) => listen<string>('chat-proactive', (e) => cb(e.payload)),
 };
 
 export interface PetApi {
@@ -98,6 +102,7 @@ export const settingsApi = {
     invoke('backend_select', { chatBackend, backgroundBackend }),
   test: (id: string) => invoke<TestResult>('backend_test', { id }),
   saveBudget: (budget: Budget) => invoke('budget_save', { budget }),
+  saveDaily: (daily: DailySettings) => invoke('daily_save', { daily }),
   usage: () => invoke<UsageView>('usage_get'),
   openDataDir: (sub?: string) => invoke('open_data_dir', { sub: sub ?? null }),
   characters: () => invoke<CharactersView>('characters_list'),

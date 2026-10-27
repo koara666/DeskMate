@@ -50,6 +50,7 @@ pub enum PetState {
     Talking,
     Happy,
     Sad,
+    Sleep,
 }
 
 struct Active {
@@ -64,6 +65,14 @@ pub struct ChatState {
 }
 
 impl ChatState {
+    /// 是否正在生成回复
+    pub fn is_generating(&self) -> bool {
+        self.active
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+    }
+
     /// 开始新一轮：取消正在进行的生成，登记新的取消令牌
     fn begin(&self, id: &str) -> CancellationToken {
         let mut a = self.active.lock().unwrap_or_else(|e| e.into_inner());

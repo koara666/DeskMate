@@ -16,6 +16,9 @@ tauri-build = { version = "2.7", features = [] }
 [dependencies]
 tauri = { version = "2.12", features = ["tray-icon"] }
 tauri-plugin-single-instance = "2.5"
+# 开机自启（默认关闭）、全局快捷键：只在 Rust 端使用，不开放给前端
+tauri-plugin-autostart = "2.7"
+tauri-plugin-global-shortcut = "2.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

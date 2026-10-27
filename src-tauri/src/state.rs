@@ -26,6 +26,8 @@ pub struct AppState {
     notice: Mutex<Option<String>>,
     /// 正在执行 / 等待批准的任务
     pub tasks: crate::task_cmds::TaskState,
+    /// 日常体验：互动时间、全屏、睡眠、快捷键
+    pub daily: crate::daily::DailyState,
 }
 
 impl AppState {
@@ -50,6 +52,7 @@ impl AppState {
             secrets,
             notice: Mutex::new(None),
             tasks: Default::default(),
+            daily: Default::default(),
         }
     }
 

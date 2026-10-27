@@ -176,6 +176,13 @@ async fn run_task(app: AppHandle, spec: RunSpec, ch: Channel<TaskEvent>) {
     state.tasks.end(&spec.task_id);
     let (status, summary, cost) = result;
     let _ = tasks::finish_task(&state.db(), &spec.task_id, status, &summary, cost, now());
+    // 聊天窗口关着时把结果弹出来（不抢键盘焦点）
+    if !crate::desktop::chat(&app)
+        .and_then(|c| c.is_visible().ok())
+        .unwrap_or(false)
+    {
+        crate::daily::pop_chat(&app);
+    }
     chat::emit_pet_state(
         &app,
         if status == "done" {

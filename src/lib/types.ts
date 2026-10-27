@@ -104,6 +104,18 @@ export interface SettingsView {
   data_dir: string;
   version: string;
   initial_tab: string | null;
+  daily: DailySettings;
+}
+
+export interface DailySettings {
+  autostart: boolean;
+  hotkey_enabled: boolean;
+  hotkey: string;
+  hide_in_fullscreen: boolean;
+  sleep_minutes: number;
+  proactive: boolean;
+  proactive_minutes: number;
+  proactive_daily_max: number;
 }
 
 export interface TestResult {
