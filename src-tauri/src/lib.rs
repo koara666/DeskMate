@@ -12,8 +12,11 @@ pub mod logging;
 pub mod paths;
 pub mod prompt;
 pub mod redact;
+pub mod secrets;
 pub mod settings;
+pub mod settings_cmds;
 pub mod state;
+pub mod usage;
 
 use paths::DataPaths;
 use state::AppState;
@@ -46,7 +49,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let conn = db::open(&paths.db(), &paths.backups())?;
     let builtin = builtin_characters_dir(app);
-    app.manage(AppState::new(paths, conn, builtin));
+    app.manage(AppState::new(
+        paths,
+        conn,
+        builtin,
+        Box::new(secrets::KeyringStore),
+    ));
 
     let handle = app.handle().clone();
     desktop::create_pet(&handle)?;
@@ -92,6 +100,18 @@ pub fn run() {
             commands::chat_set_mode,
             commands::chat_hide,
             commands::open_settings,
+            settings_cmds::settings_get,
+            settings_cmds::settings_save_general,
+            settings_cmds::backend_save,
+            settings_cmds::backend_add,
+            settings_cmds::backend_delete,
+            settings_cmds::backend_set_key,
+            settings_cmds::backend_clear_key,
+            settings_cmds::backend_select,
+            settings_cmds::backend_test,
+            settings_cmds::budget_save,
+            settings_cmds::usage_get,
+            settings_cmds::open_data_dir,
         ])
         .build(tauri::generate_context!())
         .expect("DeskMate 启动失败");

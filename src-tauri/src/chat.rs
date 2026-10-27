@@ -1,13 +1,14 @@
 //! 一轮对话的编排：组装提示词 → 调用后端（流式）→ 禁词过滤 → 通知前端 → 记录历史。
 
 use crate::backends::{
-    BackendError, ChatBackend, ChatMessage, ChatOutcome, ChatRequest, FinishReason, Role,
-    mock::MockBackend,
+    self, BackendConfig, BackendError, ChatBackend, ChatMessage, ChatOutcome, ChatRequest,
+    FinishReason, Role,
 };
 use crate::character::{self, Character};
 use crate::filter::{BannedWords, StreamFilter};
 use crate::prompt::{self, PromptBudget, PromptParts};
 use crate::state::AppState;
+use crate::usage;
 use serde::Serialize;
 use std::sync::Mutex;
 use tauri::ipc::Channel;
@@ -153,8 +154,98 @@ pub async fn generate(
 }
 
 /// 当前使用的对话后端（M2 起根据设置选择）
-fn current_backend(_state: &AppState) -> Result<Box<dyn ChatBackend>, BackendError> {
-    Ok(Box::new(MockBackend::default()))
+/// 选好的后端：实例 + 对应配置
+pub struct Selected {
+    pub backend: Box<dyn ChatBackend>,
+    pub cfg: BackendConfig,
+}
+
+/// 按配置 id 创建后端（需要 Key 的从系统凭据管理器读取）
+pub fn select_backend(state: &AppState, id: &str) -> Result<Selected, BackendError> {
+    let cfg = state
+        .settings()
+        .backend(id)
+        .cloned()
+        .ok_or(BackendError::NotConfigured)?;
+    let kind = backends::find_kind(&cfg.kind).ok_or(BackendError::NotConfigured)?;
+    let key = if kind.needs_key {
+        match state.secrets.get(&cfg.id) {
+            Ok(Some(k)) => Some(k),
+            Ok(None) => return Err(BackendError::NotConfigured),
+            Err(e) => {
+                log::warn!("读取 Key 失败：{e}");
+                return Err(BackendError::NotConfigured);
+            }
+        }
+    } else {
+        None
+    };
+    Ok(Selected {
+        backend: (kind.create)(&cfg, key, state.http.clone()),
+        cfg,
+    })
+}
+
+/// 调用前检查花费上限（mock 不花钱，不检查）
+pub fn check_budget(state: &AppState, cfg: &BackendConfig) -> Result<(), BackendError> {
+    if cfg.kind == "mock" {
+        return Ok(());
+    }
+    let (day, month) = usage::today();
+    let budget = state.settings().budget;
+    usage::check_budget(&state.db(), &budget, &day, &month)
+}
+
+fn request_tokens(req: &ChatRequest) -> usize {
+    backends::estimate_tokens(&req.system_text())
+        + req
+            .messages_for_api()
+            .iter()
+            .map(|m| backends::estimate_tokens(&m.content))
+            .sum::<usize>()
+}
+
+/// 记录用量。中途取消等情况拿不到接口返回的用量时，按字数估算（宁可多估）。
+pub fn record_usage(
+    state: &AppState,
+    cfg: &BackendConfig,
+    purpose: &str,
+    req_tokens: usize,
+    out: &ChatOutcome,
+) {
+    let mut u = out.usage;
+    if u.input_tokens == 0 && u.output_tokens == 0 && cfg.kind != "mock" {
+        u.input_tokens = req_tokens as u64;
+        u.output_tokens = backends::estimate_tokens(&out.text) as u64;
+    }
+    let cost = cfg.price.cost(&u);
+    let rec = usage::Record {
+        backend_id: &cfg.id,
+        model: &cfg.model,
+        purpose,
+        usage: u,
+        cost_usd: cost,
+    };
+    if let Err(e) = usage::record(&state.db(), &rec) {
+        log::warn!("记录用量失败：{e}");
+    }
+}
+
+/// 不需要流式显示的一次性调用（后台记忆整理、测试连接）：检查上限 → 调用 → 记录用量
+pub async fn complete(
+    state: &AppState,
+    backend_id: &str,
+    req: ChatRequest,
+    purpose: &str,
+    cancel: CancellationToken,
+) -> Result<ChatOutcome, BackendError> {
+    let sel = select_backend(state, backend_id)?;
+    check_budget(state, &sel.cfg)?;
+    let tokens = request_tokens(&req);
+    let mut sink = |_: &str| {};
+    let out = sel.backend.stream_chat(req, &mut sink, cancel).await?;
+    record_usage(state, &sel.cfg, purpose, tokens, &out);
+    Ok(out)
 }
 
 fn now_text() -> String {
@@ -240,8 +331,14 @@ pub async fn run_turn(
     state.chat.push(ChatMessage::user(user_text.clone()));
     emit_pet_state(&app, PetState::Thinking);
 
-    let result = match current_backend(&state) {
-        Ok(backend) => {
+    let chat_id = state.settings().chat_backend;
+    let req_tokens = request_tokens(&req);
+    let selected = select_backend(&state, &chat_id).and_then(|sel| {
+        check_budget(&state, &sel.cfg)?;
+        Ok(sel)
+    });
+    let result = match selected {
+        Ok(sel) => {
             let mut talking = false;
             let ch = channel.clone();
             let app2 = app.clone();
@@ -254,14 +351,18 @@ pub async fn run_turn(
                     text: s.to_string(),
                 });
             };
-            generate(
-                backend.as_ref(),
+            let r = generate(
+                sel.backend.as_ref(),
                 req,
                 BannedWords::default(),
                 cancel,
                 &mut on_delta,
             )
-            .await
+            .await;
+            if let Ok(out) = &r {
+                record_usage(&state, &sel.cfg, usage::purpose::CHAT, req_tokens, out);
+            }
+            r
         }
         Err(e) => Err(e),
     };
@@ -308,6 +409,7 @@ pub async fn run_turn(
 mod tests {
     use super::*;
     use crate::backends::SystemBlock;
+    use crate::backends::mock::MockBackend;
 
     fn req(text: &str) -> ChatRequest {
         ChatRequest {
@@ -316,6 +418,7 @@ mod tests {
                 cacheable: true,
             }],
             messages: vec![ChatMessage::user(text)],
+            context: None,
             max_tokens: 100,
             temperature: None,
         }

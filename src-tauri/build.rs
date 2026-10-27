@@ -11,6 +11,18 @@ const COMMANDS: &[&str] = &[
     "chat_set_mode",
     "chat_hide",
     "open_settings",
+    "settings_get",
+    "settings_save_general",
+    "backend_save",
+    "backend_add",
+    "backend_delete",
+    "backend_set_key",
+    "backend_clear_key",
+    "backend_select",
+    "backend_test",
+    "budget_save",
+    "usage_get",
+    "open_data_dir",
 ];
 
 fn main() {

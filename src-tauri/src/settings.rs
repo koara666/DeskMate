@@ -1,6 +1,8 @@
 //! 设置：整个结构以 JSON 存在 `settings` 表的 `app` 键下（不含任何密钥）。
 //! 新增字段一律带默认值（`#[serde(default)]`），老数据读出来自动补齐。
 
+use crate::backends::{self, BackendConfig};
+use crate::usage::Budget;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +40,14 @@ pub struct Settings {
     pub pet_position: Option<SavedPosition>,
     /// 默认停靠角落
     pub corner: Corner,
+    /// 模型配置列表（不含 Key）
+    pub backends: Vec<BackendConfig>,
+    /// 日常聊天用哪个配置（id）
+    pub chat_backend: String,
+    /// 后台记忆整理用哪个配置（空 = 和聊天相同）。建议选最便宜的。
+    pub background_backend: String,
+    /// 花费上限
+    pub budget: Budget,
 }
 
 impl Default for Settings {
@@ -50,6 +60,10 @@ impl Default for Settings {
             dnd: false,
             pet_position: None,
             corner: Corner::BottomRight,
+            backends: backends::default_configs(),
+            chat_backend: "mock".into(),
+            background_backend: String::new(),
+            budget: Budget::default(),
         }
     }
 }
@@ -61,7 +75,32 @@ impl Settings {
             self.pet_scale = 1.0;
         }
         self.pet_scale = self.pet_scale.clamp(0.6, 2.0);
+        self.budget = self.budget.sanitize();
+        // 丢掉无效配置；新版本新增的后端类型自动补上默认配置
+        let mut seen = std::collections::HashSet::new();
+        self.backends
+            .retain(|b| b.validate().is_ok() && seen.insert(b.id.clone()));
+        for d in backends::default_configs() {
+            if !self.backends.iter().any(|b| b.id == d.id) {
+                self.backends.push(d);
+            }
+        }
+        if !self.backends.iter().any(|b| b.id == self.chat_backend) {
+            self.chat_backend = "mock".into();
+        }
+        if !self.background_backend.is_empty()
+            && !self
+                .backends
+                .iter()
+                .any(|b| b.id == self.background_backend)
+        {
+            self.background_backend = String::new();
+        }
         self
+    }
+
+    pub fn backend(&self, id: &str) -> Option<&BackendConfig> {
+        self.backends.iter().find(|b| b.id == id)
     }
 }
 
@@ -132,6 +171,24 @@ mod tests {
         let s = load(&conn);
         assert_eq!(s.pet_scale, 2.0);
         assert_eq!(s.character_id, "deepseek-whale");
+    }
+
+    #[test]
+    fn invalid_backends_are_dropped_and_defaults_restored() {
+        let conn = db::open_in_memory().unwrap();
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES ('app', '{\"backends\": [{\"id\": \"deepseek\", \"kind\": \"deepseek\", \"name\": \"DS\", \"base_url\": \"http://evil.com\", \"model\": \"x\"}], \"chat_backend\": \"gone\"}')",
+            [],
+        )
+        .unwrap();
+        let s = load(&conn);
+        let ds = s.backend("deepseek").unwrap();
+        assert_eq!(
+            ds.base_url, "https://api.deepseek.com",
+            "http 地址无效，恢复默认"
+        );
+        assert_eq!(s.chat_backend, "mock");
+        assert!(s.backend("gemini").is_some());
     }
 
     #[test]

@@ -4,6 +4,7 @@ use crate::character::{self, Character};
 use crate::chat::ChatState;
 use crate::desktop::DesktopState;
 use crate::paths::DataPaths;
+use crate::secrets::SecretStore;
 use crate::settings::{self, Settings};
 use rusqlite::Connection;
 use std::path::PathBuf;
@@ -17,6 +18,10 @@ pub struct AppState {
     pub builtin_characters_dir: Option<PathBuf>,
     pub chat: ChatState,
     pub desktop: DesktopState,
+    /// 共用的 HTTP 客户端
+    pub http: reqwest::Client,
+    /// API Key 存储（系统凭据管理器）
+    pub secrets: Box<dyn SecretStore>,
 }
 
 impl AppState {
@@ -24,6 +29,7 @@ impl AppState {
         paths: DataPaths,
         conn: Connection,
         builtin_characters_dir: Option<PathBuf>,
+        secrets: Box<dyn SecretStore>,
     ) -> Self {
         let settings = settings::load(&conn);
         let characters =
@@ -36,6 +42,8 @@ impl AppState {
             builtin_characters_dir,
             chat: ChatState::default(),
             desktop: DesktopState::default(),
+            http: crate::backends::http::client(),
+            secrets,
         }
     }
 

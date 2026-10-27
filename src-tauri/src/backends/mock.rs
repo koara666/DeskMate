@@ -8,19 +8,26 @@
 use super::*;
 use std::time::Duration;
 
-pub const KIND: BackendKind = BackendKind {
-    kind: "mock",
-    display_name: "Mock（本地测试，不联网）",
-    needs_key: false,
-    default_base_url: "",
-    default_model: "mock-1",
-    capabilities: Capabilities {
-        streaming: true,
-        tool_calls: false,
-        agent: false,
-        prompt_cache: false,
-    },
-};
+pub fn kind() -> BackendKind {
+    BackendKind {
+        kind: "mock",
+        display_name: "Mock（本地测试，不联网）",
+        needs_key: false,
+        default_base_url: "",
+        default_model: "mock-1",
+        default_reasoning: "",
+        default_price: Price::new(0.0, 0.0, 0.0, 0.0),
+        key_url: "",
+        note: "本地假数据，不联网、不花钱。用来体验界面和开发测试。",
+        capabilities: Capabilities {
+            streaming: true,
+            tool_calls: false,
+            agent: false,
+            prompt_cache: false,
+        },
+        create: |_, _, _| Box::new(MockBackend::default()),
+    }
+}
 
 pub struct MockBackend {
     /// 每段输出之间的间隔（测试时设为 0）
@@ -110,7 +117,7 @@ pub fn reply_for(req: &ChatRequest) -> Result<(String, Duration), BackendError> 
 
 impl ChatBackend for MockBackend {
     fn capabilities(&self) -> Capabilities {
-        KIND.capabilities
+        kind().capabilities
     }
 
     fn stream_chat<'a>(
@@ -165,6 +172,7 @@ fn outcome(text: String, input_tokens: usize, finish: FinishReason) -> ChatOutco
             input_tokens: input_tokens as u64,
             output_tokens,
             cached_input_tokens: 0,
+            cache_write_input_tokens: 0,
         },
         finish,
     }
@@ -181,6 +189,7 @@ mod tests {
                 cacheable: true,
             }],
             messages: vec![ChatMessage::user(text)],
+            context: None,
             max_tokens: 256,
             temperature: None,
         }

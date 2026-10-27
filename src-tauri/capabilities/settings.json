@@ -1,10 +1,22 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "settings",
-  "description": "设置窗口（随功能逐步授权）",
+  "description": "设置窗口：读写设置、管理模型配置与 Key（Key 只能写入/清除，读不到原文）、查看用量",
   "windows": ["settings"],
   "permissions": [
     "core:event:allow-listen",
-    "core:event:allow-unlisten"
+    "core:event:allow-unlisten",
+    "allow-settings-get",
+    "allow-settings-save-general",
+    "allow-backend-save",
+    "allow-backend-add",
+    "allow-backend-delete",
+    "allow-backend-set-key",
+    "allow-backend-clear-key",
+    "allow-backend-select",
+    "allow-backend-test",
+    "allow-budget-save",
+    "allow-usage-get",
+    "allow-open-data-dir"
   ]
 }

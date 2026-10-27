@@ -193,6 +193,26 @@ fn finalize_pet_position(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// 改变桌宠大小后重新摆放（保持在屏幕内并吸附边缘）
+pub fn apply_pet_scale(app: &AppHandle) -> tauri::Result<()> {
+    let Some(w) = pet(app) else { return Ok(()) };
+    let scale = app.state::<AppState>().settings().pet_scale;
+    let r = window_rect(&w)?;
+    w.set_size(LogicalSize::new(
+        PET_LOGICAL.0 * scale,
+        PET_LOGICAL.1 * scale,
+    ))?;
+    // 以底边中点为锚点缩放，看起来像「站在原地变大变小」
+    let s = w.outer_size()?;
+    let (cx, bottom) = (r.x + r.w / 2, r.bottom());
+    w.set_position(PhysicalPosition::new(
+        cx - s.width as i32 / 2,
+        bottom - s.height as i32,
+    ))?;
+    finalize_pet_position(app)?;
+    position_chat(app)
+}
+
 /// 停靠到某个角落
 pub fn dock(app: &AppHandle, corner: Corner) -> tauri::Result<()> {
     let Some(w) = pet(app) else { return Ok(()) };

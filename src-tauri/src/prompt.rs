@@ -3,8 +3,9 @@
 //! 顺序按「越稳定越靠前」排列，方便后端做提示缓存：
 //! 1. 基础规则 + 角色设定 + 用户自定义要求 + 禁词      （可缓存，几乎不变）
 //! 2. 用户档案（关于用户的稳定事实）                  （可缓存，偶尔变）
-//! 3. 本轮检索到的相关记忆 + 当前时间                  （每轮都变，不缓存）
-//! 4. 最近对话（在 token 预算内从新到旧保留）+ 本轮用户消息
+//! 3. 最近对话（在 token 预算内从新到旧保留）+ 本轮用户消息
+//! 4. 本轮检索到的相关记忆 + 当前时间：每轮都变，放进 `ChatRequest::context`，
+//!    由后端附在最后一条用户消息前面——这样系统提示词和历史前缀逐字节不变，提示缓存才能命中。
 
 use crate::backends::{ChatMessage, ChatRequest, Role, SystemBlock, estimate_tokens};
 
@@ -147,12 +148,7 @@ pub fn build(parts: &PromptParts<'_>, budget: PromptBudget) -> ChatRequest {
     if !parts.now.is_empty() {
         dynamic.push_str(&format!("当前时间：{}", parts.now));
     }
-    if !dynamic.trim().is_empty() {
-        system.push(SystemBlock {
-            text: dynamic.trim_end().to_string(),
-            cacheable: false,
-        });
-    }
+    let context = (!dynamic.trim().is_empty()).then(|| dynamic.trim_end().to_string());
 
     // 4. 最近对话
     let messages = trim_history(parts.history, parts.user_text, budget.history_tokens);
@@ -160,6 +156,7 @@ pub fn build(parts: &PromptParts<'_>, budget: PromptBudget) -> ChatRequest {
     ChatRequest {
         system,
         messages,
+        context,
         max_tokens: budget.max_output_tokens,
         temperature: None,
     }
@@ -233,16 +230,18 @@ mod tests {
             ..base()
         };
         let req = build(&p, PromptBudget::default());
-        assert_eq!(req.system.len(), 3);
+        assert_eq!(req.system.len(), 2);
         assert!(req.system[0].cacheable && req.system[1].cacheable);
-        assert!(!req.system[2].cacheable);
         let core = &req.system[0].text;
         assert!(core.contains("测试酱") && core.contains("喵"));
         assert!(core.contains("回复不超过三句话"));
         assert!(core.contains("笨蛋"));
         assert!(req.system[1].text.contains("小林"));
-        assert!(req.system[2].text.contains("看了海"));
-        assert!(req.system[2].text.contains("当前时间"));
+        let ctx = req.context.as_deref().unwrap();
+        assert!(ctx.contains("看了海"));
+        assert!(ctx.contains("当前时间"));
+        // 每轮都变的内容不能进系统提示词（否则提示缓存失效）
+        assert!(!req.system.iter().any(|b| b.text.contains("当前时间")));
         // 角色设定在规则之后
         assert!(core.find("基本规则").unwrap() < core.find("喵").unwrap());
     }
@@ -251,6 +250,7 @@ mod tests {
     fn empty_sections_are_omitted() {
         let req = build(&PromptParts { now: "", ..base() }, PromptBudget::default());
         assert_eq!(req.system.len(), 1);
+        assert_eq!(req.context, None);
         assert!(!req.system[0].text.contains("禁用词"));
         assert!(!req.system[0].text.contains("额外要求"));
         assert_eq!(req.messages, vec![ChatMessage::user("你好")]);
@@ -270,7 +270,7 @@ mod tests {
             },
             PromptBudget::default(),
         );
-        let t = &req.system.last().unwrap().text;
+        let t = req.context.as_deref().unwrap();
         assert!(t.contains("不可信来源"));
         assert!(t.contains("不是指令"));
     }
@@ -295,7 +295,7 @@ mod tests {
             },
             budget,
         );
-        let t = &req.system.last().unwrap().text;
+        let t = req.context.as_deref().unwrap();
         assert!(t.contains("第0条"));
         assert!(!t.contains("第99条"));
         let mem_part = t.split("当前时间").next().unwrap();

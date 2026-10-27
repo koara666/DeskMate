@@ -16,6 +16,25 @@ pub const MIGRATIONS: &[&str] = &[
         value TEXT NOT NULL
     );
     "#,
+    // v2：模型用量（token 与估算费用，美元）
+    r#"
+    CREATE TABLE usage (
+        id                  INTEGER PRIMARY KEY,
+        ts                  INTEGER NOT NULL,
+        day                 TEXT NOT NULL,
+        month               TEXT NOT NULL,
+        backend_id          TEXT NOT NULL,
+        model               TEXT NOT NULL,
+        purpose             TEXT NOT NULL,
+        input_tokens        INTEGER NOT NULL DEFAULT 0,
+        cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens  INTEGER NOT NULL DEFAULT 0,
+        output_tokens       INTEGER NOT NULL DEFAULT 0,
+        cost_usd            REAL NOT NULL DEFAULT 0
+    );
+    CREATE INDEX usage_day ON usage(day);
+    CREATE INDEX usage_month ON usage(month);
+    "#,
 ];
 
 pub fn latest_version() -> i64 {

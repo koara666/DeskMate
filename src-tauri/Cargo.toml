@@ -26,6 +26,10 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 rusqlite = { version = "0.41", features = ["bundled"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 base64 = "0.22"
+# HTTP：Windows 上用系统 TLS（schannel），体积小；读取系统代理设置（国内访问 Gemini/Claude 常需要代理）
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "stream", "http2", "system-proxy", "charset"] }
+# API Key 存系统凭据管理器
+keyring = { version = "3.6", features = ["windows-native", "apple-native"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
