@@ -9,6 +9,7 @@ use crate::filter::{BannedWords, StreamFilter};
 use crate::memory::{self, conversation, forget};
 use crate::prompt::{self, MemorySnippet, PromptBudget, PromptParts};
 use crate::state::AppState;
+use crate::task_marker::{self, MarkerFilter};
 use crate::usage;
 use serde::Serialize;
 use std::sync::Mutex;
@@ -26,6 +27,8 @@ pub enum ChatEvent {
     Done {
         text: String,
         finish: FinishReason,
+        /// 角色提议交给执行工具的任务（需要用户在卡片上确认）
+        task: Option<String>,
     },
     Error {
         kind: String,
@@ -301,11 +304,13 @@ pub fn prepare_turn(
     character_id: &str,
     user_text: &str,
     now: i64,
+    extra_notes: Vec<String>,
 ) -> TurnContext {
     let paused = state.settings().memory_paused;
     let db = state.db();
     let mut t = TurnContext {
         stored_user_text: user_text.to_string(),
+        notes: extra_notes,
         ..Default::default()
     };
     let conv = match conversation::current_or_new(&db, character_id, now, paused) {
@@ -389,6 +394,17 @@ pub async fn run_turn(
     request_id: String,
     channel: Channel<ChatEvent>,
 ) {
+    run_turn_with_notes(app, user_text, request_id, channel, Vec::new()).await
+}
+
+/// 同上，并附带给模型的程序提示（比如任务执行结果）
+pub async fn run_turn_with_notes(
+    app: AppHandle,
+    user_text: String,
+    request_id: String,
+    channel: Channel<ChatEvent>,
+    notes: Vec<String>,
+) {
     let state = app.state::<AppState>();
     let cancel = state.chat.begin(&request_id);
     let character = state.current_character();
@@ -399,7 +415,7 @@ pub async fn run_turn(
     // 禁词和自定义要求 = 全局 + 当前角色专属
     let prefs = state.settings().effective_prefs(&character_id);
     let now = memory::now_secs();
-    let turn = prepare_turn(&state, &character_id, &user_text, now);
+    let turn = prepare_turn(&state, &character_id, &user_text, now, notes);
 
     let req = {
         let (name, persona) = character
@@ -440,23 +456,34 @@ pub async fn run_turn(
             let mut talking = false;
             let ch = channel.clone();
             let app2 = app.clone();
-            let mut on_delta = move |s: &str| {
-                if !talking {
-                    talking = true;
-                    emit_pet_state(&app2, PetState::Talking);
-                }
-                let _ = ch.send(ChatEvent::Delta {
-                    text: s.to_string(),
-                });
+            // 任务提议标记 [[任务：…]] 不显示给用户
+            let mut marker = MarkerFilter::default();
+            let r = {
+                let marker = &mut marker;
+                let mut on_delta = move |s: &str| {
+                    let visible = marker.push(s);
+                    if visible.is_empty() {
+                        return;
+                    }
+                    if !talking {
+                        talking = true;
+                        emit_pet_state(&app2, PetState::Talking);
+                    }
+                    let _ = ch.send(ChatEvent::Delta { text: visible });
+                };
+                generate(
+                    sel.backend.as_ref(),
+                    req,
+                    BannedWords::new(&prefs.banned_words),
+                    cancel,
+                    &mut on_delta,
+                )
+                .await
             };
-            let r = generate(
-                sel.backend.as_ref(),
-                req,
-                BannedWords::new(&prefs.banned_words),
-                cancel,
-                &mut on_delta,
-            )
-            .await;
+            let rest = marker.finish();
+            if !rest.is_empty() {
+                let _ = channel.send(ChatEvent::Delta { text: rest });
+            }
             if let Ok(out) = &r {
                 record_usage(&state, &sel.cfg, usage::purpose::CHAT, req_tokens, out);
             }
@@ -467,7 +494,9 @@ pub async fn run_turn(
     state.chat.end(&request_id);
 
     match result {
-        Ok(out) => {
+        Ok(mut out) => {
+            let (visible, task) = task_marker::strip(&out.text);
+            out.text = visible;
             if !out.text.is_empty()
                 && let Some(conv) = turn.conversation_id
                 && let Err(e) = conversation::append(
@@ -497,6 +526,7 @@ pub async fn run_turn(
             let _ = channel.send(ChatEvent::Done {
                 text: out.text,
                 finish: out.finish,
+                task,
             });
         }
         Err(e) => {

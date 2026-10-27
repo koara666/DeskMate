@@ -1,12 +1,13 @@
 // 聊天窗口：气泡模式（只显示最新回复）和面板模式（完整历史）。
 // 模型输出一律作为纯文本渲染（Preact 自动转义），绝不使用 dangerouslySetInnerHTML。
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
-import type { ChatApi } from '../lib/ipc';
+import type { ChatApi, TaskApi } from '../lib/ipc';
 import { newRequestId } from '../lib/ipc';
 import { Typewriter } from '../lib/typewriter';
 import { copyText } from '../lib/clipboard';
 import type { CharacterView, ChatEvent, ChatMode, ErrorInfo, Role, Side } from '../lib/types';
 import { Composer } from './Composer';
+import { TaskCard } from './TaskCard';
 
 export type MsgStatus = 'streaming' | 'done' | 'stopped' | 'error';
 
@@ -25,17 +26,21 @@ const NETWORK_KINDS = new Set(['network', 'timeout']);
 
 interface Props {
   api: ChatApi;
+  /** 任务执行（不传时不显示任务相关界面） */
+  taskApi?: TaskApi;
   /** 测试时可以把打字机间隔调小 */
   typewriterTickMs?: number;
 }
 
-export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
+export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [mode, setModeState] = useState<ChatMode>('compact');
   const [side, setSide] = useState<Side>('left');
   const [character, setCharacter] = useState<CharacterView>({ id: '', name: '', color: '' });
   const [greeting, setGreeting] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  /** 任务卡片：null = 不显示；字符串 = 预填的任务描述 */
+  const [taskGoal, setTaskGoal] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [focusSignal, setFocusSignal] = useState(0);
@@ -107,6 +112,7 @@ export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
       } else if (e.type === 'done') {
         if (e.finish === 'cancelled') w.flush();
         w.end(() => finishWith({ text: e.text || w.text(), status: e.finish === 'cancelled' ? 'stopped' : 'done' }));
+        if (e.task && taskApi) openTask(e.task);
       } else {
         w.flush();
         const { type: _t, ...info } = e;
@@ -141,6 +147,11 @@ export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
     api.stop(requestId).catch(() => {});
   };
 
+  const openTask = (goal: string) => {
+    setTaskGoal(goal);
+    setMode('expanded');
+  };
+
   const setMode = (m: ChatMode) => {
     setModeState(m);
     api.setMode(m).catch(() => {});
@@ -169,6 +180,11 @@ export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
           ) : (
             <button type="button" class="icon-btn" title="收起为气泡" aria-label="收起" onClick={() => setMode('compact')}>
               ⤡
+            </button>
+          )}
+          {taskApi && (
+            <button type="button" class="icon-btn" title="交给执行工具做一件事" aria-label="新任务" onClick={() => openTask('')}>
+              🛠
             </button>
           )}
           <button type="button" class="icon-btn" title="设置" aria-label="设置" onClick={() => api.openSettings().catch(() => {})}>
@@ -235,6 +251,14 @@ export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
         </div>
       )}
 
+      {taskApi && taskGoal !== null && (
+        <TaskCard
+          api={taskApi}
+          initialGoal={taskGoal}
+          onClose={() => setTaskGoal(null)}
+          onFinished={(id) => startStream((rid, onEvent) => taskApi.report(id, rid, onEvent))}
+        />
+      )}
       <Composer generating={generating} onSend={send} onStop={stop} focusSignal={focusSignal} />
     </div>
   );

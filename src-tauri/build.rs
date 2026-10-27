@@ -36,6 +36,15 @@ const COMMANDS: &[&str] = &[
     "memory_set_paused",
     "memory_clear_all",
     "memory_export",
+    "task_defaults",
+    "task_settings_save",
+    "task_start",
+    "task_approve",
+    "task_decline",
+    "task_cancel",
+    "task_list",
+    "task_open_log",
+    "chat_task_report",
 ];
 
 fn main() {

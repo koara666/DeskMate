@@ -24,6 +24,8 @@ pub struct AppState {
     pub secrets: Box<dyn SecretStore>,
     /// 下次打开聊天窗口时要告诉用户的一句话（比如数据库从备份恢复了）
     notice: Mutex<Option<String>>,
+    /// 正在执行 / 等待批准的任务
+    pub tasks: crate::task_cmds::TaskState,
 }
 
 impl AppState {
@@ -47,6 +49,7 @@ impl AppState {
             http: crate::backends::http::client(),
             secrets,
             notice: Mutex::new(None),
+            tasks: Default::default(),
         }
     }
 

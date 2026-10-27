@@ -50,7 +50,7 @@ export interface ErrorInfo {
 
 export type ChatEvent =
   | { type: 'delta'; text: string }
-  | { type: 'done'; text: string; finish: FinishReason }
+  | { type: 'done'; text: string; finish: FinishReason; task?: string | null }
   | ({ type: 'error' } & ErrorInfo);
 
 // ---------------- 设置窗口 ----------------
@@ -198,4 +198,59 @@ export interface MemoryOverview {
   paused: boolean;
   last_backup: string | null;
   scopes: { id: string; name: string }[];
+}
+
+// ---------------- 任务执行 ----------------
+
+export type Executor = 'claude' | 'codex';
+export type StepKind = 'read' | 'edit' | 'command' | 'network' | 'outside' | 'note' | 'other';
+
+export interface ApprovalItem {
+  kind: StepKind;
+  detail: string;
+  rule: string | null;
+  path: string | null;
+}
+
+export type TaskEvent =
+  | { type: 'started'; task_id: string; executor: string }
+  | { type: 'step'; kind: StepKind; text: string }
+  | { type: 'needs_approval'; summary: string; items: ApprovalItem[] }
+  | { type: 'done'; summary: string; cost_usd: number; changed: string[]; backup: string | null }
+  | { type: 'failed'; message: string; detail: string };
+
+export interface TaskSettings {
+  executor: Executor;
+  root: string;
+  timeout_minutes: number;
+  budget_usd: number;
+  claude_model: string;
+  codex_model: string;
+  claude_path: string;
+  codex_path: string;
+}
+
+export interface ExecutorInfo {
+  found: boolean;
+  path: string;
+  version: string;
+}
+
+export interface TaskDefaults {
+  settings: TaskSettings;
+  root: string;
+  claude: ExecutorInfo;
+  codex: ExecutorInfo;
+}
+
+export interface TaskRecord {
+  id: string;
+  created_at: number;
+  finished_at: number | null;
+  executor: string;
+  goal: string;
+  workdir: string;
+  status: string;
+  summary: string;
+  cost_usd: number;
 }

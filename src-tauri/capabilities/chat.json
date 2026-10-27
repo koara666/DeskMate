@@ -12,6 +12,12 @@
     "allow-chat-stop",
     "allow-chat-set-mode",
     "allow-chat-hide",
-    "allow-open-settings"
+    "allow-open-settings",
+    "allow-task-defaults",
+    "allow-task-start",
+    "allow-task-approve",
+    "allow-task-decline",
+    "allow-task-cancel",
+    "allow-chat-task-report"
   ]
 }

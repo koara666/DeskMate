@@ -10,6 +10,11 @@ import type {
   ChatEvent,
   ChatInit,
   ChatMode,
+  Executor,
+  TaskDefaults,
+  TaskEvent,
+  TaskRecord,
+  TaskSettings,
   General,
   Memory,
   MemoryFilter,
@@ -114,3 +119,36 @@ export const settingsApi = {
   memoryExport: () => invoke<string>('memory_export'),
 };
 export type SettingsApi = typeof settingsApi;
+
+function taskChannel(onEvent: (e: TaskEvent) => void): Channel<TaskEvent> {
+  const ch = new Channel<TaskEvent>();
+  ch.onmessage = onEvent;
+  return ch;
+}
+
+export interface TaskApi {
+  defaults(): Promise<TaskDefaults>;
+  start(goal: string, workdir: string, executor: Executor, allowWrite: boolean, onEvent: (e: TaskEvent) => void): Promise<string>;
+  approve(taskId: string, approved: number[], onEvent: (e: TaskEvent) => void): Promise<void>;
+  decline(taskId: string): Promise<void>;
+  cancel(taskId: string): Promise<boolean>;
+  report(taskId: string, requestId: string, onEvent: (e: ChatEvent) => void): Promise<void>;
+}
+
+export const taskApi: TaskApi = {
+  defaults: () => invoke<TaskDefaults>('task_defaults'),
+  start: (goal, workdir, executor, allowWrite, onEvent) =>
+    invoke<string>('task_start', { goal, workdir, executor, allowWrite, onEvent: taskChannel(onEvent) }),
+  approve: (taskId, approved, onEvent) => invoke('task_approve', { taskId, approved, onEvent: taskChannel(onEvent) }),
+  decline: (taskId) => invoke('task_decline', { taskId }),
+  cancel: (taskId) => invoke<boolean>('task_cancel', { taskId }),
+  report: (taskId, requestId, onEvent) =>
+    invoke('chat_task_report', { taskId, requestId, onEvent: channel(onEvent) }),
+};
+
+export const taskSettingsApi = {
+  defaults: () => invoke<TaskDefaults>('task_defaults'),
+  save: (settings: TaskSettings) => invoke<string>('task_settings_save', { settings }),
+  list: () => invoke<TaskRecord[]>('task_list'),
+  openLog: (taskId: string) => invoke('task_open_log', { taskId }),
+};

@@ -216,13 +216,25 @@ mod tests {
         assert_eq!(process_pending(&state).await, 0);
 
         // 下一轮对话：名字作为用户档案注入，所有角色共享
-        let turn = chat::prepare_turn(&state, "naiwa", "你还记得我住在哪吗", memory::now_secs());
+        let turn = chat::prepare_turn(
+            &state,
+            "naiwa",
+            "你还记得我住在哪吗",
+            memory::now_secs(),
+            vec![],
+        );
         assert!(turn.profile.iter().any(|p| p.contains("小林")));
         assert!(turn.memories.iter().any(|m| m.text.contains("杭州")));
         assert!(turn.history.is_empty(), "新角色、新会话，没有短期历史");
 
         // 「忘掉」：删除相关记忆，指令本身不原样存进聊天记录
-        let turn = chat::prepare_turn(&state, "naiwa", "忘掉我住在杭州这件事", memory::now_secs());
+        let turn = chat::prepare_turn(
+            &state,
+            "naiwa",
+            "忘掉我住在杭州这件事",
+            memory::now_secs(),
+            vec![],
+        );
         assert_eq!(turn.stored_user_text, "（我请你忘掉了一件事）");
         assert!(
             turn.notes[0].contains("删除了 2 条"),

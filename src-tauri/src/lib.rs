@@ -19,6 +19,8 @@ pub mod secrets;
 pub mod settings;
 pub mod settings_cmds;
 pub mod state;
+pub mod task_cmds;
+pub mod task_marker;
 pub mod tasks;
 pub mod usage;
 pub mod worker;
@@ -140,6 +142,15 @@ pub fn run() {
             memory_cmds::memory_set_paused,
             memory_cmds::memory_clear_all,
             memory_cmds::memory_export,
+            task_cmds::task_defaults,
+            task_cmds::task_settings_save,
+            task_cmds::task_start,
+            task_cmds::task_approve,
+            task_cmds::task_decline,
+            task_cmds::task_cancel,
+            task_cmds::task_list,
+            task_cmds::task_open_log,
+            task_cmds::chat_task_report,
         ])
         .build(tauri::generate_context!())
         .expect("DeskMate 启动失败");
