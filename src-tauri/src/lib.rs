@@ -11,6 +11,7 @@ pub mod filter;
 pub mod geometry;
 pub mod logging;
 pub mod memory;
+pub mod memory_cmds;
 pub mod paths;
 pub mod prompt;
 pub mod redact;
@@ -130,6 +131,14 @@ pub fn run() {
             character_cmds::character_select,
             character_cmds::prefs_save,
             character_cmds::open_character_dir,
+            memory_cmds::memory_overview,
+            memory_cmds::memory_list,
+            memory_cmds::memory_update,
+            memory_cmds::memory_delete,
+            memory_cmds::memory_add,
+            memory_cmds::memory_set_paused,
+            memory_cmds::memory_clear_all,
+            memory_cmds::memory_export,
         ])
         .build(tauri::generate_context!())
         .expect("DeskMate 启动失败");

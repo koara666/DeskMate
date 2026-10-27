@@ -162,3 +162,40 @@ export interface CharactersView {
   states: string[];
   user_root: string;
 }
+
+// ---------------- 记忆 ----------------
+
+export interface Memory {
+  id: number;
+  kind: 'fact' | 'summary';
+  content: string;
+  scope: string;
+  category: string;
+  source_kind: string;
+  source_ref: string;
+  trusted: boolean;
+  importance: number;
+  created_at: number;
+  updated_at: number;
+  last_used_at: number | null;
+  use_count: number;
+  status: 'active' | 'superseded';
+  superseded_by: number | null;
+  day: string;
+}
+
+export interface MemoryFilter {
+  query: string;
+  kind: string;
+  scope: string;
+  include_history: boolean;
+  limit: number;
+  offset: number;
+}
+
+export interface MemoryOverview {
+  stats: { facts: number; summaries: number; history: number; conversations: number };
+  paused: boolean;
+  last_backup: string | null;
+  scopes: { id: string; name: string }[];
+}

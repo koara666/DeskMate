@@ -22,6 +22,14 @@
     "allow-characters-reload",
     "allow-character-select",
     "allow-prefs-save",
-    "allow-open-character-dir"
+    "allow-open-character-dir",
+    "allow-memory-overview",
+    "allow-memory-list",
+    "allow-memory-update",
+    "allow-memory-delete",
+    "allow-memory-add",
+    "allow-memory-set-paused",
+    "allow-memory-clear-all",
+    "allow-memory-export"
   ]
 }

@@ -406,3 +406,42 @@ textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
+
+/* —— 记忆页 —— */
+.grow {
+  flex: 1;
+  min-width: 200px;
+}
+input[type='search'] {
+  flex: 1;
+  min-width: 180px;
+}
+.memory-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+}
+.memory-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.memory-item.history {
+  opacity: 0.6;
+}
+.memory-content {
+  line-height: 1.6;
+  user-select: text;
+}
+.memory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+.memory-edit textarea {
+  width: 100%;
+}
+.link-btn.danger {
+  color: var(--danger);
+}

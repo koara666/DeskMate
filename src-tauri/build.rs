@@ -28,6 +28,14 @@ const COMMANDS: &[&str] = &[
     "character_select",
     "prefs_save",
     "open_character_dir",
+    "memory_overview",
+    "memory_list",
+    "memory_update",
+    "memory_delete",
+    "memory_add",
+    "memory_set_paused",
+    "memory_clear_all",
+    "memory_export",
 ];
 
 fn main() {

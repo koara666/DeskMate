@@ -329,7 +329,14 @@ pub fn set_always_on_top(app: &AppHandle, on: bool) -> tauri::Result<()> {
 }
 
 /// 设置窗口允许直接打开的页面
-pub const SETTINGS_TABS: [&str; 5] = ["general", "characters", "models", "usage", "about"];
+pub const SETTINGS_TABS: [&str; 6] = [
+    "general",
+    "characters",
+    "memory",
+    "models",
+    "usage",
+    "about",
+];
 
 /// 解析启动参数：`--settings` 或 `--settings=<页面>`；不是这个参数时返回 None
 pub fn parse_settings_arg(arg: &str) -> Option<Option<String>> {

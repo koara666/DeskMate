@@ -11,6 +11,9 @@ import type {
   ChatInit,
   ChatMode,
   General,
+  Memory,
+  MemoryFilter,
+  MemoryOverview,
   PetInit,
   PetState,
   SettingsView,
@@ -99,5 +102,15 @@ export const settingsApi = {
     invoke('prefs_save', { global, characterId, prefs }),
   openCharacterDir: (id: string) => invoke('open_character_dir', { id }),
   onOpenTab: (cb: (tab: string) => void) => listen<string>('settings-tab', (e) => cb(e.payload)),
+  memoryOverview: () => invoke<MemoryOverview>('memory_overview'),
+  memoryList: (filter: MemoryFilter) => invoke<{ items: Memory[]; total: number }>('memory_list', { filter }),
+  memoryUpdate: (id: number, content: string, importance: number) =>
+    invoke('memory_update', { id, content, importance }),
+  memoryDelete: (id: number) => invoke('memory_delete', { id }),
+  memoryAdd: (content: string, scope: string, importance: number) =>
+    invoke<number>('memory_add', { content, scope, importance }),
+  memorySetPaused: (paused: boolean) => invoke('memory_set_paused', { paused }),
+  memoryClearAll: (confirm: string) => invoke('memory_clear_all', { confirm }),
+  memoryExport: () => invoke<string>('memory_export'),
 };
 export type SettingsApi = typeof settingsApi;

@@ -7,12 +7,14 @@ import { ModelsPage } from './ModelsPage';
 import { UsagePage } from './UsagePage';
 import { AboutPage } from './AboutPage';
 import { CharactersPage } from './CharactersPage';
+import { MemoryPage } from './MemoryPage';
 
-type Tab = 'general' | 'characters' | 'models' | 'usage' | 'about';
+type Tab = 'general' | 'characters' | 'memory' | 'models' | 'usage' | 'about';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: '常规' },
   { id: 'characters', label: '角色' },
+  { id: 'memory', label: '记忆' },
   { id: 'models', label: '模型' },
   { id: 'usage', label: '用量与花费' },
   { id: 'about', label: '关于与隐私' },
@@ -68,6 +70,8 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
           <GeneralPage api={api} view={view} onChanged={reload} />
         ) : tab === 'characters' ? (
           <CharactersPage api={api} />
+        ) : tab === 'memory' ? (
+          <MemoryPage api={api} />
         ) : tab === 'models' ? (
           <ModelsPage api={api} view={view} onChanged={reload} />
         ) : tab === 'usage' ? (
