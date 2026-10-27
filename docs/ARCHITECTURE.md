@@ -63,6 +63,9 @@ src-tauri/src/
                                tokenize.rs（中文切分）、sensitive.rs（敏感信息）、extract.rs（摘要/事实提取）、
                                forget.rs（「忘掉这件事」）、backup.rs（备份与损坏恢复）
   worker.rs                    后台维护：每 5 分钟——每日备份、整理已结束会话的记忆
+  tasks/                       任务执行：mod.rs（查找 CLI、运行进程、超时结束进程树、日志、备份）、
+                               sandbox.rs（工作目录检查）、claude.rs / codex.rs（参数与输出解析）
+  task_cmds.rs task_marker.rs  任务流程编排与命令；聊天回复里 [[任务：…]] 标记的识别与隐藏
   character_cmds.rs memory_cmds.rs  设置窗口「角色」「记忆」页的命令
   logging.rs redact.rs         轮换日志、密钥脱敏
 src-tauri/capabilities/        每个窗口一份最小权限
@@ -97,6 +100,12 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 - v3 记忆：`conversations`（每个角色的会话，含提取状态、是否暂停记忆）、`messages`（脱敏后的原文）、
   `memories`（fact/summary，scope、来源、可信度、重要度、使用次数、状态与取代关系）、
   `memory_fts`（FTS5，rowid = memories.id，tokens = 切分后的文本）
+
+### 任务执行数据流
+1. 角色回复末尾的 `[[任务：…]]` 被 `task_marker` 隐藏并作为 `Done.task` 发给聊天窗口 → 弹出确认卡片。
+2. 用户点「开始执行」→ `task_start`：检查任务文件夹、全局花费 → `run_task` 启动 CLI（stdin 传任务说明），逐行解析输出为步骤事件。
+3. Claude Code 被拒绝的操作 → `NeedsApproval` → 用户勾选 → `task_approve` 用 `--resume` + 精确 `--allowedTools` 续跑。
+4. 结束 → `chat_task_report`：把执行报告作为不可信资料交给对话模型，角色转述。
 
 ### 记忆数据流
 1. 每轮：`chat::prepare_turn` 找/建会话 → 处理「忘掉」→ 取本次会话历史 → `memory::retrieve`（用户档案 + 相关记忆）→ 组装提示词。

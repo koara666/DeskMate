@@ -105,3 +105,18 @@
   - mock 后端识别提取请求，用简单规则（我叫/我喜欢/我住在）产出 JSON，让开发和测试能跑通完整记忆流程且不花钱。
 - 原因：需求第 7 节；安全（敏感信息、记忆投毒）和花费优先。
 - 放弃：嵌入向量检索（需求说第一版不做）；每轮对话实时提取（成本高、打断体验）。
+
+## #18 2026-10-27 任务执行的安全设计（M5）
+- 决定：
+  - 流程：角色确认 → 输出 `[[任务：…]]` 标记（流式中隐藏）→ 聊天窗口弹确认卡片 → 用户点「开始执行」才运行。模型只能提议，不能直接执行。同一时间只运行一个任务。
+  - 启动方式：从 npm 入口推出真正的程序（Claude Code 是原生 `claude.exe`；Codex 是 `node codex.js`）直接启动，**不经过 cmd.exe**；任务内容走 stdin，命令行里只有固定参数和校验过的值（模型名、会话 id 不能以 `-` 开头）。
+  - Claude Code（推荐）：`-p --restricted --tools Read,Glob,Grep,Edit,Write,Bash,WebFetch,WebSearch --permission-mode acceptEdits --permission-prompts none --max-budget-usd <剩余预算>`。工作目录内读写自动通过；执行命令、联网、目录外访问会被 CLI 自动拒绝并汇总到 `permission_denials`，DeskMate 列给用户逐条勾选，批准后 `--resume <会话> --allowedTools <精确规则>` 继续（最多 3 轮）。含括号/引号等特殊字符的命令无法生成精确规则，不能单独批准。目录外访问只放行该文件所在文件夹，且不能是系统目录或 DeskMate 数据目录。
+  - Codex：非交互模式不能逐条批准，所以默认 `--sandbox read-only`；用户在卡片上明确勾选才用 `workspace-write`，此时网络强制关闭（`-c sandbox_workspace_write.network_access=false`），开始前把工作目录完整备份到 `%APPDATA%\DeskMate\task-backups\<任务id>`（上限 300 MB / 1 万个文件，超过则不允许写模式，保留最近 5 份）。`--ignore-user-config --ignore-rules` 避免用户配置里的宽松设置生效。
+  - 工作目录：只能在「任务文件夹」（默认 `D:\DeskMate-Work`）及其子目录；路径规范化后比较（防 `..`、链接）；任务文件夹本身不能是盘符根、系统/程序目录、用户主目录、AppData、DeskMate 数据目录。
+  - 超时：默认 10 分钟，到时用 `taskkill /T /F` 结束整个进程树。
+  - 花费：调用前检查全局每日/每月上限；Claude Code 用 `--max-budget-usd` 强制单任务上限（多轮累计）；Codex 只记录 token（订阅额度没有美元价格）。
+  - 日志：`tasks\<任务id>.jsonl` 记录任务说明、CLI 的每行输出、结束原因和 stderr，写入前脱敏；数据库 `tasks` 表记录摘要（任务描述入库前脱敏）。
+  - 结果转述：执行工具的报告作为「不可信来源」的程序提示交给对话模型，由角色用自己的口吻转述；报告不写入长期记忆（v1 先不存，最安全）。
+- 原因：需求第 6、8 节——必须靠 CLI 参数和程序检查强制执行，不能只靠提示词；危险操作必须弹窗确认；超时与花费上限。
+- 放弃：`--dangerously-skip-permissions` / `bypassPermissions` / Codex `danger-full-access`（任何情况下都不用）；通过 MCP 权限工具逐条实时询问（复杂度高，v1 用「拒绝→汇总→批准→续跑」实现同样的效果）。
+- 未验证：开发期间按规定不调用真实任务，CLI 输出字段（`permission_denials`、`total_cost_usd`、Codex 的 JSONL 事件）按官方文档的格式解析并做了容错；需要用户第一次使用时验证（见 NEEDS_USER）。
