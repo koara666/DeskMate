@@ -61,7 +61,8 @@ src-tauri/src/
   usage.rs secrets.rs          用量与花费上限、系统凭据管理器
   memory/                      记忆：mod.rs（存取、检索打分）、conversation.rs（会话与消息）、
                                tokenize.rs（中文切分）、sensitive.rs（敏感信息）、extract.rs（摘要/事实提取）、
-                               forget.rs（「忘掉这件事」）、backup.rs（备份与损坏恢复）
+                               forget.rs（「忘掉这件事」）、backup.rs（备份与损坏恢复）、
+                               maintain.rs（每日维护：合并/降权/压缩/清理）、transfer.rs（导入）
   worker.rs                    后台维护：每 5 分钟——每日备份、整理已结束会话的记忆
   tasks/                       任务执行：mod.rs（查找 CLI、运行进程、超时结束进程树、日志、备份）、
                                sandbox.rs（工作目录检查）、claude.rs / codex.rs（参数与输出解析）
@@ -98,6 +99,7 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 表结构见 `src-tauri/src/db.rs` 的 `MIGRATIONS`：
 - v1 `settings(key, value JSON)`：全部设置（不含 Key）
 - v2 `usage`：每次模型调用的 token 与估算费用（按日/月索引）
+- v4 `tasks`：任务执行记录；v5 `memories.decayed_at`：记忆降权时间
 - v3 记忆：`conversations`（每个角色的会话，含提取状态、是否暂停记忆）、`messages`（脱敏后的原文）、
   `memories`（fact/summary，scope、来源、可信度、重要度、使用次数、状态与取代关系）、
   `memory_fts`（FTS5，rowid = memories.id，tokens = 切分后的文本）
