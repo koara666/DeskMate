@@ -1,6 +1,7 @@
 {
   "id": "naiwa",
   "name": "奶蛙",
+  "order": 3,
   "version": "1.0.0",
   "author": "DeskMate",
   "language": "zh-CN",

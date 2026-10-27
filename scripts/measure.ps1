@@ -1,6 +1,5 @@
 # Measure DeskMate release build: startup time, idle CPU, memory (all WebView2 child processes).
 # Usage: powershell -File scripts/measure.ps1 -Exe src-tauri/target/release/deskmate.exe -DataDir <temp dir> [-IdleSeconds 30]
-eleasedeskmate.exe -DataDir <temp dir> [-IdleSeconds 30]
 # Keep this file ASCII-only: Windows PowerShell 5.1 misreads UTF-8 without BOM.
 param([string]$Exe, [string]$DataDir, [int]$IdleSeconds = 30)
 Add-Type @"

@@ -41,6 +41,9 @@ pub struct Lines {
 pub struct Manifest {
     pub id: String,
     pub name: String,
+    /// 在列表里的排序（越小越靠前），没写时排在最后
+    #[serde(default = "default_order")]
+    pub order: i32,
     #[serde(default)]
     pub version: String,
     #[serde(default)]
@@ -60,6 +63,10 @@ pub struct Manifest {
     pub expressions: BTreeMap<String, String>,
     #[serde(default)]
     pub lines: Lines,
+}
+
+fn default_order() -> i32 {
+    1000
 }
 
 fn default_language() -> String {
@@ -203,7 +210,11 @@ pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character>
             Err(e) => log::warn!("用户角色包 {} 无效：{e}", dir.display()),
         }
     }
-    map.into_values().collect()
+    let mut list: Vec<Character> = map.into_values().collect();
+    list.sort_by(|a, b| {
+        (a.manifest.order, &a.manifest.id).cmp(&(b.manifest.order, &b.manifest.id))
+    });
+    list
 }
 
 fn subdirs(root: &Path) -> Vec<PathBuf> {
@@ -474,6 +485,8 @@ mod tests {
         let empty = tempfile::tempdir().unwrap();
         let all = load_all(Some(&root), empty.path());
         let ids: Vec<&str> = all.iter().map(|c| c.manifest.id.as_str()).collect();
+        assert_eq!(all[0].manifest.id, "deepseek-whale", "按 order 排序");
+        assert_eq!(all[7].manifest.id, "yui-sao");
         for id in [
             "deepseek-whale",
             "nailong",

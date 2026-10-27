@@ -1,6 +1,7 @@
 {
   "id": "yui-sao",
   "name": "结衣 Yui",
+  "order": 8,
   "version": "1.0.0",
   "author": "DeskMate",
   "language": "zh-CN",

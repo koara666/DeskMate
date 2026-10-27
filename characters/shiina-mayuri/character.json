@@ -1,6 +1,7 @@
 {
   "id": "shiina-mayuri",
   "name": "椎名真由理",
+  "order": 5,
   "version": "1.0.0",
   "author": "DeskMate",
   "language": "zh-CN",

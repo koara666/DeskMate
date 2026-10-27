@@ -4,15 +4,42 @@
 
 ## 1. 新增角色（不需要改代码）
 
-（M3 实现角色包加载后补全具体字段说明）
-
-角色包结构：
+### 1.1 角色包结构
 ```
-characters/<角色id>/
-  character.json   # 名字、语言、表情映射、作者、版本
+<角色id>/
+  character.json   # 元信息、表情映射、角色口吻的固定台词
   persona.md       # 性格设定 + 5~10 段原创示范对话
-  assets/          # 仓库里只放原创占位 SVG；用户图片放用户数据目录
+  assets/
+    placeholder.svg  # 仅内置角色：原创的简单占位形象（160×180 viewBox）
 ```
+- 角色 id 只能用小写字母、数字、`-`、`_`，最长 40 个字符，**必须和文件夹名一致**。
+- 放在哪里：
+  - 随程序发布的内置角色：仓库的 `characters/<id>/`（只放原创占位 SVG，**绝不放官方或他人绘制的图片**）。
+  - 用户自己加的角色：`%APPDATA%\DeskMate\characters\<id>\`（有 character.json + persona.md 才算新角色；同 id 会覆盖内置设定）。
+- 加好以后：设置 →「角色」→「重新加载」，或重启程序。
+
+### 1.2 character.json 字段
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `id` | 是 | 同文件夹名 |
+| `name` | 是 | 显示名 |
+| `order` | 否 | 列表排序，越小越靠前（默认 1000） |
+| `version` / `author` / `language` | 否 | `language` 默认 `zh-CN` |
+| `description` | 否 | 一句话介绍（设置界面显示） |
+| `source` | 否 | 原作/原型出处，同人角色要写明「与官方无关」 |
+| `color` | 否 | 主题色 `#rrggbb`（气泡边框、按钮） |
+| `expressions` | 否 | 状态 → 图片文件名（不含扩展名），如 `{"sad": "confused"}`；不写就用同名图片 |
+| `lines` | 否 | 固定台词（不调用模型，省钱）：`greeting`、`error`、`offline`、`budget`、`not_configured`，每项是字符串数组，随机挑一句 |
+
+表情状态：`idle` 待机、`talking` 说话、`thinking` 思考、`happy` 开心、`sad` 难过/困惑、`sleep` 睡觉。
+
+### 1.3 persona.md 写法
+按这几节写（参考 `characters/makise-kurisu/persona.md`）：身份背景（简短）、性格关键词、说话方式与语气、称呼用户的方式、口癖倾向、会做的事、不会做的事、示范对话（5~10 段，**必须原创，不能摘抄原作台词**，标题里写「原创」）。
+- 「会做的事」里写上：用户想让角色动手做事时，先确认要做什么、在哪个文件夹。
+- 角色设定在运行时只读，程序和模型都不能改。
+
+### 1.4 测试
+`cargo test character` 里的 `all_builtin_packs_are_valid` 会检查所有内置角色包；新增内置角色时把 id 加进去。
 
 ## 2. 新增模型后端
 

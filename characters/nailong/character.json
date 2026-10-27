@@ -1,6 +1,7 @@
 {
   "id": "nailong",
   "name": "奶龙",
+  "order": 2,
   "version": "1.0.0",
   "author": "DeskMate",
   "language": "zh-CN",

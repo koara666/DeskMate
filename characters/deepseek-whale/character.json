@@ -1,6 +1,7 @@
 {
   "id": "deepseek-whale",
   "name": "鲸鱼娘",
+  "order": 1,
   "version": "1.0.0",
   "author": "DeskMate",
   "language": "zh-CN",
