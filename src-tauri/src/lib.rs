@@ -59,6 +59,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
     desktop::create_pet(&handle)?;
     desktop::build_tray(&handle)?;
+    if std::env::args().any(|a| a == "--settings") {
+        desktop::open_settings(&handle)?;
+    }
 
     // 桌宠出现后再在后台准备聊天窗口，不拖慢启动
     tauri::async_runtime::spawn(async move {
@@ -72,10 +75,13 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
 pub fn run() {
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            // 第二个实例启动时，只把已有的桌宠显示出来
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // 第二个实例启动时：把已有的桌宠显示出来；带 --settings 时打开设置
             if let Some(w) = desktop::pet(app) {
                 let _ = w.show();
+            }
+            if argv.iter().any(|a| a == "--settings") {
+                let _ = desktop::open_settings(app);
             }
         }))
         .setup(setup)

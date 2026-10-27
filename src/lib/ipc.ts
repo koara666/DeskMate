@@ -2,7 +2,20 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import type { ChatEvent, ChatInit, ChatMode, PetInit, PetState, Side } from './types';
+import type {
+  BackendConfig,
+  Budget,
+  ChatEvent,
+  ChatInit,
+  ChatMode,
+  General,
+  PetInit,
+  PetState,
+  SettingsView,
+  Side,
+  TestResult,
+  UsageView,
+} from './types';
 
 export interface ChatApi {
   init(): Promise<ChatInit>;
@@ -62,3 +75,20 @@ export function newRequestId(): string {
   const rnd = Math.random().toString(36).slice(2, 10);
   return `r-${Date.now().toString(36)}-${rnd}`;
 }
+
+export const settingsApi = {
+  get: () => invoke<SettingsView>('settings_get'),
+  saveGeneral: (general: General) => invoke('settings_save_general', { general }),
+  saveBackend: (config: BackendConfig) => invoke('backend_save', { config }),
+  addBackend: (kind: string) => invoke<string>('backend_add', { kind }),
+  deleteBackend: (id: string) => invoke('backend_delete', { id }),
+  setKey: (id: string, key: string) => invoke<string>('backend_set_key', { id, key }),
+  clearKey: (id: string) => invoke('backend_clear_key', { id }),
+  select: (chatBackend: string, backgroundBackend: string) =>
+    invoke('backend_select', { chatBackend, backgroundBackend }),
+  test: (id: string) => invoke<TestResult>('backend_test', { id }),
+  saveBudget: (budget: Budget) => invoke('budget_save', { budget }),
+  usage: () => invoke<UsageView>('usage_get'),
+  openDataDir: (sub?: string) => invoke('open_data_dir', { sub: sub ?? null }),
+};
+export type SettingsApi = typeof settingsApi;

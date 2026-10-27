@@ -1,0 +1,344 @@
+/* 设置窗口：普通窗口，左侧导航 + 右侧内容 */
+html,
+body,
+#app {
+  height: 100%;
+  background: var(--panel-2);
+}
+
+.settings {
+  display: flex;
+  height: 100%;
+}
+
+.side-nav {
+  flex: none;
+  width: 168px;
+  padding: 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+}
+.brand {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--accent);
+  padding: 4px 10px 14px;
+}
+.nav-item {
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+}
+.nav-item:hover {
+  background: var(--panel-2);
+}
+.nav-item.active {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.page {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 20px 28px 40px;
+}
+.page h1 {
+  font-size: 20px;
+  margin: 0 0 6px;
+}
+.page h2 {
+  font-size: 15px;
+  margin: 0 0 6px;
+}
+
+.muted {
+  color: var(--text-weak);
+}
+.small,
+small {
+  font-size: 12px;
+}
+.mono {
+  font-family: Consolas, 'Cascadia Mono', monospace;
+}
+.selectable {
+  user-select: text;
+}
+.warn-text {
+  color: #b7791f;
+  font-size: 12px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+.card.backend.active {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.card-head .title {
+  font-weight: 600;
+}
+.card-head .chev {
+  margin-left: auto;
+  color: var(--text-weak);
+}
+.card-body {
+  margin-top: 10px;
+}
+
+.tag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-weak);
+  border: 1px solid var(--border);
+}
+.tag-accent {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.tag-ok {
+  color: var(--ok);
+}
+.tag-warn {
+  color: #b7791f;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.row .label {
+  min-width: 120px;
+  color: var(--text-weak);
+}
+label.row span small {
+  display: block;
+  color: var(--text-weak);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+.grid .span2 {
+  grid-column: span 2;
+}
+.grid label,
+.prices label,
+.row > label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-weak);
+}
+
+input:not([type='checkbox']):not([type='range']),
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  min-width: 0;
+}
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.key-box input[type='password'] {
+  flex: 1;
+  min-width: 220px;
+}
+
+.prices {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 8px 12px 12px;
+  margin: 12px 0 4px;
+}
+.prices legend {
+  font-size: 12px;
+  color: var(--text-weak);
+  padding: 0 4px;
+}
+
+.key-box {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-danger {
+  color: var(--danger);
+}
+.btn-small {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.alert {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  word-break: break-word;
+}
+.alert-ok {
+  background: color-mix(in srgb, var(--ok) 12%, var(--panel));
+  color: var(--ok);
+}
+.alert-error {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.alert .hint {
+  color: var(--text);
+  margin-top: 4px;
+}
+.status {
+  font-size: 12px;
+}
+.status-ok {
+  color: var(--ok);
+}
+.status-err {
+  color: var(--danger);
+}
+
+.meters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.meter .big {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 4px 0 8px;
+}
+.bar {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.bar .fill {
+  height: 100%;
+  background: var(--accent);
+}
+.bar .fill.high {
+  background: #d69e2e;
+}
+.bar .fill.full {
+  background: var(--danger);
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-left: auto;
+}
+.seg button {
+  border: none;
+  background: var(--panel);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.seg button.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th,
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+ul.plain {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.8;
+}
