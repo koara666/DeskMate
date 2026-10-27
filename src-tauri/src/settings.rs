@@ -23,9 +23,53 @@ pub struct SavedPosition {
     pub y: i32,
 }
 
+/// 某个角色单独的用户偏好（叠加在全局偏好之上）
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CharacterPrefs {
+    pub banned_words: Vec<String>,
+    pub custom_rules: Vec<String>,
+}
+
+const MAX_BANNED: usize = 200;
+const MAX_BANNED_LEN: usize = 50;
+const MAX_RULES: usize = 30;
+const MAX_RULE_LEN: usize = 300;
+
+/// 清理用户输入的列表：去首尾空白、去空行、去重、限制条数和长度
+pub fn clean_list(items: &[String], max_items: usize, max_len: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for it in items {
+        let t: String = it.trim().chars().take(max_len).collect();
+        if !t.is_empty() && !out.contains(&t) {
+            out.push(t);
+        }
+        if out.len() >= max_items {
+            break;
+        }
+    }
+    out
+}
+
+impl CharacterPrefs {
+    pub fn sanitize(self) -> Self {
+        Self {
+            banned_words: clean_list(&self.banned_words, MAX_BANNED, MAX_BANNED_LEN),
+            custom_rules: clean_list(&self.custom_rules, MAX_RULES, MAX_RULE_LEN),
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.banned_words.is_empty() && self.custom_rules.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// 全局禁词和自定义要求（对所有角色生效）
+    pub global_prefs: CharacterPrefs,
+    /// 每个角色单独的禁词和自定义要求
+    pub character_prefs: std::collections::BTreeMap<String, CharacterPrefs>,
     /// 当前角色 id
     pub character_id: String,
     /// 总在最前
@@ -53,6 +97,8 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            global_prefs: CharacterPrefs::default(),
+            character_prefs: Default::default(),
             character_id: "deepseek-whale".into(),
             always_on_top: true,
             pet_scale: 1.0,
@@ -76,6 +122,13 @@ impl Settings {
         }
         self.pet_scale = self.pet_scale.clamp(0.6, 2.0);
         self.budget = self.budget.sanitize();
+        self.global_prefs = std::mem::take(&mut self.global_prefs).sanitize();
+        self.character_prefs = std::mem::take(&mut self.character_prefs)
+            .into_iter()
+            .filter(|(id, _)| crate::character::valid_id(id))
+            .map(|(id, p)| (id, p.sanitize()))
+            .filter(|(_, p)| !p.is_empty())
+            .collect();
         // 丢掉无效配置；新版本新增的后端类型自动补上默认配置
         let mut seen = std::collections::HashSet::new();
         self.backends
@@ -101,6 +154,19 @@ impl Settings {
 
     pub fn backend(&self, id: &str) -> Option<&BackendConfig> {
         self.backends.iter().find(|b| b.id == id)
+    }
+
+    /// 某个角色实际生效的禁词和自定义要求 = 全局 + 角色专属
+    pub fn effective_prefs(&self, character_id: &str) -> CharacterPrefs {
+        let mut p = self.global_prefs.clone();
+        if let Some(c) = self.character_prefs.get(character_id) {
+            p.banned_words.extend(c.banned_words.iter().cloned());
+            p.custom_rules.extend(c.custom_rules.iter().cloned());
+        }
+        CharacterPrefs {
+            banned_words: clean_list(&p.banned_words, MAX_BANNED * 2, MAX_BANNED_LEN),
+            custom_rules: clean_list(&p.custom_rules, MAX_RULES * 2, MAX_RULE_LEN),
+        }
     }
 }
 
@@ -189,6 +255,38 @@ mod tests {
         );
         assert_eq!(s.chat_backend, "mock");
         assert!(s.backend("gemini").is_some());
+    }
+
+    #[test]
+    fn prefs_are_cleaned_and_merged() {
+        let mut s = Settings::default();
+        s.global_prefs.banned_words =
+            vec![" 笨蛋 ".into(), "".into(), "笨蛋".into(), "x".repeat(80)];
+        s.global_prefs.custom_rules = vec!["回复不超过三句话".into()];
+        s.character_prefs.insert(
+            "nailong".into(),
+            CharacterPrefs {
+                banned_words: vec!["笨蛋".into(), "傻".into()],
+                custom_rules: vec!["叫我小林".into()],
+            },
+        );
+        s.character_prefs
+            .insert("../bad".into(), CharacterPrefs::default());
+        s.character_prefs
+            .insert("empty".into(), CharacterPrefs::default());
+        let s = s.sanitize();
+        assert_eq!(s.global_prefs.banned_words.len(), 2);
+        assert_eq!(s.global_prefs.banned_words[0], "笨蛋");
+        assert_eq!(s.global_prefs.banned_words[1].chars().count(), 50);
+        assert_eq!(s.character_prefs.len(), 1, "无效 id 和空偏好被丢掉");
+        let p = s.effective_prefs("nailong");
+        assert_eq!(p.banned_words.iter().filter(|w| *w == "笨蛋").count(), 1);
+        assert!(p.banned_words.contains(&"傻".to_string()));
+        assert_eq!(p.custom_rules, vec!["回复不超过三句话", "叫我小林"]);
+        assert_eq!(
+            s.effective_prefs("other").custom_rules,
+            vec!["回复不超过三句话"]
+        );
     }
 
     #[test]

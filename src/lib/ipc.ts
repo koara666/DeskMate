@@ -5,6 +5,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
   BackendConfig,
   Budget,
+  CharacterPrefs,
+  CharactersView,
   ChatEvent,
   ChatInit,
   ChatMode,
@@ -90,5 +92,12 @@ export const settingsApi = {
   saveBudget: (budget: Budget) => invoke('budget_save', { budget }),
   usage: () => invoke<UsageView>('usage_get'),
   openDataDir: (sub?: string) => invoke('open_data_dir', { sub: sub ?? null }),
+  characters: () => invoke<CharactersView>('characters_list'),
+  reloadCharacters: () => invoke<CharactersView>('characters_reload'),
+  selectCharacter: (id: string) => invoke('character_select', { id }),
+  savePrefs: (global: CharacterPrefs, characterId: string, prefs: CharacterPrefs) =>
+    invoke('prefs_save', { global, characterId, prefs }),
+  openCharacterDir: (id: string) => invoke('open_character_dir', { id }),
+  onOpenTab: (cb: (tab: string) => void) => listen<string>('settings-tab', (e) => cb(e.payload)),
 };
 export type SettingsApi = typeof settingsApi;

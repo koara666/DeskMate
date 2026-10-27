@@ -17,6 +17,11 @@
     "allow-backend-test",
     "allow-budget-save",
     "allow-usage-get",
-    "allow-open-data-dir"
+    "allow-open-data-dir",
+    "allow-characters-list",
+    "allow-characters-reload",
+    "allow-character-select",
+    "allow-prefs-save",
+    "allow-open-character-dir"
   ]
 }

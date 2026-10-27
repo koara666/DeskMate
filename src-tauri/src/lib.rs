@@ -2,6 +2,7 @@
 
 pub mod backends;
 pub mod character;
+pub mod character_cmds;
 pub mod chat;
 pub mod commands;
 pub mod db;
@@ -59,8 +60,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
     desktop::create_pet(&handle)?;
     desktop::build_tray(&handle)?;
-    if std::env::args().any(|a| a == "--settings") {
-        desktop::open_settings(&handle)?;
+    if let Some(tab) = std::env::args().find_map(|a| desktop::parse_settings_arg(&a)) {
+        desktop::open_settings_tab(&handle, tab)?;
     }
 
     // 桌宠出现后再在后台准备聊天窗口，不拖慢启动
@@ -80,8 +81,8 @@ pub fn run() {
             if let Some(w) = desktop::pet(app) {
                 let _ = w.show();
             }
-            if argv.iter().any(|a| a == "--settings") {
-                let _ = desktop::open_settings(app);
+            if let Some(tab) = argv.iter().find_map(|a| desktop::parse_settings_arg(a)) {
+                let _ = desktop::open_settings_tab(app, tab);
             }
         }))
         .setup(setup)
@@ -118,6 +119,11 @@ pub fn run() {
             settings_cmds::budget_save,
             settings_cmds::usage_get,
             settings_cmds::open_data_dir,
+            character_cmds::characters_list,
+            character_cmds::characters_reload,
+            character_cmds::character_select,
+            character_cmds::prefs_save,
+            character_cmds::open_character_dir,
         ])
         .build(tauri::generate_context!())
         .expect("DeskMate 启动失败");

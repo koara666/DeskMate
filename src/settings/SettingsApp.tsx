@@ -6,11 +6,13 @@ import { GeneralPage } from './GeneralPage';
 import { ModelsPage } from './ModelsPage';
 import { UsagePage } from './UsagePage';
 import { AboutPage } from './AboutPage';
+import { CharactersPage } from './CharactersPage';
 
-type Tab = 'general' | 'models' | 'usage' | 'about';
+type Tab = 'general' | 'characters' | 'models' | 'usage' | 'about';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: '常规' },
+  { id: 'characters', label: '角色' },
   { id: 'models', label: '模型' },
   { id: 'usage', label: '用量与花费' },
   { id: 'about', label: '关于与隐私' },
@@ -23,7 +25,9 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
 
   const reload = useCallback(async () => {
     try {
-      setView(await api.get());
+      const v = await api.get();
+      setView(v);
+      if (v.initial_tab && TABS.some((t) => t.id === v.initial_tab)) setTab(v.initial_tab as Tab);
       setError('');
     } catch (e) {
       setError(String(e));
@@ -32,7 +36,13 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
 
   useEffect(() => {
     reload();
-  }, [reload]);
+    const off = api.onOpenTab((t) => {
+      if (TABS.some((x) => x.id === t)) setTab(t as Tab);
+    });
+    return () => {
+      off.then((f) => f()).catch(() => {});
+    };
+  }, [api, reload]);
 
   return (
     <div class="settings">
@@ -56,6 +66,8 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
           <div class="muted">加载中…</div>
         ) : tab === 'general' ? (
           <GeneralPage api={api} view={view} onChanged={reload} />
+        ) : tab === 'characters' ? (
+          <CharactersPage api={api} />
         ) : tab === 'models' ? (
           <ModelsPage api={api} view={view} onChanged={reload} />
         ) : tab === 'usage' ? (

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180">
+  <!-- 奶龙占位形象（原创几何图形，不是官方形象）：圆滚滚的黄色小恐龙 -->
+  <ellipse cx="80" cy="171" rx="52" ry="6" fill="#000" opacity="0.12"/>
+  <path d="M58 40 L52 22 L66 34 Z" fill="#f29d38"/>
+  <path d="M102 40 L108 22 L94 34 Z" fill="#f29d38"/>
+  <path d="M80 34 C126 34 148 70 148 110 C148 150 118 168 80 168 C42 168 12 150 12 110 C12 70 34 34 80 34 Z" fill="#ffd23f"/>
+  <ellipse cx="80" cy="128" rx="42" ry="34" fill="#fff3c4"/>
+  <ellipse cx="18" cy="118" rx="9" ry="14" fill="#ffd23f" transform="rotate(-20 18 118)"/>
+  <ellipse cx="142" cy="118" rx="9" ry="14" fill="#ffd23f" transform="rotate(20 142 118)"/>
+  <ellipse cx="60" cy="84" rx="7" ry="9" fill="#2d2420"/>
+  <ellipse cx="100" cy="84" rx="7" ry="9" fill="#2d2420"/>
+  <circle cx="62" cy="81" r="2.5" fill="#fff"/>
+  <circle cx="102" cy="81" r="2.5" fill="#fff"/>
+  <ellipse cx="46" cy="100" rx="9" ry="5" fill="#ff9f7a" opacity="0.7"/>
+  <ellipse cx="114" cy="100" rx="9" ry="5" fill="#ff9f7a" opacity="0.7"/>
+  <path d="M70 98 Q80 108 90 98" stroke="#2d2420" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>

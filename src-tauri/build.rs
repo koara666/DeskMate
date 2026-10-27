@@ -23,6 +23,11 @@ const COMMANDS: &[&str] = &[
     "budget_save",
     "usage_get",
     "open_data_dir",
+    "characters_list",
+    "characters_reload",
+    "character_select",
+    "prefs_save",
+    "open_character_dir",
 ];
 
 fn main() {

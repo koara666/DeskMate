@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180">
+  <!-- 椎名真由理占位形象（原创几何图形，不是官方形象）：软软的蓝帽子 + 短发 -->
+  <ellipse cx="80" cy="172" rx="50" ry="6" fill="#000" opacity="0.12"/>
+  <path d="M44 124 L116 124 L130 168 L30 168 Z" fill="#a9c3f0"/>
+  <path d="M66 124 Q80 136 94 124" fill="#ffffff"/>
+  <path d="M38 96 C34 56 126 56 122 96 L118 122 L42 122 Z" fill="#3b2a2a"/>
+  <ellipse cx="80" cy="90" rx="36" ry="38" fill="#ffe8d8"/>
+  <path d="M46 88 C48 66 112 66 114 88 C102 76 90 78 80 82 C70 78 58 76 46 88 Z" fill="#3b2a2a"/>
+  <path d="M34 66 C36 30 124 30 126 66 C120 58 40 58 34 66 Z" fill="#6a8fd8"/>
+  <ellipse cx="80" cy="64" rx="50" ry="8" fill="#5a7cc4"/>
+  <circle cx="112" cy="50" r="6" fill="#ffffff"/>
+  <path d="M60 96 Q66 90 72 96" stroke="#3b2a2a" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M88 96 Q94 90 100 96" stroke="#3b2a2a" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <ellipse cx="58" cy="106" rx="7" ry="4" fill="#ffa3b5" opacity="0.7"/>
+  <ellipse cx="102" cy="106" rx="7" ry="4" fill="#ffa3b5" opacity="0.7"/>
+  <path d="M72 110 Q80 117 88 110" stroke="#3b2a2a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</svg>

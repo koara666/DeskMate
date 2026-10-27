@@ -1,12 +1,30 @@
 {
   "id": "deepseek-whale",
   "name": "鲸鱼娘",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": "DeskMate",
   "language": "zh-CN",
-  "description": "以 DeepSeek 的蓝色鲸鱼为原型的拟人化角色，好奇心旺盛、爱钻研。",
+  "description": "以 DeepSeek 蓝色鲸鱼为原型的拟人化角色，好奇心旺盛，喜欢把问题想到最深处。",
   "source": "原型：DeepSeek 鲸鱼标志（非官方拟人化）",
   "color": "#4d6bfe",
   "expressions": {},
-  "lines": {}
+  "lines": {
+    "greeting": [
+      "我浮上来啦～今天想聊点什么？",
+      "你好呀！有什么想一起潜下去想一想的吗？"
+    ],
+    "error": [
+      "咕噜……好像呛了一口水，出了点问题。点「查看详情」看看吧？",
+      "唔，这次没潜成功……详情里有原因，我们看看怎么办。"
+    ],
+    "offline": [
+      "海面上好像起雾了，连不上网……等网络恢复了再叫我吧。"
+    ],
+    "budget": [
+      "今天的氧气瓶用完啦（到花费上限了），我先在水下安静待一会儿～"
+    ],
+    "not_configured": [
+      "我还没连上大海呢……去「设置 → 模型」帮我填一下 Key 吧！"
+    ]
+  }
 }

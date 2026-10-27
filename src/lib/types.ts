@@ -35,6 +35,8 @@ export interface ChatInit {
   mode: ChatMode;
   side: Side;
   history: ChatMessage[];
+  /** 没有聊天记录时角色说的开场白 */
+  greeting: string;
 }
 
 export interface ErrorInfo {
@@ -99,6 +101,7 @@ export interface SettingsView {
   budget: Budget;
   data_dir: string;
   version: string;
+  initial_tab: string | null;
 }
 
 export interface TestResult {
@@ -129,4 +132,31 @@ export interface UsageView {
   rows_today: UsageRow[];
   rows_month: UsageRow[];
   rows_all: UsageRow[];
+}
+
+// ---------------- 角色设置 ----------------
+
+export interface CharacterPrefs {
+  banned_words: string[];
+  custom_rules: string[];
+}
+
+export interface CharacterItem {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  color: string;
+  origin: 'builtin' | 'user';
+  preview: string;
+  user_images: string[];
+  prefs: CharacterPrefs;
+}
+
+export interface CharactersView {
+  current: string;
+  list: CharacterItem[];
+  global: CharacterPrefs;
+  states: string[];
+  user_root: string;
 }

@@ -311,6 +311,12 @@ pub async fn run_turn(
     let cancel = state.chat.begin(&request_id);
     let character = state.current_character();
     let history = state.chat.history();
+    let character_id = character
+        .as_ref()
+        .map(|c| c.manifest.id.clone())
+        .unwrap_or_default();
+    // 禁词和自定义要求 = 全局 + 当前角色专属
+    let prefs = state.settings().effective_prefs(&character_id);
 
     let req = {
         let (name, persona) = character
@@ -321,6 +327,8 @@ pub async fn run_turn(
         let parts = PromptParts {
             character_name: &name,
             persona: &persona,
+            user_rules: &prefs.custom_rules,
+            banned_words: &prefs.banned_words,
             history: &history,
             user_text: &user_text,
             now: &now,
@@ -354,7 +362,7 @@ pub async fn run_turn(
             let r = generate(
                 sel.backend.as_ref(),
                 req,
-                BannedWords::default(),
+                BannedWords::new(&prefs.banned_words),
                 cancel,
                 &mut on_delta,
             )

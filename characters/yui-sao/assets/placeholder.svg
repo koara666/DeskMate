@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180">
+  <!-- 结衣占位形象（原创几何图形，不是官方形象）：黑色长发 + 白裙 + 小翅膀 -->
+  <ellipse cx="80" cy="172" rx="50" ry="6" fill="#000" opacity="0.12"/>
+  <path d="M40 126 C14 108 8 86 22 80 C34 96 40 110 48 128 Z" fill="#cfc8ff" opacity="0.8"/>
+  <path d="M120 126 C146 108 152 86 138 80 C126 96 120 110 112 128 Z" fill="#cfc8ff" opacity="0.8"/>
+  <path d="M34 72 C30 30 130 30 126 72 L132 156 L28 156 Z" fill="#2a2433"/>
+  <path d="M46 124 L114 124 L130 168 L30 168 Z" fill="#fafafa"/>
+  <path d="M66 124 Q80 132 94 124" fill="#e8e4ff"/>
+  <ellipse cx="80" cy="86" rx="35" ry="38" fill="#fff0e6"/>
+  <path d="M45 84 C46 56 114 56 115 84 C104 70 92 72 80 78 C68 72 56 70 45 84 Z" fill="#2a2433"/>
+  <ellipse cx="66" cy="93" rx="6" ry="8" fill="#2a2433"/>
+  <ellipse cx="94" cy="93" rx="6" ry="8" fill="#2a2433"/>
+  <circle cx="68" cy="90" r="2.4" fill="#fff"/>
+  <circle cx="96" cy="90" r="2.4" fill="#fff"/>
+  <ellipse cx="56" cy="104" rx="7" ry="4" fill="#ffa3b5" opacity="0.7"/>
+  <ellipse cx="104" cy="104" rx="7" ry="4" fill="#ffa3b5" opacity="0.7"/>
+  <path d="M73 108 Q80 115 87 108" stroke="#2a2433" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</svg>

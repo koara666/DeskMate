@@ -88,11 +88,22 @@ pub struct ChatInit {
     pub mode: ChatMode,
     pub side: Side,
     pub history: Vec<ChatMessage>,
+    /// 没有聊天记录时角色说的开场白
+    pub greeting: String,
 }
 
 #[tauri::command]
 pub fn chat_init(state: State<'_, AppState>) -> ChatInit {
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let greeting = state
+        .current_character()
+        .map(|c| character::pick_line(&c.manifest.lines.greeting, "有什么想聊的吗？", seed))
+        .unwrap_or_else(|| "有什么想聊的吗？".into());
     ChatInit {
+        greeting,
         character: character_view(&state),
         mode: state.desktop.chat_mode(),
         side: state.desktop.chat_side(),

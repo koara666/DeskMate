@@ -51,6 +51,8 @@ pub struct SettingsView {
     pub budget: Budget,
     pub data_dir: String,
     pub version: String,
+    /// 打开设置窗口时要直接显示的页面（只生效一次）
+    pub initial_tab: Option<String>,
 }
 
 fn is_builtin_id(id: &str) -> bool {
@@ -107,6 +109,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         budget: s.budget,
         data_dir: state.paths.root().display().to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
+        initial_tab: state.desktop.take_settings_tab(),
     }
 }
 

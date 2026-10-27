@@ -33,6 +33,7 @@ const view: SettingsView = {
   budget: { daily_usd: 1, monthly_usd: 10 },
   data_dir: 'C:\\data',
   version: '0.1.0',
+  initial_tab: null,
 };
 
 function fakeApi() {

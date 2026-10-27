@@ -36,12 +36,22 @@ pub struct DesktopState {
     move_gen: AtomicU64,
     chat_mode: Mutex<ChatMode>,
     chat_side: Mutex<Option<Side>>,
+    /// 设置窗口下次打开时要显示的页面（由 --settings=<页面> 启动参数设置）
+    settings_tab: Mutex<Option<String>>,
 }
 
 impl DesktopState {
     pub fn chat_mode(&self) -> ChatMode {
         *self.chat_mode.lock().unwrap_or_else(|e| e.into_inner())
     }
+    /// 取走待显示的设置页面（只生效一次）
+    pub fn take_settings_tab(&self) -> Option<String> {
+        self.settings_tab
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+    }
+
     pub fn chat_side(&self) -> Side {
         self.chat_side
             .lock()
@@ -318,6 +328,31 @@ pub fn set_always_on_top(app: &AppHandle, on: bool) -> tauri::Result<()> {
     Ok(())
 }
 
+/// 设置窗口允许直接打开的页面
+pub const SETTINGS_TABS: [&str; 5] = ["general", "characters", "models", "usage", "about"];
+
+/// 解析启动参数：`--settings` 或 `--settings=<页面>`；不是这个参数时返回 None
+pub fn parse_settings_arg(arg: &str) -> Option<Option<String>> {
+    if arg == "--settings" {
+        return Some(None);
+    }
+    let tab = arg.strip_prefix("--settings=")?;
+    Some(SETTINGS_TABS.contains(&tab).then(|| tab.to_string()))
+}
+
+/// 打开设置窗口并跳到指定页面
+pub fn open_settings_tab(app: &AppHandle, tab: Option<String>) -> tauri::Result<()> {
+    if let Some(t) = tab {
+        *app.state::<AppState>()
+            .desktop
+            .settings_tab
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(t.clone());
+        let _ = app.emit_to("settings", "settings-tab", t);
+    }
+    open_settings(app)
+}
+
 pub fn open_settings(app: &AppHandle) -> tauri::Result<()> {
     if let Some(w) = app.get_webview_window("settings") {
         w.show()?;
@@ -332,6 +367,20 @@ pub fn open_settings(app: &AppHandle) -> tauri::Result<()> {
 pub fn broadcast_settings_changed(app: &AppHandle) {
     let _ = app.emit("settings-changed", ());
     refresh_tray_menu(app);
+}
+
+/// 角色或角色图片变化后通知所有窗口刷新
+pub fn notify_character_changed(app: &AppHandle) {
+    let _ = app.emit("character-changed", ());
+    refresh_tray_menu(app);
+}
+
+/// 切换当前角色（托盘菜单、右键菜单、设置界面共用）
+pub fn select_character(app: &AppHandle, id: &str) {
+    let id = id.to_string();
+    app.state::<AppState>()
+        .update_settings(|s| s.character_id = id);
+    notify_character_changed(app);
 }
 
 // ---------------- 菜单（托盘和右键共用） ----------------
@@ -474,9 +523,7 @@ pub fn handle_menu(app: &AppHandle, id: &str) {
             "quit" => app.exit(0),
             _ => {
                 if let Some(cid) = id.strip_prefix("char:") {
-                    let cid = cid.to_string();
-                    st.update_settings(|s| s.character_id = cid);
-                    let _ = app.emit("character-changed", ());
+                    select_character(app, cid);
                 } else if let Some(c) = id.strip_prefix("corner:") {
                     let corner = match c {
                         "top_left" => Corner::TopLeft,
@@ -494,4 +541,20 @@ pub fn handle_menu(app: &AppHandle, id: &str) {
         log::warn!("菜单操作失败（{id}）：{e}");
     }
     broadcast_settings_changed(app);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_arg_parsing() {
+        assert_eq!(parse_settings_arg("--settings"), Some(None));
+        assert_eq!(
+            parse_settings_arg("--settings=characters"),
+            Some(Some("characters".into()))
+        );
+        assert_eq!(parse_settings_arg("--settings=../../etc"), Some(None));
+        assert_eq!(parse_settings_arg("--other"), None);
+    }
 }

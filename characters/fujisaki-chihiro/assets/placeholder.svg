@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180">
+  <!-- 不二咲千寻占位形象（原创几何图形，不是官方形象）：浅棕短发 + 小笔记本电脑 -->
+  <ellipse cx="80" cy="172" rx="50" ry="6" fill="#000" opacity="0.12"/>
+  <path d="M44 124 L116 124 L128 168 L32 168 Z" fill="#8cc084"/>
+  <path d="M68 124 L80 134 L92 124 Z" fill="#ffffff"/>
+  <path d="M38 100 C34 56 126 56 122 100 L118 120 L42 120 Z" fill="#c49a6c"/>
+  <ellipse cx="80" cy="90" rx="35" ry="37" fill="#fff0e4"/>
+  <path d="M45 88 C46 62 114 62 115 88 C106 76 94 78 80 82 C66 78 54 76 45 88 Z" fill="#c49a6c"/>
+  <ellipse cx="66" cy="96" rx="5.5" ry="7" fill="#5a4a3a"/>
+  <ellipse cx="94" cy="96" rx="5.5" ry="7" fill="#5a4a3a"/>
+  <circle cx="67.5" cy="93.5" r="2" fill="#fff"/>
+  <circle cx="95.5" cy="93.5" r="2" fill="#fff"/>
+  <ellipse cx="57" cy="107" rx="7" ry="4" fill="#ffa3b5" opacity="0.75"/>
+  <ellipse cx="103" cy="107" rx="7" ry="4" fill="#ffa3b5" opacity="0.75"/>
+  <path d="M76 111 Q80 113 84 111" stroke="#5a4a3a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <rect x="56" y="138" width="48" height="26" rx="3" fill="#d9dde4"/>
+  <rect x="60" y="141" width="40" height="19" rx="2" fill="#2f3b45"/>
+  <path d="M64 146 L68 150 L64 154" stroke="#8cc084" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M72 154 L80 154" stroke="#8cc084" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -34,6 +34,7 @@ export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
   const [mode, setModeState] = useState<ChatMode>('compact');
   const [side, setSide] = useState<Side>('left');
   const [character, setCharacter] = useState<CharacterView>({ id: '', name: '', color: '' });
+  const [greeting, setGreeting] = useState('');
   const [requestId, setRequestId] = useState<string | null>(null);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [focusSignal, setFocusSignal] = useState(0);
@@ -44,6 +45,7 @@ export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
   const load = useCallback(async () => {
     const init = await api.init();
     setCharacter(init.character);
+    setGreeting(init.greeting);
     setModeState(init.mode);
     setSide(init.side);
     setMessages(
@@ -217,7 +219,7 @@ export function ChatApp({ api, typewriterTickMs = 28 }: Props) {
             />
           ) : (
             <div class="msg msg-assistant">
-              <div class="text">有什么想和{name}聊的吗？</div>
+              <div class="text">{greeting || `有什么想和${name}聊的吗？`}</div>
             </div>
           )}
         </div>

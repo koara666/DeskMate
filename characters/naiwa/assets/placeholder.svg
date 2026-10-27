@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180">
+  <!-- 奶蛙占位形象（原创几何图形）：软乎乎的小青蛙 -->
+  <ellipse cx="80" cy="171" rx="56" ry="6" fill="#000" opacity="0.12"/>
+  <circle cx="50" cy="62" r="22" fill="#7ccf6b"/>
+  <circle cx="110" cy="62" r="22" fill="#7ccf6b"/>
+  <path d="M80 58 C130 58 150 92 150 122 C150 156 120 168 80 168 C40 168 10 156 10 122 C10 92 30 58 80 58 Z" fill="#7ccf6b"/>
+  <ellipse cx="80" cy="138" rx="46" ry="26" fill="#e6f7d9"/>
+  <circle cx="50" cy="60" r="14" fill="#fff"/>
+  <circle cx="110" cy="60" r="14" fill="#fff"/>
+  <circle cx="52" cy="62" r="7" fill="#22301f"/>
+  <circle cx="108" cy="62" r="7" fill="#22301f"/>
+  <circle cx="54" cy="59" r="2.2" fill="#fff"/>
+  <circle cx="110" cy="59" r="2.2" fill="#fff"/>
+  <ellipse cx="38" cy="104" rx="9" ry="5" fill="#ffa3b5" opacity="0.7"/>
+  <ellipse cx="122" cy="104" rx="9" ry="5" fill="#ffa3b5" opacity="0.7"/>
+  <path d="M56 102 Q80 118 104 102" stroke="#22301f" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <ellipse cx="40" cy="166" rx="14" ry="5" fill="#69bb59"/>
+  <ellipse cx="120" cy="166" rx="14" ry="5" fill="#69bb59"/>
+</svg>

@@ -312,6 +312,22 @@ pub fn appearance(c: &Character) -> Appearance {
     }
 }
 
+/// 用户为哪些状态提供了自己的图片（设置界面显示用）
+pub fn user_image_states(c: &Character) -> Vec<String> {
+    STATES
+        .iter()
+        .filter(|state| {
+            let name = c
+                .manifest
+                .expressions
+                .get(**state)
+                .map_or(**state, |s| s.as_str());
+            user_image(&c.user_dir, name).is_some()
+        })
+        .map(|s| s.to_string())
+        .collect()
+}
+
 /// 从台词列表里挑一句（列表为空时用默认句）
 pub fn pick_line(list: &[String], fallback: &str, seed: u64) -> String {
     if list.is_empty() {
@@ -450,6 +466,44 @@ mod tests {
         big.resize(MAX_IMAGE_BYTES as usize + 10, 0);
         fs::write(ua.join("idle.png"), big).unwrap();
         assert!(user_image(&u.path().join("cat"), "idle").is_none());
+    }
+
+    #[test]
+    fn all_builtin_packs_are_valid() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+        let empty = tempfile::tempdir().unwrap();
+        let all = load_all(Some(&root), empty.path());
+        let ids: Vec<&str> = all.iter().map(|c| c.manifest.id.as_str()).collect();
+        for id in [
+            "deepseek-whale",
+            "nailong",
+            "naiwa",
+            "makise-kurisu",
+            "shiina-mayuri",
+            "nanami-chiaki",
+            "fujisaki-chihiro",
+            "yui-sao",
+        ] {
+            assert!(ids.contains(&id), "缺少内置角色 {id}");
+        }
+        for c in &all {
+            let id = &c.manifest.id;
+            assert!(c.persona.contains("示范对话"), "{id} 缺少示范对话");
+            assert!(c.persona.contains("原创"), "{id} 应声明示范对话为原创");
+            assert!(!c.manifest.lines.greeting.is_empty(), "{id} 缺少开场白");
+            assert!(c.manifest.color.starts_with('#'), "{id} 缺少主题色");
+            let a = appearance(c);
+            assert!(a.placeholder);
+            assert!(
+                c.builtin_dir
+                    .as_ref()
+                    .unwrap()
+                    .join("assets/placeholder.svg")
+                    .is_file(),
+                "{id} 缺少占位形象"
+            );
+            assert!(user_image_states(c).is_empty());
+        }
     }
 
     #[test]

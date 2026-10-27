@@ -342,3 +342,67 @@ ul.plain {
   padding-left: 18px;
   line-height: 1.8;
 }
+
+/* —— 角色页 —— */
+.char-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.char-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px 12px;
+  background: var(--panel);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+}
+.char-card.editing {
+  border-color: var(--accent);
+}
+.char-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+.char-main img {
+  width: 72px;
+  height: 81px;
+  object-fit: contain;
+}
+.char-name {
+  font-weight: 600;
+  color: var(--text);
+}
+.state-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 12px;
+}
+.state-list .ok {
+  color: var(--ok);
+}
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  resize: vertical;
+}
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}

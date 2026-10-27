@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180">
+  <!-- 七海千秋占位形象（原创几何图形，不是官方形象）：浅粉短发 + 手柄 -->
+  <ellipse cx="80" cy="172" rx="50" ry="6" fill="#000" opacity="0.12"/>
+  <path d="M42 124 L118 124 L132 168 L28 168 Z" fill="#6d6a8c"/>
+  <path d="M68 124 L80 136 L92 124 Z" fill="#ffffff"/>
+  <path d="M38 98 C34 54 126 54 122 98 L116 118 L44 118 Z" fill="#f2b6c6"/>
+  <ellipse cx="80" cy="88" rx="35" ry="37" fill="#ffeadf"/>
+  <path d="M45 86 C46 62 114 62 115 86 C104 72 92 74 80 80 C68 74 56 72 45 86 Z" fill="#f2b6c6"/>
+  <path d="M60 96 L72 96" stroke="#5a4660" stroke-width="3" stroke-linecap="round"/>
+  <path d="M88 96 L100 96" stroke="#5a4660" stroke-width="3" stroke-linecap="round"/>
+  <ellipse cx="58" cy="104" rx="7" ry="4" fill="#ff9fb8" opacity="0.6"/>
+  <ellipse cx="102" cy="104" rx="7" ry="4" fill="#ff9fb8" opacity="0.6"/>
+  <path d="M75 109 Q80 112 85 109" stroke="#5a4660" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <rect x="50" y="138" width="60" height="24" rx="12" fill="#3f3d56"/>
+  <circle cx="64" cy="150" r="4" fill="#9aa0c8"/>
+  <circle cx="94" cy="146" r="3" fill="#e88fb0"/>
+  <circle cx="100" cy="152" r="3" fill="#8fd0e8"/>
+</svg>
