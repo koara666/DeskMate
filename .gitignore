@@ -1,0 +1,58 @@
+# ===== 构建产物 =====
+/node_modules/
+/dist/
+/src-tauri/target/
+/src-tauri/gen/schemas/
+/coverage/
+*.tsbuildinfo
+
+# ===== 用户数据（绝不能进仓库） =====
+# 程序运行时数据放在系统用户数据目录（%APPDATA%\DeskMate），这里再兜底排除一次
+/userdata/
+/appdata/
+/DeskMate-data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+/backups/
+
+# ===== 密钥与环境变量 =====
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+secrets.json
+secrets.toml
+secrets.yaml
+credentials.json
+*.secret
+*.secrets
+
+# ===== 用户自己的角色图片 =====
+# 仓库里的 characters/ 只允许放原创占位 SVG；用户图片放在用户数据目录
+characters/*/assets/*.png
+characters/*/assets/*.jpg
+characters/*/assets/*.jpeg
+characters/*/assets/*.webp
+characters/*/assets/*.gif
+/user-characters/
+
+# ===== 日志 =====
+*.log
+/logs/
+/tasks-logs/
+
+# ===== 编辑器 / 系统 =====
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
