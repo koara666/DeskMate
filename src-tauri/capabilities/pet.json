@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pet",
+  "description": "桌宠窗口：读取形象、拖动、点击、右键菜单，监听状态事件",
+  "windows": ["pet"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-start-dragging",
+    "allow-pet-init",
+    "allow-pet-click",
+    "allow-pet-menu"
+  ]
+}

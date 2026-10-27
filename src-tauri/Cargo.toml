@@ -1,0 +1,53 @@
+[package]
+name = "deskmate"
+version = "0.1.0"
+description = "常驻桌面的萌系 AI 伙伴"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[lib]
+name = "deskmate_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+log = "0.4"
+tokio = { version = "1", features = ["sync", "time", "macros", "rt-multi-thread", "process", "io-util", "fs"] }
+tokio-util = "0.7"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+base64 = "0.22"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_System_SystemInformation",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+panic = "unwind"
+
+[profile.dev]
+# 依赖用优化编译，开发时窗口和数据库更流畅；自己的代码保持快速增量编译
+[profile.dev.package."*"]
+opt-level = 1

@@ -1,0 +1,28 @@
+# DeskMate 的 gitleaks 配置：在默认规则基础上，额外检查几家模型服务商的 Key 格式。
+# 测试代码里如果必须出现「长得像密钥」的假数据，在那一行末尾加注释 gitleaks:allow。
+title = "DeskMate gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "deepseek-api-key"
+description = "DeepSeek / OpenAI 风格的 sk- 开头密钥"
+regex = '''\bsk-[A-Za-z0-9_\-]{24,}\b'''
+keywords = ["sk-"]
+
+[[rules]]
+id = "google-api-key"
+description = "Google / Gemini API Key"
+regex = '''\bAIza[0-9A-Za-z_\-]{35}\b'''
+keywords = ["aiza"]
+
+[[allowlists]]
+description = "依赖锁文件与构建产物"
+paths = [
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)Cargo\.lock$''',
+  '''(^|/)node_modules/''',
+  '''(^|/)target/''',
+  '''(^|/)dist/''',
+]

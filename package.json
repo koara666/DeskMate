@@ -1,0 +1,31 @@
+{
+  "name": "deskmate",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "常驻桌面的萌系 AI 伙伴",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "tauri": "tauri",
+    "dev:app": "node scripts/dev-app.mjs",
+    "build:app": "tauri build",
+    "check": "node scripts/check.mjs",
+    "hooks:install": "git config core.hooksPath .githooks"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "~2.12.4",
+    "preact": "~10.29.8"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "~2.12.4",
+    "@testing-library/preact": "~3.2.6",
+    "happy-dom": "~21.0.4",
+    "typescript": "~5.9.3",
+    "vite": "~8.3.5",
+    "vitest": "~5.0.5"
+  }
+}

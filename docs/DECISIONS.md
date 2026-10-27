@@ -36,3 +36,22 @@
 - 决定：每隔几秒（带随机抖动）给角色加一个类，播放一次约 0.6 秒的呼吸/眨眼动画，播完移除；其余时间没有任何动画在跑。设置里可以完全关闭。
 - 原因：持续运行的 CSS 动画（即使只动 transform）也会让 Chromium 每帧合成，空闲 CPU/GPU 不为 0。
 - 放弃：`animation: infinite` 的呼吸动画；requestAnimationFrame 循环。
+
+## #8 2026-10-27 关闭 Tauri 的 freezePrototype
+- 决定：`tauri.conf.json` 里 `freezePrototype` 设为 false。
+- 原因：开启后 `Object.prototype` 被冻结，Preact 创建虚拟节点时给对象赋值 `constructor` 会抛错，界面直接白屏（实测）。防 XSS 的主要防线是严格 CSP（禁止内联脚本和 eval）+ 模型输出只按纯文本渲染，冻结原型只是额外加固。
+- 放弃：换用不给 constructor 赋值的框架（成本高、收益小）。
+
+## #9 2026-10-27 应用命令按窗口最小授权
+- 决定：`build.rs` 用 `AppManifest::commands` 登记全部命令，每个窗口的 capability（`capabilities/pet.json`、`chat.json`、`settings.json`）只授权它需要的命令；前端事件只开放 listen/unlisten，不开放 emit。
+- 原因：需求要求 capabilities 最小化；即使某个窗口被注入脚本，也调用不了别的窗口的命令。
+- 放弃：所有窗口共用一个 capability（简单但权限过大）。
+
+## #10 2026-10-27 自写轮换文件日志 + 脱敏，不用 tauri-plugin-log
+- 决定：`logging.rs` 实现一个约 100 行的文件日志：单文件 1 MB、保留 3 份，每行输出前经过 `redact::redact_secrets`。
+- 原因：插件会额外引入依赖和前端可调用的日志接口；我们只需要后端写日志。脱敏是兜底：正常代码路径本来就不记录 Key、请求头、请求体和对话内容。
+- 放弃：tauri-plugin-log。
+
+## #11 2026-10-27 拖动结束判定：去抖 + 检查鼠标左键是否仍按住
+- 决定：桌宠窗口每次 Moved 事件后 250 ms 内没有新的移动、且鼠标左键已松开（Windows 上用 GetAsyncKeyState），才执行吸附和保存位置。
+- 原因：原生拖动期间前端收不到 mouseup；只靠去抖的话，用户拖到一半停住不动时会被提前吸附。

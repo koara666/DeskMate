@@ -1,0 +1,23 @@
+#!/bin/sh
+# 提交前密钥扫描（gitleaks）。发现疑似密钥会阻止提交。
+# 启用方法：npm run hooks:install（= git config core.hooksPath .githooks）
+
+GITLEAKS="$(command -v gitleaks 2>/dev/null)"
+if [ -z "$GITLEAKS" ]; then
+  for c in "/d/dev/tools/gitleaks.exe" "D:/dev/tools/gitleaks.exe" "$HOME/.local/bin/gitleaks" "/usr/local/bin/gitleaks"; do
+    if [ -x "$c" ]; then GITLEAKS="$c"; break; fi
+  done
+fi
+
+if [ -z "$GITLEAKS" ]; then
+  echo "[pre-commit] 找不到 gitleaks，为安全起见拒绝提交。" >&2
+  echo "[pre-commit] 安装：https://github.com/gitleaks/gitleaks/releases （放进 PATH 或 D:\dev\tools）" >&2
+  exit 1
+fi
+
+if ! "$GITLEAKS" git --pre-commit --staged --redact --no-banner -v --config .gitleaks.toml; then
+  echo "" >&2
+  echo "[pre-commit] ⚠ 发现疑似密钥，提交已阻止。请把密钥从代码中移除（密钥只能存在系统凭据管理器里）。" >&2
+  echo "[pre-commit] 如果确认是测试用的假数据，在那一行末尾加注释 gitleaks:allow。" >&2
+  exit 1
+fi

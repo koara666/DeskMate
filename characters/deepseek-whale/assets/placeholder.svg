@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180">
+  <!-- 鲸鱼娘占位形象（原创几何图形，不是官方形象）：蓝色圆润鲸鱼 + 水花 -->
+  <ellipse cx="80" cy="170" rx="50" ry="6" fill="#000" opacity="0.12"/>
+  <path d="M60 40 Q52 18 40 22 Q52 30 54 44 Z" fill="#7fb2ff"/>
+  <path d="M100 40 Q108 18 120 22 Q108 30 106 44 Z" fill="#7fb2ff"/>
+  <circle cx="72" cy="22" r="5" fill="#a9d1ff"/>
+  <circle cx="86" cy="14" r="4" fill="#a9d1ff"/>
+  <circle cx="96" cy="26" r="3" fill="#a9d1ff"/>
+  <path d="M80 42 C126 42 146 76 146 112 C146 150 116 166 80 166 C44 166 14 150 14 112 C14 76 34 42 80 42 Z" fill="#4d6bfe"/>
+  <path d="M30 128 C46 154 114 154 130 128 C122 150 104 160 80 160 C56 160 38 150 30 128 Z" fill="#dfe7ff"/>
+  <ellipse cx="60" cy="102" rx="8" ry="11" fill="#1d2340"/>
+  <ellipse cx="100" cy="102" rx="8" ry="11" fill="#1d2340"/>
+  <circle cx="63" cy="98" r="3" fill="#fff"/>
+  <circle cx="103" cy="98" r="3" fill="#fff"/>
+  <ellipse cx="44" cy="122" rx="9" ry="5" fill="#ff9fb8" opacity="0.75"/>
+  <ellipse cx="116" cy="122" rx="9" ry="5" fill="#ff9fb8" opacity="0.75"/>
+  <path d="M72 122 Q80 130 88 122" stroke="#1d2340" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>

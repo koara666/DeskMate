@@ -1,0 +1,59 @@
+/* 全局样式与设计变量。只用系统字体，不打包任何字体文件。 */
+:root {
+  --font: 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', system-ui, sans-serif;
+  --accent: #6b8cff;
+  --text: #2b2a35;
+  --text-weak: #6e6b7d;
+  --panel: #ffffff;
+  --panel-2: #f4f5fb;
+  --border: #e3e5ef;
+  --user-bg: color-mix(in srgb, var(--accent) 14%, #ffffff);
+  --danger: #d9485f;
+  --danger-bg: #fff0f2;
+  --ok: #2f9e6d;
+  --shadow: 0 3px 12px rgba(30, 30, 60, 0.16);
+  --radius: 14px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --text: #ecebf3;
+    --text-weak: #a6a3b8;
+    --panel: #24232c;
+    --panel-2: #2d2c37;
+    --border: #3a3946;
+    --user-bg: color-mix(in srgb, var(--accent) 28%, #24232c);
+    --danger-bg: #3a2229;
+    --shadow: 0 3px 14px rgba(0, 0, 0, 0.45);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

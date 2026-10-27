@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180">
+  <!-- 通用占位形象（原创）：没有任何角色图片时使用 -->
+  <ellipse cx="80" cy="168" rx="46" ry="7" fill="#000" opacity="0.12"/>
+  <path d="M80 30 C120 30 140 62 140 104 C140 146 114 164 80 164 C46 164 20 146 20 104 C20 62 40 30 80 30 Z" fill="#cfd8ea"/>
+  <ellipse cx="62" cy="98" rx="7" ry="10" fill="#3a3550"/>
+  <ellipse cx="98" cy="98" rx="7" ry="10" fill="#3a3550"/>
+  <ellipse cx="50" cy="118" rx="9" ry="5" fill="#ffb3c1" opacity="0.7"/>
+  <ellipse cx="110" cy="118" rx="9" ry="5" fill="#ffb3c1" opacity="0.7"/>
+  <path d="M72 120 Q80 127 88 120" stroke="#3a3550" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>

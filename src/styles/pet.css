@@ -1,0 +1,129 @@
+/* 桌宠窗口：透明背景，只有角色本身可见。
+   动画只在对应状态下运行（说话、思考），待机时只有低频触发的一次性动画。 */
+html,
+body,
+#app {
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+.pet {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.pet-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: 50% 100%;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+  transition: filter 0.4s ease, transform 0.4s ease;
+}
+
+/* —— 一次性待机动画 —— */
+.fx-breathe .pet-img {
+  animation: pet-breathe 1.2s ease-in-out 1;
+}
+.fx-blink .pet-img {
+  animation: pet-blink 0.4s ease-in-out 1;
+}
+@keyframes pet-breathe {
+  50% {
+    transform: scale(1.025, 0.985);
+  }
+}
+@keyframes pet-blink {
+  50% {
+    transform: scaleY(0.97);
+  }
+}
+
+/* —— 状态 —— */
+.state-talking .pet-img {
+  animation: pet-talk 0.45s ease-in-out infinite alternate;
+}
+@keyframes pet-talk {
+  to {
+    transform: translateY(-3px) scale(1.01, 0.99);
+  }
+}
+
+.state-happy .pet-img {
+  animation: pet-hop 0.45s ease-out 2;
+}
+@keyframes pet-hop {
+  40% {
+    transform: translateY(-10px);
+  }
+}
+
+.placeholder.state-sad .pet-img {
+  filter: saturate(0.5) brightness(0.93);
+  transform: translateY(4px) rotate(-4deg);
+}
+
+.state-sleep .pet-img {
+  filter: brightness(0.85) saturate(0.7);
+  transform: scale(1, 0.97);
+}
+
+.pet-thinking {
+  position: absolute;
+  top: 6%;
+  right: 4%;
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  z-index: 1;
+}
+.pet-thinking span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8a87a0;
+  animation: dot 1s ease-in-out infinite;
+}
+.pet-thinking span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.pet-thinking span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes dot {
+  50% {
+    opacity: 0.3;
+    transform: translateY(-2px);
+  }
+}
+
+.pet-zzz {
+  position: absolute;
+  top: 8%;
+  right: 10%;
+  font-weight: bold;
+  color: #7d8bd6;
+  letter-spacing: 3px;
+  text-shadow: 0 1px 2px #fff;
+}
+
+.pet-dnd {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #8b6fd6;
+  box-shadow: 0 0 0 2px #fff;
+}

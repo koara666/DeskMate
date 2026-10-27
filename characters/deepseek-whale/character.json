@@ -1,0 +1,12 @@
+{
+  "id": "deepseek-whale",
+  "name": "鲸鱼娘",
+  "version": "0.1.0",
+  "author": "DeskMate",
+  "language": "zh-CN",
+  "description": "以 DeepSeek 的蓝色鲸鱼为原型的拟人化角色，好奇心旺盛、爱钻研。",
+  "source": "原型：DeepSeek 鲸鱼标志（非官方拟人化）",
+  "color": "#4d6bfe",
+  "expressions": {},
+  "lines": {}
+}

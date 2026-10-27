@@ -1,0 +1,62 @@
+# CI：密钥扫描 + 前端/后端测试 + 构建安装包
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: 密钥扫描（gitleaks）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 下载并校验 gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+      - name: 扫描全部提交历史
+        run: ./gitleaks git --redact -v --no-banner --config .gitleaks.toml .
+
+  test-build:
+    name: 测试与构建（Windows）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: 前端类型检查与测试
+        run: |
+          npm run typecheck
+          npm test
+      - name: Rust 格式、lint、测试
+        working-directory: src-tauri
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+      - name: 构建安装包
+        run: npx tauri build
+      - name: 记录安装包大小
+        shell: bash
+        run: ls -la src-tauri/target/release/bundle/nsis/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deskmate-installer
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          retention-days: 7
