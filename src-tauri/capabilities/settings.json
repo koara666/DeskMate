@@ -31,6 +31,8 @@
     "allow-memory-set-paused",
     "allow-memory-clear-all",
     "allow-memory-export",
+    "allow-memory-import-list",
+    "allow-memory-import",
     "allow-task-defaults",
     "allow-task-settings-save",
     "allow-task-list",

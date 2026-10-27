@@ -160,6 +160,8 @@ pub fn run() {
             memory_cmds::memory_set_paused,
             memory_cmds::memory_clear_all,
             memory_cmds::memory_export,
+            memory_cmds::memory_import_list,
+            memory_cmds::memory_import,
             task_cmds::task_defaults,
             task_cmds::task_settings_save,
             task_cmds::task_start,

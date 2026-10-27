@@ -15,8 +15,10 @@ pub mod backup;
 pub mod conversation;
 pub mod extract;
 pub mod forget;
+pub mod maintain;
 pub mod sensitive;
 pub mod tokenize;
+pub mod transfer;
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};

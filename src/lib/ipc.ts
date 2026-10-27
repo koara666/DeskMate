@@ -122,6 +122,9 @@ export const settingsApi = {
   memorySetPaused: (paused: boolean) => invoke('memory_set_paused', { paused }),
   memoryClearAll: (confirm: string) => invoke('memory_clear_all', { confirm }),
   memoryExport: () => invoke<string>('memory_export'),
+  memoryImportList: () => invoke<string[]>('memory_import_list'),
+  memoryImport: (file: string) =>
+    invoke<{ added: number; duplicates: number; rejected: number }>('memory_import', { file }),
 };
 export type SettingsApi = typeof settingsApi;
 

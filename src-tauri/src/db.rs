@@ -98,6 +98,10 @@ pub const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX tasks_created ON tasks(created_at);
     "#,
+    // v5：记忆维护——记录上次因为久未使用而降低重要度的时间
+    r#"
+    ALTER TABLE memories ADD COLUMN decayed_at INTEGER;
+    "#,
 ];
 
 pub fn latest_version() -> i64 {

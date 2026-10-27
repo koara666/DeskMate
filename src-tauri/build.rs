@@ -36,6 +36,8 @@ const COMMANDS: &[&str] = &[
     "memory_set_paused",
     "memory_clear_all",
     "memory_export",
+    "memory_import_list",
+    "memory_import",
     "task_defaults",
     "task_settings_save",
     "task_start",

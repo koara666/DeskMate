@@ -204,6 +204,24 @@ pub fn load(conn: &Connection) -> Settings {
     }
 }
 
+/// 读取 settings 表里的其他键（比如记忆维护日期）
+pub fn kv_get(conn: &Connection, key: &str) -> Option<String> {
+    conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+        r.get(0)
+    })
+    .optional()
+    .ok()
+    .flatten()
+}
+
+pub fn kv_set(conn: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO settings(key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [key, value],
+    )?;
+    Ok(())
+}
+
 pub fn save(conn: &Connection, s: &Settings) -> rusqlite::Result<()> {
     let json = serde_json::to_string(s).expect("Settings 一定能序列化");
     conn.execute(

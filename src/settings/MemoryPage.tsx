@@ -292,15 +292,55 @@ function AddMemory({ api, scopes, onAdded }: { api: SettingsApi; scopes: { id: s
 
 function DangerZone({ api, onCleared }: { api: SettingsApi; onCleared: () => void }) {
   const [confirmText, setConfirmText] = useState('');
-  const { status, run } = useStatus();
+  const [files, setFiles] = useState<string[] | null>(null);
+  const [file, setFile] = useState('');
+  const { status, run, setStatus } = useStatus();
+  const loadFiles = async () => {
+    const list = await api.memoryImportList();
+    setFiles(list);
+    setFile(list[0] ?? '');
+  };
+  const doImport = async () => {
+    try {
+      const r = await api.memoryImport(file);
+      setStatus({ ok: true, text: `导入完成：新增 ${r.added} 条，重复跳过 ${r.duplicates} 条，不合规拒绝 ${r.rejected} 条` });
+      onCleared();
+    } catch (e) {
+      setStatus({ ok: false, text: String(e) });
+    }
+  };
   return (
     <div class="card">
-      <h2>导出与清空</h2>
+      <h2>导出、导入与清空</h2>
       <div class="actions">
         <button type="button" class="btn" onClick={() => run(() => api.memoryExport(), '已导出到数据目录的 exports 文件夹')}>
           导出全部记忆（JSON + Markdown）
         </button>
+        <button type="button" class="btn" onClick={() => loadFiles().catch(() => {})}>
+          导入…
+        </button>
       </div>
+      {files !== null && (
+        <div class="row">
+          {files.length === 0 ? (
+            <span class="muted small">exports 文件夹里还没有导出的 JSON 文件。可以把以前导出的文件放进 {'%APPDATA%\\DeskMate\\exports'} 再试。</span>
+          ) : (
+            <>
+              <select aria-label="选择导入文件" value={file} onChange={(e) => setFile((e.currentTarget as HTMLSelectElement).value)}>
+                {files.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+              <button type="button" class="btn btn-primary" disabled={!file} onClick={doImport}>
+                导入这个文件
+              </button>
+              <span class="muted small">重复的会跳过；密码等敏感内容不会导入</span>
+            </>
+          )}
+        </div>
+      )}
       <p class="muted small">清空会删除所有记忆和聊天记录（清空前会自动备份一份）。请输入「清空」两个字确认：</p>
       <div class="row">
         <input aria-label="清空确认" value={confirmText} onInput={(e) => setConfirmText((e.currentTarget as HTMLInputElement).value)} />

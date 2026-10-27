@@ -207,3 +207,52 @@ mod tests {
         assert!(md.contains("范围：关于你｜重要度：5｜来源：聊天"));
     }
 }
+
+/// 可以导入的文件（数据目录 exports 文件夹里的 .json）
+#[tauri::command]
+pub fn memory_import_list(state: State<'_, AppState>) -> Vec<String> {
+    let dir = state.paths.root().join("exports");
+    let mut v: Vec<String> = std::fs::read_dir(&dir)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| n.ends_with(".json"))
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort();
+    v.reverse();
+    v
+}
+
+/// 从 exports 文件夹里的某个导出文件导入记忆（只接受文件名，不接受路径）
+#[tauri::command]
+pub fn memory_import(
+    state: State<'_, AppState>,
+    file: String,
+) -> CmdResult<memory::transfer::ImportReport> {
+    let ok_name = file.ends_with(".json")
+        && file.len() <= 100
+        && !file.contains(['/', '\\', ':'])
+        && !file.contains("..");
+    if !ok_name {
+        return Err("文件名不合法".into());
+    }
+    let path = state.paths.root().join("exports").join(&file);
+    let meta = std::fs::metadata(&path).map_err(|_| "找不到这个文件".to_string())?;
+    if meta.len() > 20 * 1024 * 1024 {
+        return Err("文件太大了".into());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let items: Vec<memory::Memory> =
+        serde_json::from_str(&text).map_err(|e| format!("文件格式不对：{e}"))?;
+    let rep = memory::transfer::import(&state.db(), &items, &file, memory::now_secs())
+        .map_err(|e| e.to_string())?;
+    log::info!(
+        "导入记忆：新增 {}，重复 {}，拒绝 {}",
+        rep.added,
+        rep.duplicates,
+        rep.rejected
+    );
+    Ok(rep)
+}
