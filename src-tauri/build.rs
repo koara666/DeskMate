@@ -87,6 +87,10 @@ const COMMANDS: &[&str] = &[
     "update_save",
     "update_install",
     "update_skip",
+    "menu_open",
+    "menu_pick",
+    "menu_close",
+    "menu_focus",
 ];
 
 fn main() {

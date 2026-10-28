@@ -315,6 +315,8 @@ pub struct ProactiveMessage {
     pub note: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update: Option<crate::update::UpdateView>,
+    /// 聊天窗口原来是关着的：只弹「她说的话」气泡（没有输入框，点一下才变成聊天框）
+    pub speech: bool,
 }
 
 #[derive(Default)]
@@ -545,7 +547,14 @@ fn deliver(app: &AppHandle, item: Item, decision: Decision, id: u64) {
             .unwrap_or_default(),
         note: item.note.clone(),
         update: item.update.clone(),
+        speech: decision == Decision::Speak && !crate::desktop::chat_visible(app),
     };
+    if msg.speech {
+        st.desktop
+            .speech
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        st.desktop.force_compact();
+    }
     if let Some(c) = &item.choices {
         let mut g = st
             .companion

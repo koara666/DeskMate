@@ -110,8 +110,23 @@ pub async fn handle(
         actions: Vec::new(),
         reminder: draft,
         reminder_form: form,
+        open_game: None,
     });
     true
+}
+
+/// 模型在回复里写了 `[[提醒：明天下午3点提醒我开会]]`：本地解析成待确认的提醒；解析不了给手动表单
+pub fn draft_for_marker(st: &AppState, text: &str) -> (Option<Draft>, bool) {
+    // 模型可能只写了「明天下午3点 开会」：补上关键词再解析
+    let t = if parse::looks_like_request(text) {
+        text.to_string()
+    } else {
+        format!("提醒我{text}")
+    };
+    match parse::parse(&t, now_local()) {
+        Outcome::Ok(p) => (Some(draft_from(st, &p, now_local())), false),
+        _ => (None, true),
+    }
 }
 
 /// 测试用：本地解析 + 复述（不需要 Tauri）

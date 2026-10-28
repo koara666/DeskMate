@@ -3,6 +3,8 @@
 //! - `[[打开：路径或网址]]`：内置能力层，气泡里出现「打开」按钮，用户点了才打开（`abilities.rs`）。
 //! - `[[读取：文件路径]]`：内置能力层，用户点了才读（只能读设置里允许的文件夹）。
 //! - `[[任务：要做的事]]`：委托外部 agent（高级选项，默认关闭，DECISIONS #33），弹出任务确认卡片。
+//! - `[[玩：游戏名]]`：用户想玩游戏时，直接打开那个游戏（v2.1，DECISIONS #49）。
+//! - `[[提醒：一句吩咐]]`：用户要她记着某个时间提醒，本地解析后在气泡里确认（v2.1）。
 //!
 //! 标记本身不显示给用户，也不存进聊天记录。模型只能「提议」，真正动手必须用户点确认。
 
@@ -14,12 +16,16 @@ pub enum MarkerKind {
     Task,
     Open,
     Read,
+    Game,
+    Remind,
 }
 
-const TAGS: [(&str, MarkerKind); 3] = [
+const TAGS: [(&str, MarkerKind); 5] = [
     ("[[任务", MarkerKind::Task),
     ("[[打开", MarkerKind::Open),
     ("[[读取", MarkerKind::Read),
+    ("[[玩", MarkerKind::Game),
+    ("[[提醒", MarkerKind::Remind),
 ];
 const CLOSE: &str = "]]";
 const MAX_MARKER_CHARS: usize = 500;
@@ -75,7 +81,8 @@ fn find_open(s: &str) -> Option<(usize, MarkerKind, usize)> {
 impl MarkerFilter {
     fn close_marker(&mut self, kind: MarkerKind) {
         let t = clean(&std::mem::take(&mut self.cur));
-        if !t.is_empty() && self.found.len() < MAX_MARKERS {
+        // [[玩：]]（没说玩什么）也算：打开游戏列表
+        if (!t.is_empty() || kind == MarkerKind::Game) && self.found.len() < MAX_MARKERS {
             self.found.push(Marker { kind, text: t });
         }
     }
@@ -215,6 +222,20 @@ mod tests {
             ]
         );
         assert_eq!(first_task(&m), None);
+    }
+
+    #[test]
+    fn game_and_reminder_markers() {
+        let (out, m) = stream(&["好呀！[[玩", "：井字棋]]"]);
+        assert_eq!(out, "好呀！");
+        assert_eq!(m[0].kind, MarkerKind::Game);
+        assert_eq!(m[0].text, "井字棋");
+        let (out, m) = strip("记下啦\n[[提醒：明天下午3点提醒我开会]]");
+        assert_eq!(out, "记下啦");
+        assert_eq!(m[0].kind, MarkerKind::Remind);
+        let (_, m) = strip("来吧[[玩：]]");
+        assert_eq!((m[0].kind, m[0].text.as_str()), (MarkerKind::Game, ""));
+        assert_eq!(strip("[[好]]").1, vec![]);
     }
 
     #[test]

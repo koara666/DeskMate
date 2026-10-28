@@ -18,7 +18,9 @@ use tauri::{
 pub const PET_LOGICAL: (f64, f64) = (160.0, 180.0);
 /// 气泡模式：宽度固定，高度跟着内容在最小值和这个最大值之间变化
 pub const CHAT_COMPACT: (f64, f64) = (340.0, 250.0);
-pub const CHAT_COMPACT_MIN_H: f64 = 120.0;
+pub const CHAT_COMPACT_MIN_H: f64 = 56.0;
+/// 头顶气泡菜单窗口的大小（逻辑像素）
+pub const MENU_LOGICAL: (f64, f64) = (340.0, 210.0);
 pub const CHAT_EXPANDED: (f64, f64) = (380.0, 560.0);
 const SNAP_LOGICAL: f64 = 24.0;
 const MARGIN_LOGICAL: f64 = 8.0;
@@ -49,9 +51,26 @@ pub struct DesktopState {
     compact_h: Mutex<f64>,
     /// 设置窗口下次打开时要显示的页面（由 --settings=<页面> 启动参数设置）
     settings_tab: Mutex<Option<String>>,
+    /// 聊天窗口现在只是「她说的话」气泡（没有输入框）：点桌宠时变成聊天框，而不是关掉
+    pub speech: std::sync::atomic::AtomicBool,
+    /// 拖动轨迹（时间毫秒, x, y），松手后看看是不是甩来甩去、拖了很久
+    drag_path: Mutex<Vec<(i64, i32, i32)>>,
+    /// 头顶气泡菜单：打开的代数（关掉 / 重新打开后旧的按住检测自动退出）
+    menu_gen: AtomicU64,
 }
 
 impl DesktopState {
+    /// 菜单每打开 / 关掉一次加一（旧的按住检测看到代数变了就退出）
+    pub fn next_menu_gen(&self) -> u64 {
+        self.menu_gen.fetch_add(1, Ordering::SeqCst) + 1
+    }
+    pub fn menu_gen(&self) -> u64 {
+        self.menu_gen.load(Ordering::SeqCst)
+    }
+    /// 「她说的话」气泡总是用小气泡的大小（不改 speech 标记）
+    pub fn force_compact(&self) {
+        *self.chat_mode.lock().unwrap_or_else(|e| e.into_inner()) = ChatMode::Compact;
+    }
     pub fn chat_mode(&self) -> ChatMode {
         *self.chat_mode.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -153,6 +172,51 @@ fn monitors(w: &WebviewWindow) -> tauri::Result<(Vec<Rect>, Rect)> {
 }
 
 /// 窗口当前所在显示器的工作区
+pub fn current_work_of(w: &WebviewWindow) -> tauri::Result<Rect> {
+    current_work(w)
+}
+
+/// 按 tauri.conf.json 里的配置建一个窗口（头顶气泡菜单等）
+pub fn build_window(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow> {
+    window_builder(app, label)?.build()
+}
+
+/// 窗口实际上是不是显示着（系统调用）
+pub fn window_visible(w: &WebviewWindow) -> bool {
+    #[cfg(windows)]
+    if let Ok(h) = w.hwnd() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::IsWindowVisible;
+        return unsafe { IsWindowVisible(h.0 as _) != 0 };
+    }
+    w.is_visible().unwrap_or(false)
+}
+
+/// 鼠标在屏幕上的位置（物理像素）
+#[cfg(windows)]
+pub fn cursor_pos() -> Option<(i32, i32)> {
+    use windows_sys::Win32::Foundation::POINT;
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    let mut p = POINT { x: 0, y: 0 };
+    (unsafe { GetCursorPos(&mut p) } != 0).then_some((p.x, p.y))
+}
+
+#[cfg(not(windows))]
+pub fn cursor_pos() -> Option<(i32, i32)> {
+    None
+}
+
+/// 右键是不是正被按着
+#[cfg(windows)]
+pub fn right_button_down() -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_RBUTTON};
+    unsafe { (GetAsyncKeyState(VK_RBUTTON as i32) as u16 & 0x8000) != 0 }
+}
+
+#[cfg(not(windows))]
+pub fn right_button_down() -> bool {
+    false
+}
+
 fn current_work(w: &WebviewWindow) -> tauri::Result<Rect> {
     let (works, primary) = monitors(w)?;
     let r = window_rect(w)?;
@@ -239,7 +303,20 @@ pub fn ensure_chat(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 /// 桌宠窗口移动时调用：聊天窗口跟着走；停止移动后吸附边缘并保存位置
 pub fn on_pet_moved(app: &AppHandle) {
     let _ = position_chat(app);
+    let _ = crate::radial::position_if_open(app);
     let st = app.state::<AppState>();
+    if let Some(p) = pet(app)
+        && let Ok(pos) = p.outer_position()
+    {
+        let mut path = st
+            .desktop
+            .drag_path
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if path.len() < 4000 {
+            path.push((now_ms(), pos.x, pos.y));
+        }
+    }
     let generation = st.desktop.move_gen.fetch_add(1, Ordering::SeqCst) + 1;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -256,7 +333,25 @@ pub fn on_pet_moved(app: &AppHandle) {
         if let Err(e) = finalize_pet_position(&app) {
             log::warn!("保存桌宠位置失败：{e}");
         }
+        let path = std::mem::take(
+            &mut *app
+                .state::<AppState>()
+                .desktop
+                .drag_path
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()),
+        );
+        if let Some(g) = geometry::drag_gesture(&path) {
+            crate::companion::drag_gesture(&app, g);
+        }
     });
+}
+
+pub fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 #[cfg(windows)]
@@ -385,7 +480,18 @@ pub fn fit_compact(app: &AppHandle, height: f64) -> tauri::Result<()> {
     Ok(())
 }
 
+/// 聊天窗口实际上是不是显示着（用系统调用判断：Tauri 内部记录的状态可能不同步，DECISIONS #43）
+pub fn chat_visible(app: &AppHandle) -> bool {
+    chat(app).is_some_and(|c| window_visible(&c))
+}
+
 pub fn show_chat(app: &AppHandle, focus: bool) -> tauri::Result<()> {
+    if focus {
+        app.state::<AppState>()
+            .desktop
+            .speech
+            .store(false, Ordering::SeqCst);
+    }
     let c = ensure_chat(app)?;
     show_window(&c)?;
     position_chat(app)?;
@@ -397,20 +503,36 @@ pub fn show_chat(app: &AppHandle, focus: bool) -> tauri::Result<()> {
 }
 
 pub fn hide_chat(app: &AppHandle) -> tauri::Result<()> {
+    app.state::<AppState>()
+        .desktop
+        .speech
+        .store(false, Ordering::SeqCst);
     if let Some(c) = chat(app) {
         hide_window(&c)?;
     }
     Ok(())
 }
 
+/// 点桌宠：聊天框开着就关上；只是她说话的气泡（或者关着）就打开聊天框
 pub fn toggle_chat(app: &AppHandle) -> tauri::Result<()> {
-    match chat(app) {
-        Some(c) if c.is_visible()? => hide_chat(app),
-        _ => show_chat(app, true),
+    let speech = app
+        .state::<AppState>()
+        .desktop
+        .speech
+        .load(Ordering::SeqCst);
+    if chat_visible(app) && !speech {
+        hide_chat(app)
+    } else {
+        show_chat(app, true)
     }
 }
 
 pub fn set_chat_mode(app: &AppHandle, mode: ChatMode) -> tauri::Result<()> {
+    // 前端切换模式（包括从「她说的话」气泡变成聊天框）都会调这里
+    app.state::<AppState>()
+        .desktop
+        .speech
+        .store(false, Ordering::SeqCst);
     *app.state::<AppState>()
         .desktop
         .chat_mode

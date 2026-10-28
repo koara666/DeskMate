@@ -3,6 +3,7 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
+  MenuShow,
   UpdateProgress,
   UpdateView,
   UpdateSettings,
@@ -68,8 +69,8 @@ export interface ChatApi {
   onCharacterChanged(cb: () => void): Promise<UnlistenFn>;
   /** 角色主动说话（经过调度器） */
   onProactive(cb: (m: ProactiveMessage) => void): Promise<UnlistenFn>;
-  /** 右键菜单「一起玩…」 */
-  onOpenGames(cb: () => void): Promise<UnlistenFn>;
+  /** 右键菜单「一起玩…」（可能带游戏 id） */
+  onOpenGames(cb: (game?: string) => void): Promise<UnlistenFn>;
   /** 气泡里点了「打开」 */
   open(target: string): Promise<string>;
   /** 气泡里点了「读取」：读完由角色说说内容（流式） */
@@ -83,6 +84,8 @@ export interface ChatApi {
   games: GameApi;
   /** 检查更新：下载安装、跳过（不传时气泡里不显示更新按钮） */
   update?: UpdateApi;
+  /** 头顶气泡里点了「提醒」：她说一句，下面给提醒表单 */
+  onReminderForm?(cb: (text: string) => void): Promise<UnlistenFn>;
 }
 
 /** 更新：只能安装后端上次查到的版本（前端不能指定下载地址） */
@@ -143,7 +146,7 @@ export const chatApi: ChatApi = {
   onFocusInput: (cb) => listen('chat-focus-input', () => cb()),
   onCharacterChanged: (cb) => listen('character-changed', () => cb()),
   onProactive: (cb) => listen<ProactiveMessage>('chat-proactive', (e) => cb(e.payload)),
-  onOpenGames: (cb) => listen('chat-open-games', () => cb()),
+  onOpenGames: (cb) => listen<string | null>('chat-open-games', (e) => cb(e.payload || undefined)),
   open: (target) => invoke<string>('ability_open', { target }),
   read: (path, requestId, onEvent) => invoke('ability_read', { path, requestId, onEvent: channel(onEvent) }),
   feedback: (engaged) => invoke('proactive_feedback', { engaged }),
@@ -151,14 +154,17 @@ export const chatApi: ChatApi = {
   choose: (id, index) => invoke<string>('event_choose', { id, index }),
   games: gameApi,
   update: updateApi,
+  onReminderForm: (cb) => listen<string>('chat-reminder-form', (e) => cb(e.payload)),
 };
 
 export interface PetApi {
   init(): Promise<PetInit>;
   click(): Promise<void>;
-  /** 摸头 / 拖动的反应 */
-  touch(part: 'head' | 'drag'): Promise<void>;
+  /** 摸头（点头顶 / 在头上蹭）、拖动、按住不放、连戳的反应 */
+  touch(part: TouchPart): Promise<void>;
   menu(): Promise<void>;
+  /** 右键按下：头顶浮出气泡菜单 */
+  menuOpen(hold: boolean): Promise<void>;
   startDrag(): Promise<void>;
   onState(cb: (s: PetState) => void): Promise<UnlistenFn>;
   onChanged(cb: () => void): Promise<UnlistenFn[]>;
@@ -169,6 +175,7 @@ export const petApi: PetApi = {
   click: () => invoke('pet_click'),
   touch: (part) => invoke('pet_touch', { part }),
   menu: () => invoke('pet_menu'),
+  menuOpen: (hold) => invoke('menu_open', { hold }),
   startDrag: () => getCurrentWindow().startDragging(),
   onState: (cb) => listen<PetState>('pet-state', (e) => cb(e.payload)),
   onChanged: (cb) =>
@@ -177,6 +184,29 @@ export const petApi: PetApi = {
       listen('character-changed', () => cb()),
       listen('pet-variant', () => cb()),
     ]),
+};
+
+export type TouchPart = 'head' | 'rub' | 'drag' | 'hold' | 'poke';
+
+/** 头顶气泡菜单（单独的透明小窗口） */
+export interface MenuApi {
+  onShow(cb: (s: MenuShow) => void): Promise<UnlistenFn>;
+  /** 按住右键时鼠标的位置（菜单窗口里的坐标） */
+  onPointer(cb: (p: { x: number; y: number }) => void): Promise<UnlistenFn>;
+  /** 按住的右键松开了 */
+  onRelease(cb: (r: { x: number; y: number; held_ms: number }) => void): Promise<UnlistenFn>;
+  pick(id: string): Promise<void>;
+  close(heldMs: number): Promise<void>;
+  focus(): Promise<void>;
+}
+
+export const menuApi: MenuApi = {
+  onShow: (cb) => listen<MenuShow>('menu-show', (e) => cb(e.payload)),
+  onPointer: (cb) => listen<{ x: number; y: number }>('menu-pointer', (e) => cb(e.payload)),
+  onRelease: (cb) => listen<{ x: number; y: number; held_ms: number }>('menu-release', (e) => cb(e.payload)),
+  pick: (id) => invoke('menu_pick', { id }),
+  close: (heldMs) => invoke('menu_close', { heldMs }),
+  focus: () => invoke('menu_focus'),
 };
 
 /** 生成请求编号（只含字母数字和 -，Rust 端会校验） */

@@ -19,6 +19,7 @@ pub mod filter;
 pub mod games;
 pub mod games_llm;
 pub mod geometry;
+pub mod intents;
 pub mod lines;
 pub mod logging;
 pub mod markers;
@@ -30,6 +31,7 @@ pub mod privacy;
 pub mod proactive;
 pub mod prompt;
 pub mod quotes;
+pub mod radial;
 pub mod redact;
 pub mod reminders;
 pub mod screen;
@@ -42,6 +44,7 @@ pub mod tasks;
 pub mod update;
 pub mod usage;
 pub mod vision;
+pub mod voice;
 pub mod worker;
 
 use paths::DataPaths;
@@ -129,6 +132,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         if let Err(e) = desktop::ensure_chat(&handle) {
             log::warn!("创建聊天窗口失败：{e}");
             return;
+        }
+        // 头顶气泡菜单也先建好（藏着），第一次右键时不用等
+        if let Err(e) = radial::ensure(&handle) {
+            log::warn!("创建气泡菜单窗口失败：{e}");
         }
         if onboarding {
             // 等聊天页面加载、量好气泡高度，再不抢焦点地弹出来
@@ -253,6 +260,10 @@ pub fn run() {
             settings_cmds::update_check,
             settings_cmds::update_save,
             commands::update_install,
+            commands::menu_open,
+            commands::menu_pick,
+            commands::menu_close,
+            commands::menu_focus,
             commands::update_skip,
             settings_cmds::settings_get,
             settings_cmds::settings_save_general,

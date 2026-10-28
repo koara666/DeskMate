@@ -95,6 +95,10 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const [TaskCard, setTaskCard] = useState<ComponentType<Parameters<TaskCardType>[0]> | null>(null);
   const [GameHost, setGameHost] = useState<ComponentType<Parameters<GameHostType>[0]> | null>(null);
   const [playing, setPlaying] = useState(false);
+  /** 只是「她说的话」气泡（她主动说话、摸头拖动的反应）：没有标题栏和输入框，点一下变成聊天框 */
+  const [speech, setSpeech] = useState(false);
+  /** 直接打开的游戏（聊天里说「来一局井字棋」；每次递增 seq 让同一个游戏也能重新打开） */
+  const [initialGame, setInitialGame] = useState<{ id: string; seq: number } | undefined>(undefined);
   /** 主动弹出的气泡：用户理会前，无人理会一段时间就自动收起（悬停在气泡上时不收） */
   const proactive = useRef<{ timer: ReturnType<typeof setTimeout> | null; hovering: boolean } | null>(null);
   /** 用户上次在聊天窗口里打字、发消息的时间（正在聊天时不自动收起） */
@@ -118,11 +122,12 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     const offs = [
       api.onPlacement(setPlace),
       api.onFocusInput(() => {
+        setSpeech(false);
         setFocusSignal((n) => n + 1);
         setNow(nowSecs());
       }),
       api.onCharacterChanged(() => load().catch(() => {})),
-      api.onOpenGames(() => openGamesRef.current()),
+      api.onOpenGames((game) => openGamesRef.current(game)),
       api.onProactive((m) => {
         stickToBottom.current = true;
         setMessages((ms) => [
@@ -138,9 +143,22 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
             update: m.update,
           },
         ]);
+        if (m.speech) {
+          setSpeech(true);
+          setModeState('compact');
+        }
         armProactive(m);
       }),
     ];
+    if (api.onReminderForm) {
+      offs.push(
+        api.onReminderForm((text) => {
+          setSpeech(false);
+          stickToBottom.current = true;
+          setMessages((ms) => [...ms, { id: nextId(), role: 'assistant', text, status: 'done', at: nowSecs(), reminderForm: true }]);
+        }),
+      );
+    }
     const onVisible = () => {
       if (!document.hidden) setNow(nowSecs());
     };
@@ -249,6 +267,11 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
         );
         // 只有允许委托外部 agent 时后端才会带上任务（DECISIONS #33）
         if (e.task && taskApi) openTask(e.task);
+        // 用户想玩游戏：她先说一句，稍后直接打开那个游戏
+        if (e.open_game !== undefined) {
+          const id = e.open_game;
+          setTimeout(() => openGamesRef.current(id), 700);
+        }
       } else {
         w.flush();
         const { type: _t, ...info } = e;
@@ -336,9 +359,10 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     [],
   );
 
-  const openGamesRef = useRef(() => {});
-  const openGames = () => {
+  const openGamesRef = useRef((_id?: string) => {});
+  const openGames = (id?: string) => {
     engage();
+    setInitialGame(id ? { id, seq: Date.now() } : undefined);
     if (!GameHost) {
       import('../games/GameHost')
         .then((m) => setGameHost(() => m.GameHost))
@@ -352,6 +376,14 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const setMode = (m: ChatMode) => {
     setModeState(m);
     api.setMode(m).catch(() => {});
+  };
+
+  /** 点了「她说的话」气泡：变成聊天框（玩到一半的游戏接着显示） */
+  const toChat = (e: MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return;
+    setSpeech(false);
+    setMode(playing ? 'expanded' : 'compact');
+    setFocusSignal((n) => n + 1);
   };
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
@@ -369,7 +401,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   return (
     <div
       ref={panelRef}
-      class={`panel mode-${mode} tail-${place.side === 'left' ? 'right' : 'left'} anchor-${place.top ? 'top' : 'bottom'}`}
+      class={`panel mode-${mode} ${speech ? 'speech' : ''} tail-${place.side === 'left' ? 'right' : 'left'} anchor-${place.top ? 'top' : 'bottom'}`}
       style={accent ? ({ '--accent': accent } as Record<string, string>) : undefined}
       onPointerEnter={() => {
         if (proactive.current) proactive.current.hovering = true;
@@ -380,6 +412,26 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
       onPointerDown={engage}
       onKeyDown={engage}
     >
+      {speech ? (
+        <div class="bubble-area speech-area" ref={listRef} onClick={toChat} title="点一下回她" data-testid="speech">
+          {lastAssistant && (
+            <Message
+              msg={lastAssistant}
+              isLast={false}
+              generating={false}
+              bare
+              onAction={onAction}
+              onReminder={onReminder}
+              onChoose={onChoose}
+              updateApi={api.update}
+            />
+          )}
+          <span class="speech-hint" aria-hidden="true">
+            💬
+          </span>
+        </div>
+      ) : (
+        <>
       <header class="panel-header">
         <span class="name">{name}</span>
         <div class="header-actions">
@@ -392,7 +444,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
               ⤡
             </button>
           )}
-          <button type="button" class="icon-btn" title="一起玩小游戏" aria-label="小游戏" onClick={openGames}>
+          <button type="button" class="icon-btn" title="一起玩小游戏" aria-label="小游戏" onClick={() => openGames()}>
             🎮
           </button>
           <button type="button" class="icon-btn" title="设置" aria-label="设置" onClick={() => api.openSettings().catch(() => {})}>
@@ -424,7 +476,13 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
 
       {playing ? (
         GameHost ? (
-          <GameHost api={api.games} name={name} onClose={() => setPlaying(false)} />
+          <GameHost
+            key={initialGame?.seq ?? 0}
+            api={api.games}
+            name={name}
+            initial={initialGame?.id}
+            onClose={() => setPlaying(false)}
+          />
         ) : (
           <div class="messages muted">加载中…</div>
         )
@@ -486,6 +544,8 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
         />
       )}
       {!playing && <Composer generating={generating} onSend={send} onStop={stop} focusSignal={focusSignal} />}
+        </>
+      )}
     </div>
   );
 }
@@ -504,6 +564,8 @@ interface MessageProps {
   onChoose?: (msgId: number, id: number, index: number, option: string) => Promise<void>;
   /** 检查更新（有新版本的消息里显示按钮） */
   updateApi?: UpdateApi;
+  /** 「她说的话」气泡：不显示复制、重新生成 */
+  bare?: boolean;
 }
 
 const Message = memo(function Message({
@@ -515,6 +577,7 @@ const Message = memo(function Message({
   onReminder,
   onChoose,
   updateApi,
+  bare,
 }: MessageProps) {
   const [copied, setCopied] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
@@ -574,7 +637,7 @@ const Message = memo(function Message({
           )}
         </div>
       )}
-      {msg.role === 'assistant' && msg.status !== 'streaming' && (
+      {msg.role === 'assistant' && msg.status !== 'streaming' && !bare && (
         <div class="msg-actions">
           {msg.text && (
             <button type="button" class="link-btn" onClick={copy}>

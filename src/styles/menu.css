@@ -1,0 +1,98 @@
+/* 头顶气泡菜单：透明窗口里一圈圆形气泡。只有出现时有一次性的弹出动画。
+   颜色用设计变量（角色主题在 P13 里覆盖 --accent、--bubble-* 等）。 */
+html,
+body,
+#app {
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.radial {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.bubble {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 50%;
+  background: var(--bubble-bg, color-mix(in srgb, var(--panel) 92%, var(--accent)));
+  box-shadow: 0 2px 8px rgba(30, 30, 60, 0.22);
+  cursor: pointer;
+  animation: bubble-pop 0.2s cubic-bezier(0.3, 1.6, 0.6, 1) both;
+  transition: transform 0.08s ease-out, box-shadow 0.08s ease-out;
+}
+.above .bubble {
+  transform-origin: 50% 160%;
+}
+.below .bubble {
+  transform-origin: 50% -60%;
+}
+@keyframes bubble-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.bubble-icon {
+  font-size: 20px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.bubble-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 2px;
+  padding: 0 6px;
+  transform: translateX(-50%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(30, 30, 60, 0.15);
+}
+
+.bubble.hover {
+  transform: scale(1.18);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent), 0 3px 10px rgba(30, 30, 60, 0.28);
+  z-index: 1;
+}
+.bubble.hover .bubble-label {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 开着的开关（勿扰中、声音开） */
+.bubble.on {
+  background: color-mix(in srgb, var(--accent) 30%, var(--panel));
+  border-color: var(--accent);
+}
+
+/* 偶尔出现的神秘气泡 */
+.bubble.secret {
+  border-style: dashed;
+  background: color-mix(in srgb, #ffd166 40%, var(--panel));
+}
+.bubble.secret .bubble-icon {
+  font-weight: bold;
+  color: #b07a00;
+}

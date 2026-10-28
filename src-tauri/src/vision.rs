@@ -393,20 +393,33 @@ fn say(app: &AppHandle, text: String, note: String, mood: crate::chat::PetState)
     crate::proactive::say_now(app, item);
 }
 
-/// 用户让她看一眼（快捷键、聊天里说「看看我的屏幕」、右键气泡）：马上回一句，再看
+/// 用户让她看一眼（快捷键、右键气泡）：马上回一句「我看看」，再看
 pub fn look_now(app: &AppHandle, hint: &'static str) {
+    look_inner(app, hint, true);
+}
+
+/// 聊天里说「看看我的屏幕」：聊天回复里已经说过「我看看」了，直接看
+pub fn look_after_ack(app: &AppHandle, hint: &'static str) {
+    look_inner(app, hint, false);
+}
+
+fn look_inner(app: &AppHandle, hint: &'static str, ack: bool) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let st = app.state::<AppState>();
         if let Err(e) = check_ready(&st) {
-            say(&app, e, String::new(), crate::chat::PetState::Sad);
+            if ack {
+                say(&app, e, String::new(), crate::chat::PetState::Sad);
+            }
             return;
         }
         // 先说一句「我看看」，看图要几秒钟
-        let ack = st
-            .line("vision.ack", &[])
-            .unwrap_or_else(|| "嗯？我看看……".into());
-        say(&app, ack, String::new(), crate::chat::PetState::Thinking);
+        if ack {
+            let ack = st
+                .line("vision.ack", &[])
+                .unwrap_or_else(|| "嗯？我看看……".into());
+            say(&app, ack, String::new(), crate::chat::PetState::Thinking);
+        }
         crate::chat::emit_pet_state(&app, crate::chat::PetState::Thinking);
         let now = crate::memory::now_secs();
         match prepare_async(&st, Trigger::Hotkey).await {

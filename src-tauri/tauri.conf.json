@@ -48,6 +48,24 @@
         "visible": false
       },
       {
+        "label": "menu",
+        "create": false,
+        "url": "menu.html",
+        "title": "DeskMate 菜单",
+        "width": 340,
+        "height": 210,
+        "transparent": true,
+        "decorations": false,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "shadow": false,
+        "visible": false,
+        "focus": false
+      },
+      {
         "label": "settings",
         "create": false,
         "url": "settings.html",

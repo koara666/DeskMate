@@ -727,3 +727,31 @@ body,
   font-size: 11px;
 }
 
+
+/* 「她说的话」气泡：没有标题栏和输入框，点一下变成聊天框 */
+.panel.speech {
+  cursor: pointer;
+}
+.panel.speech::after {
+  bottom: 22px;
+}
+.panel.speech.anchor-top::after {
+  top: 22px;
+}
+.speech-area {
+  position: relative;
+  padding: 10px 14px 10px;
+}
+.speech-area .msg-actions {
+  display: none;
+}
+.speech-hint {
+  position: absolute;
+  right: 6px;
+  bottom: 2px;
+  font-size: 11px;
+  opacity: 0.45;
+}
+.panel.speech:hover .speech-hint {
+  opacity: 0.9;
+}

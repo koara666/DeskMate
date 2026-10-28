@@ -121,3 +121,17 @@ body,
 .placeholder.mood-low.state-idle .pet-img {
   filter: saturate(0.8);
 }
+
+/* 摸头：缩一下再弹回来（一次性动画；每摸一下换 key 重新播放） */
+.state-idle .pet-img.patted,
+.state-happy .pet-img.patted {
+  animation: pet-pat 0.36s ease-out 1;
+}
+@keyframes pet-pat {
+  35% {
+    transform: scale(1.04, 0.93);
+  }
+  70% {
+    transform: scale(0.98, 1.02);
+  }
+}

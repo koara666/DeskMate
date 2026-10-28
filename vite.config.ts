@@ -18,6 +18,7 @@ export default defineConfig({
         pet: `${root}pet.html`,
         chat: `${root}chat.html`,
         settings: `${root}settings.html`,
+        menu: `${root}menu.html`,
       },
     },
   },

@@ -10,6 +10,7 @@ function fakeApi() {
     click: ReturnType<typeof vi.fn>;
     touch: ReturnType<typeof vi.fn>;
     menu: ReturnType<typeof vi.fn>;
+    menuOpen: ReturnType<typeof vi.fn>;
     startDrag: ReturnType<typeof vi.fn>;
   } = {
     init: async () => ({
@@ -21,6 +22,7 @@ function fakeApi() {
     click: vi.fn(async () => {}),
     touch: vi.fn(async () => {}),
     menu: vi.fn(async () => {}),
+    menuOpen: vi.fn(async () => {}),
     startDrag: vi.fn(async () => {}),
     onState: async (cb) => {
       stateCb = cb;
@@ -62,10 +64,64 @@ describe('Pet 桌宠', () => {
     expect(api.click).not.toHaveBeenCalled();
   });
 
-  it('右键弹出菜单', async () => {
+  it('右键按下就出头顶气泡菜单（浏览器自己的菜单不弹）', async () => {
     const { api, el } = await mount();
+    fireEvent.pointerDown(el, { button: 2, screenX: 100, screenY: 100 });
+    expect(api.menuOpen).toHaveBeenCalledWith(true);
     fireEvent.contextMenu(el);
-    expect(api.menu).toHaveBeenCalledTimes(1);
+    expect(api.menu).not.toHaveBeenCalled();
+    expect(api.click).not.toHaveBeenCalled();
+  });
+
+  it('点头顶是摸头，不打开聊天', async () => {
+    const { api, el } = await mount();
+    el.getBoundingClientRect = () => ({ top: 0, left: 0, width: 160, height: 180, right: 160, bottom: 180, x: 0, y: 0, toJSON: () => ({}) });
+    fireEvent.pointerDown(el, { button: 0, screenX: 80, screenY: 20, clientX: 80, clientY: 20 });
+    fireEvent.pointerUp(el, { button: 0, screenX: 80, screenY: 20, clientX: 80, clientY: 20 });
+    expect(api.touch).toHaveBeenCalledWith('head');
+    expect(api.click).not.toHaveBeenCalled();
+  });
+
+  it('在头上来回蹭也是摸头', async () => {
+    const { api, el } = await mount();
+    el.getBoundingClientRect = () => ({ top: 0, left: 0, width: 160, height: 180, right: 160, bottom: 180, x: 0, y: 0, toJSON: () => ({}) });
+    let x = 60;
+    for (let i = 0; i < 12; i++) {
+      x += i % 2 === 0 ? 20 : -20;
+      fireEvent.pointerMove(el, { buttons: 0, screenX: x, screenY: 20, clientX: x, clientY: 20, timeStamp: 1000 + i * 80 });
+    }
+    expect(api.touch).toHaveBeenCalledWith('rub');
+    expect(api.click).not.toHaveBeenCalled();
+  });
+
+  it('按住不动一会儿有反应，松手不打开聊天', async () => {
+    const { api, el } = await mount();
+    fireEvent.pointerDown(el, { button: 0, screenX: 100, screenY: 150 });
+    act(() => {
+      vi.advanceTimersByTime(800);
+    });
+    expect(api.touch).toHaveBeenCalledWith('hold');
+    fireEvent.pointerUp(el, { button: 0, screenX: 100, screenY: 150 });
+    expect(api.click).not.toHaveBeenCalled();
+  });
+
+  it('连着戳身体：第 4 下变成「别戳啦」', async () => {
+    const { api, el } = await mount();
+    for (let i = 0; i < 4; i++) {
+      fireEvent.pointerDown(el, { button: 0, screenX: 100, screenY: 150 });
+      fireEvent.pointerUp(el, { button: 0, screenX: 100, screenY: 150 });
+    }
+    expect(api.click).toHaveBeenCalledTimes(3);
+    expect(api.touch).toHaveBeenCalledWith('poke');
+  });
+
+  it('拖动时不打开聊天', async () => {
+    const { api, el } = await mount();
+    fireEvent.pointerDown(el, { button: 0, screenX: 100, screenY: 150 });
+    fireEvent.pointerMove(el, { buttons: 1, screenX: 130, screenY: 150 });
+    fireEvent.pointerUp(el, { button: 0, screenX: 130, screenY: 150 });
+    expect(api.touch).toHaveBeenCalledWith('drag');
+    expect(api.click).not.toHaveBeenCalled();
   });
 
   it('开心状态过一会儿自动回到待机', async () => {

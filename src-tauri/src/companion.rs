@@ -301,27 +301,40 @@ pub struct Choice {
     pub replies: Vec<String>,
 }
 
-/// 摸头 / 戳身体 / 拖动：返回要说的话（不存进聊天记录）。拖动、戳有冷却，不是每次都说。
+/// 摸头的台词场景（纯函数）：20 秒内第 3 次换一组，30 秒内 8 次以上「头发要乱了」
+pub fn pat_scene(recent: &[i64], now: i64, rub: bool) -> &'static str {
+    let in20 = recent.iter().filter(|t| now - **t < 20).count();
+    let in30 = recent.iter().filter(|t| now - **t < 30).count();
+    if in30 >= 8 {
+        "touch.head_lots"
+    } else if in20 >= 3 {
+        "touch.head_many"
+    } else if rub {
+        "touch.rub"
+    } else {
+        "touch.head"
+    }
+}
+
+/// 摸头（点头顶 / 在头上来回蹭）、戳身体、拖动、按住不放、连戳：返回要说的话（不存进聊天记录）。
+/// 拖动、戳有冷却，不是每次都说。
 pub fn touch(app: &AppHandle, part: &str) -> Option<String> {
     let st = app.state::<AppState>();
     let now = crate::memory::now_secs();
     let (scene, cooldown, interaction): (&'static str, i64, Interaction) = match part {
-        "head" => {
+        "head" | "rub" => {
             let mut p = st.companion.pats.lock().unwrap_or_else(|e| e.into_inner());
-            p.retain(|t| now - t < 20);
+            p.retain(|t| now - t < 30);
             p.push(now);
-            let many = p.len() >= 3;
-            (
-                if many {
-                    "touch.head_many"
-                } else {
-                    "touch.head"
-                },
-                0,
-                Interaction::PatHead,
-            )
+            let scene = pat_scene(&p, now, part == "rub");
+            if scene == "touch.head_lots" {
+                p.clear();
+            }
+            (scene, 0, Interaction::PatHead)
         }
         "drag" => ("touch.drag", 180, Interaction::Drag),
+        "hold" => ("touch.hold", 30, Interaction::Poke),
+        "poke" => ("touch.poke_many", 60, Interaction::Poke),
         _ => ("touch.body", 120, Interaction::Poke),
     };
     interact(app, interaction);
@@ -335,12 +348,58 @@ pub fn touch(app: &AppHandle, part: &str) -> Option<String> {
             return None;
         }
         // 戳身体一半的时候才说话（多数时候只是打开聊天）
-        if part != "drag" && crate::lines::seed() % 2 == 0 {
+        if part == "body" && crate::lines::seed() % 2 == 0 {
             return None;
         }
         last.insert(scene, now);
     }
     st.line(scene, &[])
+}
+
+/// 在「她说的话」气泡里说一句小反应（不记进聊天记录）。台词池里没有就不说。
+pub fn say_reaction(app: &AppHandle, scene: &str, vars: &[(&str, String)]) {
+    let Some(text) = app.state::<AppState>().line(scene, vars) else {
+        return;
+    };
+    let mut item = Item::new(Kind::Random, text, crate::memory::now_secs() + 60);
+    item.ephemeral = true;
+    proactive::say_now(app, item);
+}
+
+/// 拖完松手：甩来甩去会晕，拖了很久会问是不是搬家（有冷却）
+pub fn drag_gesture(app: &AppHandle, g: crate::geometry::DragGesture) {
+    let st = app.state::<AppState>();
+    let now = crate::memory::now_secs();
+    let scene = match g {
+        crate::geometry::DragGesture::Shake => "touch.shake",
+        crate::geometry::DragGesture::Carry => "touch.carry",
+    };
+    {
+        let mut last = st
+            .companion
+            .last_reaction
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if now - last.get(scene).copied().unwrap_or(0) < 60 {
+            return;
+        }
+        last.insert(scene, now);
+    }
+    if g == crate::geometry::DragGesture::Shake {
+        add_mood_only(app, -2.0);
+    }
+    say_reaction(app, scene, &[]);
+}
+
+fn add_mood_only(app: &AppHandle, delta: f64) {
+    let st = app.state::<AppState>();
+    let Some(c) = st.current_character() else {
+        return;
+    };
+    let db = st.db();
+    let mut b = load(&db, &c.manifest.id);
+    b.add_mood(delta, crate::memory::now_secs());
+    save(&db, &c.manifest.id, &b);
 }
 
 // ---------------- 随机小事件 ----------------
@@ -570,6 +629,25 @@ pub fn remember_special_date(app: &AppHandle, text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn pat_scenes() {
+        let now = 1000;
+        assert_eq!(pat_scene(&[now], now, false), "touch.head");
+        assert_eq!(pat_scene(&[now], now, true), "touch.rub");
+        assert_eq!(
+            pat_scene(&[now - 5, now - 2, now], now, false),
+            "touch.head_many"
+        );
+        let lots: Vec<i64> = (0..8).map(|i| now - i * 3).collect();
+        assert_eq!(pat_scene(&lots, now, true), "touch.head_lots");
+        // 很久以前摸过的不算
+        assert_eq!(
+            pat_scene(&[now - 100, now - 90, now], now, false),
+            "touch.head"
+        );
+    }
+
     use super::*;
 
     #[test]

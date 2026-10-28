@@ -20,7 +20,8 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio_util::sync::CancellationToken;
 
-/// 发给 chat 窗口的流式事件
+/// 发给 chat 窗口的流式事件（一轮只发一次 Done，大小差别无所谓）
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatEvent {
@@ -40,6 +41,9 @@ pub enum ChatEvent {
         /// 没听懂的提醒：气泡里给「手动设置」按钮
         #[serde(skip_serializing_if = "std::ops::Not::not")]
         reminder_form: bool,
+        /// 用户想玩游戏：打开这个游戏（空串 = 打开游戏列表）
+        #[serde(skip_serializing_if = "Option::is_none")]
+        open_game: Option<String>,
     },
     Error {
         kind: String,
@@ -422,6 +426,9 @@ pub async fn run_turn(
     request_id: String,
     channel: Channel<ChatEvent>,
 ) {
+    if crate::intents::handle(&app, &user_text, &request_id, &channel).await {
+        return;
+    }
     if crate::reminders::parse::looks_like_request(&user_text)
         && crate::reminders::chat::handle(&app, &user_text, &request_id, &channel).await
     {
@@ -587,6 +594,16 @@ pub async fn run_turn_with_notes(
                 .iter()
                 .filter_map(|m| abilities::action_view(m, &advanced))
                 .collect();
+            // 模型兜底的动作标记：[[玩：游戏名]] → 打开游戏；[[提醒：一句吩咐]] → 提醒确认卡片
+            let open_game = found
+                .iter()
+                .find(|m| m.kind == markers::MarkerKind::Game)
+                .map(|m| crate::intents::game_id(&m.text).unwrap_or("").to_string());
+            let (reminder, reminder_form) =
+                match found.iter().find(|m| m.kind == markers::MarkerKind::Remind) {
+                    Some(m) => crate::reminders::chat::draft_for_marker(&state, &m.text),
+                    None => (None, false),
+                };
             if !out.text.is_empty()
                 && let Some(conv) = turn.conversation_id
                 && let Err(e) = conversation::append(
@@ -618,8 +635,9 @@ pub async fn run_turn_with_notes(
                 finish: out.finish,
                 task,
                 actions,
-                reminder: None,
-                reminder_form: false,
+                reminder,
+                reminder_form,
+                open_game,
             });
         }
         Err(e) => {

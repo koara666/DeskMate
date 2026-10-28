@@ -441,4 +441,39 @@ describe('ChatApp 小事件', () => {
     expect(assistantText()).toContain('休息一下也好');
     expect(f.calls.feedback).toEqual([true]);
   });
+
+  it('她主动说话（聊天窗口原来关着）：只有气泡没有输入框，点一下变成聊天框', async () => {
+    const f = fakeApi('compact');
+    const modes: string[] = [];
+    f.api.setMode = async (m) => {
+      modes.push(m);
+    };
+    render(<ChatApp api={f.api} typewriterTickMs={10} />);
+    await act(async () => {});
+    await f.say({ id: 7, kind: 'random', text: '嘿嘿，痒……', popped: true, speech: true });
+    expect(screen.getByTestId('speech').textContent).toContain('嘿嘿，痒');
+    expect(screen.queryByLabelText('输入消息')).toBeNull();
+    expect(screen.queryByText('复制')).toBeNull();
+    fireEvent.click(screen.getByTestId('speech'));
+    expect(screen.getByLabelText('输入消息')).toBeTruthy();
+    expect(modes).toEqual(['compact']);
+  });
+
+  it('聊天里说「来一局井字棋」：她回一句，然后直接打开那个游戏', async () => {
+    const f = await mount();
+    await sendText('来一局井字棋');
+    f.emit({ type: 'delta', text: '好呀，来玩井字棋！' });
+    f.emit({ type: 'done', text: '好呀，来玩井字棋！', finish: 'stop', open_game: 'ttt' });
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+    expect(screen.getByText('回到聊天')).toBeTruthy();
+    expect(screen.getByText('‹ 换个游戏')).toBeTruthy();
+  });
 });

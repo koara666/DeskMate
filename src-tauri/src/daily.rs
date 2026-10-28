@@ -119,6 +119,7 @@ pub fn interact(app: &AppHandle) {
     crate::companion::interact(app, crate::companion::Interaction::FirstToday);
     if st.daily.sleeping.swap(false, Ordering::Relaxed) {
         chat::emit_pet_state(app, PetState::Idle);
+        crate::companion::say_reaction(app, "touch.wake", &[]);
     }
 }
 

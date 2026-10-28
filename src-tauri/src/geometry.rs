@@ -147,6 +147,70 @@ pub fn chat_position(pet: Rect, (cw, ch): (i32, i32), work: Rect, gap: i32) -> (
     (x, y, side)
 }
 
+/// 拖动的手势（松手后按轨迹判断）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DragGesture {
+    /// 左右 / 上下甩来甩去
+    Shake,
+    /// 拖着走了很久（搬家？）
+    Carry,
+}
+
+/// 按拖动轨迹（毫秒, x, y）判断手势（纯函数）：3 秒内水平或垂直方向来回 6 次以上算甩；拖了 6 秒以上算搬家
+pub fn drag_gesture(path: &[(i64, i32, i32)]) -> Option<DragGesture> {
+    if path.len() < 4 {
+        return None;
+    }
+    let reversals = |axis: fn(&(i64, i32, i32)) -> i32| {
+        let mut best = 0usize;
+        let mut times: Vec<i64> = Vec::new();
+        let mut dir = 0i32;
+        let mut acc = 0i32;
+        for w in path.windows(2) {
+            let d = axis(&w[1]) - axis(&w[0]);
+            if d == 0 {
+                continue;
+            }
+            let s = d.signum();
+            if s == dir {
+                acc += d.abs();
+            } else {
+                // 每段至少挪 15 像素才算一次（手抖不算）
+                if dir != 0 && acc >= 15 {
+                    times.push(w[0].0);
+                    times.retain(|t| w[0].0 - t <= 3000);
+                    best = best.max(times.len());
+                }
+                dir = s;
+                acc = d.abs();
+            }
+        }
+        best
+    };
+    if reversals(|p| p.1) >= 6 || reversals(|p| p.2) >= 6 {
+        return Some(DragGesture::Shake);
+    }
+    let dur = path.last()?.0 - path.first()?.0;
+    if dur >= 6000 {
+        return Some(DragGesture::Carry);
+    }
+    None
+}
+
+/// 头顶气泡菜单窗口的位置：水平居中在桌宠上方，底边压住桌宠头顶一点；上面放不下就放到桌宠下面（气泡往下排）。
+/// 返回（x, y, 是不是放在下面）
+pub fn menu_position(pet: Rect, (mw, mh): (i32, i32), work: Rect) -> (i32, i32, bool) {
+    let x = (pet.x + pet.w / 2 - mw / 2).clamp(work.x, (work.right() - mw).max(work.x));
+    let overlap = pet.h * 3 / 10;
+    let above = pet.y + overlap - mh;
+    if above >= work.y {
+        (x, above, false)
+    } else {
+        let below = (pet.bottom() - overlap).min(work.bottom() - mh);
+        (x, below.max(work.y), true)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,5 +364,42 @@ mod tests {
         let pet = Rect::new(1752, 100, 160, 180);
         let (_, y, _) = chat_position(pet, (360, 520), WORK, 4);
         assert!(y >= 0 && y + 520 <= 1040);
+    }
+
+    #[test]
+    fn drag_gestures() {
+        // 左右甩：每 100 毫秒反方向挪 40 像素
+        let shake: Vec<(i64, i32, i32)> = (0..12)
+            .map(|i| (i * 100, if i % 2 == 0 { 0 } else { 40 }, 0))
+            .collect();
+        assert_eq!(drag_gesture(&shake), Some(DragGesture::Shake));
+        // 慢慢拖着走 7 秒
+        let carry: Vec<(i64, i32, i32)> = (0..70).map(|i| (i * 100, i as i32 * 5, 0)).collect();
+        assert_eq!(drag_gesture(&carry), Some(DragGesture::Carry));
+        // 普通拖一下
+        let normal: Vec<(i64, i32, i32)> = (0..10)
+            .map(|i| (i * 50, i as i32 * 20, i as i32 * 3))
+            .collect();
+        assert_eq!(drag_gesture(&normal), None);
+        // 手抖（来回 3 像素）不算甩
+        let jitter: Vec<(i64, i32, i32)> =
+            (0..30).map(|i| (i * 50, (i % 2 * 3) as i32, 0)).collect();
+        assert_eq!(drag_gesture(&jitter), None);
+    }
+
+    #[test]
+    fn menu_above_or_below_pet() {
+        let work = Rect::new(0, 0, 1920, 1040);
+        // 右下角：放在头顶上
+        let pet = Rect::new(1700, 820, 160, 180);
+        let (x, y, below) = menu_position(pet, (340, 210), work);
+        assert!(!below);
+        assert_eq!(y, 820 + 54 - 210);
+        assert!(x + 340 <= 1920, "不超出屏幕右边");
+        // 贴着屏幕顶：放到下面
+        let pet = Rect::new(100, 0, 160, 180);
+        let (_, y, below) = menu_position(pet, (340, 210), work);
+        assert!(below);
+        assert_eq!(y, 180 - 54);
     }
 }

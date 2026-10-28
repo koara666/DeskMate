@@ -51,6 +51,10 @@ pub struct AppState {
     pub vision: crate::vision::VisionState,
     /// 检查更新：上次查到的版本、是不是正在下载
     pub update: crate::update::UpdateState,
+    /// 头顶气泡菜单：彩蛋记录、是不是按住右键打开的
+    pub radial: crate::radial::MenuState,
+    /// 语音：缓存、正在说的
+    pub voice: crate::voice::VoiceState,
 }
 
 impl AppState {
@@ -88,6 +92,8 @@ impl AppState {
             llm_games: Default::default(),
             vision: Default::default(),
             update: Default::default(),
+            radial: Default::default(),
+            voice: Default::default(),
         }
     }
 

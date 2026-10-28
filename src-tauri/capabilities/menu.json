@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "menu",
+  "description": "头顶气泡菜单：显示选项、选一项、收起",
+  "windows": ["menu"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-menu-pick",
+    "allow-menu-close",
+    "allow-menu-focus"
+  ]
+}

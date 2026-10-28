@@ -82,6 +82,24 @@ export interface ProactiveMessage {
   note?: string;
   /** 有新版本：显示更新卡片 */
   update?: UpdateView;
+  /** 聊天窗口原来是关着的：只显示「她说的话」气泡（没有输入框，点一下变成聊天框） */
+  speech?: boolean;
+}
+
+/** 头顶气泡菜单 */
+export interface MenuItem {
+  id: string;
+  icon: string;
+  label: string;
+  on: boolean;
+}
+
+export interface MenuShow {
+  items: MenuItem[];
+  /** 放在桌宠下面（气泡往下排） */
+  below: boolean;
+  /** 按住右键打开的 */
+  hold: boolean;
 }
 
 export interface CompanionStatus {
@@ -171,6 +189,8 @@ export type ChatEvent =
       reminder?: ReminderDraft;
       /** 没听懂的提醒：给「手动设置」按钮 */
       reminder_form?: boolean;
+      /** 用户想玩游戏：打开这个游戏（空串 = 游戏列表） */
+      open_game?: string;
     }
   | ({ type: 'error' } & ErrorInfo);
 

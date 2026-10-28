@@ -104,6 +104,35 @@ pub async fn pet_menu(app: AppHandle) -> CmdResult<()> {
     desktop::popup_pet_menu(&app).map_err(err)
 }
 
+/// 右键按下：头顶浮出气泡菜单（`hold` = 按住右键打开，松开时再决定选不选）
+#[tauri::command]
+pub async fn menu_open(app: AppHandle, hold: bool) -> CmdResult<()> {
+    crate::radial::open(&app, hold).map_err(err)
+}
+
+/// 选了菜单里的一项（id 白名单在 `radial::pick` 里，认不出的什么都不做）
+#[tauri::command]
+pub async fn menu_pick(app: AppHandle, id: String) -> CmdResult<()> {
+    if id.len() > 16 || !id.chars().all(|c| c.is_ascii_lowercase()) {
+        return Err("不认识的选项".into());
+    }
+    crate::radial::pick(&app, &id)
+}
+
+/// 收起菜单（没选）
+#[tauri::command]
+pub async fn menu_close(app: AppHandle, held_ms: i64) -> CmdResult<()> {
+    crate::radial::close(&app, false, held_ms.clamp(0, 60_000));
+    Ok(())
+}
+
+/// 右键单击后：菜单拿到焦点，慢慢选
+#[tauri::command]
+pub async fn menu_focus(app: AppHandle) -> CmdResult<()> {
+    crate::radial::focus(&app);
+    Ok(())
+}
+
 // ---------------- 聊天窗口 ----------------
 
 #[derive(Serialize)]
@@ -313,7 +342,10 @@ pub fn reminder_save(
 /// 摸头 / 戳身体 / 拖动：有反应的话在气泡里说一句（不记进聊天记录）
 #[tauri::command]
 pub async fn pet_touch(app: AppHandle, part: String) -> CmdResult<()> {
-    if !matches!(part.as_str(), "head" | "body" | "drag") {
+    if !matches!(
+        part.as_str(),
+        "head" | "rub" | "body" | "drag" | "hold" | "poke"
+    ) {
         return Err("不认识的部位".into());
     }
     crate::daily::interact(&app);

@@ -9,9 +9,11 @@ interface Props {
   api: GameApi;
   name: string;
   onClose: () => void;
+  /** 直接打开这个游戏（聊天里说「来一局井字棋」） */
+  initial?: string;
 }
 
-export function GameHost({ api, name, onClose }: Props) {
+export function GameHost({ api, name, onClose, initial }: Props) {
   const [game, setGame] = useState<GameInfo | null>(null);
   const [Comp, setComp] = useState<ComponentType<GameProps> | null>(null);
   const [line, setLine] = useState('');
@@ -22,6 +24,10 @@ export function GameHost({ api, name, onClose }: Props) {
   useEffect(() => {
     loadStats();
   }, []);
+  useEffect(() => {
+    const g = initial ? GAMES.find((x) => x.id === initial) : undefined;
+    if (g) open(g);
+  }, [initial]);
 
   const open = (g: GameInfo) => {
     setGame(g);

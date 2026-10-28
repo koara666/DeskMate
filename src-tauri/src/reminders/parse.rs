@@ -37,13 +37,41 @@ const INTENT: [&str; 6] = [
     "帮我设个提醒",
 ];
 
+/// 不带「提醒」两个字的吩咐（v2.1）：只有句子里也有时间说法时才算，免得「你可以叫我小明」被当成提醒
+const WEAK_INTENT: [&str; 10] = [
+    "记得叫我",
+    "叫我一声",
+    "叫我",
+    "喊我",
+    "别让我忘了",
+    "别忘了让我",
+    "到时候告诉我",
+    "到点告诉我",
+    "告诉我一声",
+    "提个醒",
+];
+
 /// 这句话像不像在请求设提醒（「你提醒我了」「上次提醒我的事」这类回忆不算）
 pub fn looks_like_request(text: &str) -> bool {
     let t = normalize(text);
-    INTENT.iter().any(|k| t.contains(k))
-        && !["提醒我了", "提醒我的", "提醒过我", "你提醒我"]
-            .iter()
-            .any(|x| t.contains(x))
+    let strong = INTENT.iter().any(|k| t.contains(k));
+    let weak = || {
+        WEAK_INTENT.iter().any(|k| t.contains(k)) && {
+            let c: Vec<char> = t.chars().collect();
+            find_relative(&c).is_some() || find_day(&c).is_some() || find_clock(&c).is_some()
+        }
+    };
+    (strong || weak())
+        && ![
+            "提醒我了",
+            "提醒我的",
+            "提醒过我",
+            "你提醒我",
+            "叫我了",
+            "喊我了",
+        ]
+        .iter()
+        .any(|x| t.contains(x))
 }
 
 /// 全角数字和冒号换成半角，去掉空白
@@ -550,6 +578,7 @@ fn extract_content(c: &[char], spans: &[Span]) -> String {
     // 关键词后面那段优先（「半小时后提醒我收衣服」）；后面是空的再用前面的（「收衣服的事半小时后提醒我」）
     let (before, after) = INTENT
         .iter()
+        .chain(WEAK_INTENT.iter())
         .find_map(|k| {
             kept.find(k)
                 .map(|i| (kept[..i].to_string(), kept[i + k.len()..].to_string()))
@@ -902,6 +931,14 @@ mod tests {
         assert!(looks_like_request("记得提醒我吃药"));
         assert!(!looks_like_request("你提醒我了，谢谢"));
         assert!(!looks_like_request("上次提醒我的事做完了"));
+        // 不带「提醒」的说法要有时间才算
+        assert!(looks_like_request("明天早上7点叫我起床"));
+        assert!(looks_like_request("半小时后喊我收衣服"));
+        assert!(looks_like_request("下午三点别让我忘了交表"));
+        assert!(!looks_like_request("你可以叫我小明"));
+        assert!(!looks_like_request("别让我忘了你"));
+        assert_eq!(ok("明天早上7点叫我起床").content, "起床");
+        assert_eq!(ok("半小时后喊我收衣服").content, "收衣服");
         assert!(!looks_like_request("今天天气不错"));
         assert_eq!(parse("今天天气不错", now()), Outcome::NotReminder);
     }
