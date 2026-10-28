@@ -112,3 +112,20 @@ pub fn install(app: &tauri::AppHandle) -> tokio::sync::mpsc::UnboundedReceiver<(
     let _ = app;
     rx
 }
+
+/// 本机冒烟测试（默认忽略）：读一次前台窗口并分类，只打印分类和程序名，不打印窗口标题。
+/// `cargo test --manifest-path src-tauri/Cargo.toml real_foreground_smoke -- --ignored --nocapture`
+#[cfg(test)]
+mod smoke {
+    #[test]
+    #[ignore]
+    fn real_foreground_smoke() {
+        let fg = super::foreground().expect("读不到前台窗口");
+        let s = super::super::classify::classify(&fg.exe, &fg.path, &fg.title, &[]);
+        println!(
+            "进程 {}，分类 {:?}，程序名 {:?}，隐私 {}",
+            s.exe, s.category, s.label, s.private
+        );
+        assert!(!s.exe.is_empty());
+    }
+}

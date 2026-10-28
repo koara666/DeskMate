@@ -130,6 +130,14 @@
 | `briefing.birthday_self` | 角色自己的生日（character.json 的 `birthday`） | — |
 | `briefing.special_user` | 用户的生日 / 纪念日 | `{日子}`（比如「生日」） |
 | `briefing.festival` | 不放假的节日（情人节、万圣节……） | `{节日}` |
+| `activity.game_end` | 玩完一大段游戏（1 小时以上） | `{时长}` `{程序}`（游戏名，不一定有） |
+| `activity.long_game` `.long_coding` `.long_video` `.long_writing` | 同一件事做了很久 | `{时长}` `{程序}` |
+| `activity.late_night` | 深夜还在玩游戏 / 看视频 | — |
+| `activity.writing_to_video` | 写东西写了一阵切去看视频 | — |
+| `care.stand_up` | 坐太久了 | — |
+| `care.water` | 喝水 | — |
+| `care.late_night` | 深夜还在电脑前 | — |
+| `care.meal` | 到饭点了 | `{饭}`（午饭 / 晚饭） |
 
 新增场景时：在 `src-tauri/src/lines.rs` 的 `SCENES` 里登记（场景名和能用的占位符），在 `_common/lines/` 里写通用台词，再更新上表。
 
@@ -168,7 +176,10 @@
 2. 更新 `src-tauri/data/holidays.tsv`：中国的放假日写 `off`、调休上班写 `work`；日本的祝日写 `off`（名字译成中文）；删掉那一年的 `fest` 行（有了正式安排就不需要了）。文件头的来源说明一起更新。
 3. `cargo test holiday`，必要时补测试（比如新一年的国庆、调休）。
 
-### 4.2 一般步骤
+### 4.2 让活动感知认识新程序
+在 `src-tauri/src/activity/classify.rs` 的 `KNOWN` 表里加一行：进程名（小写，带 .exe）、分类、显示名（会发给模型，所以只写程序本身的名字）。浏览器网站按标题识别的关键词在 `VIDEO_TITLES` / `MUSIC_TITLES`；默认隐私名单在 `PRIVATE_EXES` / `PRIVATE_TITLES`。加完补一条测试（`cargo test classify`）。用户自己也可以在「设置 → 活动感知」里按程序设规则，不需要改代码。
+
+### 4.3 一般步骤
 1. 在 ROADMAP 里加任务。
 2. 有重要取舍时写 DECISIONS。
 3. 先写测试（Rust 用 mock 后端），再实现。

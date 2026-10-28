@@ -84,6 +84,10 @@ src-tauri/src/
   briefing/                    每日播报：mod.rs（设置、收集资料、随机组合、模型 / 模板、触发时间、聊天里问天气）、
                                city.rs（内置城市表 + 在线地理编码）、weather.rs（Open-Meteo、建议、缓存）、
                                holiday.rs（节假日、调休、节日）、meal.rs（吃什么）、news.rs（RSS 标题）
+  activity/                    活动感知：mod.rs（设置、规则、采样、事件 → 评论 / 回避 / 活动提醒、聊天时的一句话）、
+                               classify.rs（进程名 / 路径 / 标题 → 分类，纯函数）、tracker.rs（会话状态机）、
+                               win.rs（前台窗口与切换事件）、log.rs（活动日志汇总）
+  care.rs                      日常关怀：久坐、喝水、深夜、吃饭（纯函数 due + 每 30 秒检查）
   reminders/                   提醒：mod.rs（数据、触发、定时器、补提醒）、parse.rs（本地中文时间解析、重复规则）、
                                model.rs（本地解析不了时调用一次模型，输出 JSON）、chat.rs（聊天里吩咐 → 复述确认）
   daily.rs                     日常体验：开机自启、全局快捷键、全屏检测、睡眠、主动搭话（低频循环）
@@ -125,6 +129,7 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 - v1 `settings(key, value JSON)`：全部设置（不含 Key）
 - v2 `usage`：每次模型调用的 token 与估算费用（按日/月索引）
 - v4 `tasks`：任务执行记录；v5 `memories.decayed_at`：记忆降权时间
+- v7 `activity_log`：活动日志（日期、分类、清洗过的程序名、开始时间、时长；不存窗口标题）
 - v6 `reminders`：提醒（内容、触发方式 at/startup/activity、下次时间、重复规则 JSON、活动、到时台词、重要、状态）
 - v3 记忆：`conversations`（每个角色的会话，含提取状态、是否暂停记忆）、`messages`（脱敏后的原文）、
   `memories`（fact/summary，scope、来源、可信度、重要度、使用次数、状态与取代关系）、
@@ -173,6 +178,10 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 - `briefing/`：`daily.rs` 每 30 秒调用 `briefing::check`（每天第一次 / 设定的时间点）→ `gather`（天气、日子、吃饭、提醒、
   新闻、特殊日期，`arrange` 随机挑选和排序）→ 有预算时一次模型调用，否则 `compose_template` → 调度器（种类 Briefing）。
   聊天时 `chat::run_turn_with_notes` 先调 `briefing::weather_note`：问天气就把查到的天气放进背景资料。
+
+- `activity/`：前台切换事件 / 每 30 秒 → `sample`：分类 → 规则（评论 / 安静 / 回避）→ `Tracker::observe` 产生事件 →
+  活动提醒、评论（调度器种类 Activity）、活动日志。`gate_flags` 告诉调度器前台是不是隐私窗口、是不是在玩游戏 / 看视频 / 开会。
+- `care.rs`：`daily.rs` 每 30 秒调用 `care::check` → 调度器种类 Care（专注时等一等）。
 
 计划中的模块（实现后移到上面）：
 - `reminders.rs`：提醒的解析、存储、定时触发、补提醒。
