@@ -6,20 +6,6 @@
 
 ## 待办
 
-### [ ] 0. 安装 DeskMate（想用的时候）
-- **为什么**：程序已经可以用了，安装需要你本人双击确认。
-- **怎么做**：
-  1. 打开文件夹 `D:\DeskMate\src-tauri\target\release\bundle\nsis\`，双击 `DeskMate_0.1.2_x64-setup.exe`。
-  2. 如果出现「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」（安装包没有购买数字签名才会这样提示）。
-  3. 安装位置**保持默认**，不要选 `D:\DeskMate`（那是源代码文件夹，装进去以后卸载程序可能会删掉源代码里的文件）。
-  4. 安装完桌面右下角会出现小鲸鱼。使用说明见项目根目录的 `README.md`。
-- **说明**：开发期间 agent 测试时用的是临时数据目录，不会影响你安装后的数据。
-- **⚠ 你现在的安装在 `D:\DeskMate` 里（2026-10-28 发现），请按下面换个位置**：
-  1. 右键点任务栏右下角托盘里的 DeskMate 图标 →「退出」。
-  2. **不要**双击 `D:\DeskMate\uninstall.exe`。直接删掉这两个文件：`D:\DeskMate\deskmate.exe`、`D:\DeskMate\uninstall.exe`（只删这两个，别的不要动）。
-  3. 双击新的安装包 `D:\DeskMate\src-tauri\target\release\bundle\nsis\DeskMate_0.1.2_x64-setup.exe`，安装位置保持默认。如果它问要不要先卸载旧版本，选「不卸载」/ 直接继续。
-  4. 你的聊天记录、记忆、Key 不在程序目录里，换位置不会丢。
-
 ### [ ] 1. 填写至少一个聊天模型的 API Key（想真正聊天时再做）
 - **为什么**：没有 Key 时角色只能用 mock 模式回复测试文字。Key 相当于付费账号的密码，只能由你本人申请和填写。
 - **推荐**：DeepSeek（便宜、中文好、国内直接能用）。
@@ -72,3 +58,10 @@
 - agent 已做：推送前把全部提交的作者邮箱改成 GitHub 匿名地址 `249128192+koara666@users.noreply.github.com`（只改了这个项目的 git 设置，电脑全局设置不变）；推送前用 gitleaks 扫描了全部历史，没有密钥。
 - 仓库公开后：**任何提交都会立刻被所有人看到**，提交前的密钥扫描更要坚持；仍然**不发布 Release**（要发布需要用户另外确认）。
 - 推送时 git 走代理 `127.0.0.1:7897`，代理软件没开会连不上。
+
+### [x] 0. 安装 DeskMate
+- 2026-10-28 用户反馈「设置关不掉、有些界面有问题」：查到用户运行的是装在 `D:\DeskMate`（项目目录）里的 0.1.0（卡死问题在 0.1.1 才修好）。用户同意后，agent 代为换装：
+  1. 结束旧进程；只删除 `D:\DeskMate\deskmate.exe` 和 `uninstall.exe`（没有运行旧卸载程序，它会删掉项目里的 `characters/` 文件）；删除旧的安装记录（`HKCU\...\Uninstall\DeskMate`、`HKCU\Software\deskmate`，后者记着安装位置，不删的话新安装包默认还装回 `D:\DeskMate`）和指向旧位置的桌面/开始菜单快捷方式。
+  2. 静默安装 0.1.2 到 `%LOCALAPPDATA%\DeskMate`（快捷方式已指向新位置），启动新版。聊天记录、记忆、Key 不在安装目录，不受影响。项目代码确认完好（git status 干净）。
+- **以后更新**：直接运行新的安装包即可，安装位置会自动沿用 `%LOCALAPPDATA%\DeskMate`。
+- 使用说明见项目根目录的 `README.md`。
