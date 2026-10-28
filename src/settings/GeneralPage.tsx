@@ -55,6 +55,20 @@ export function GeneralPage({ api, view, onChanged }: Props) {
             <small>开启后角色不会主动打扰你</small>
           </span>
         </label>
+        <label class="row">
+          <input
+            type="checkbox"
+            checked={g.gpu_acceleration}
+            onChange={(e) => save({ ...g, gpu_acceleration: (e.currentTarget as HTMLInputElement).checked })}
+          />
+          <span>
+            显卡加速
+            <small>
+              默认关闭，可以少占约 80 MB 内存。只有角色或窗口显示不正常时才需要打开。
+              {g.gpu_acceleration !== view.general.gpu_acceleration && <b>（退出 DeskMate 再打开后生效）</b>}
+            </small>
+          </span>
+        </label>
         <div class="row">
           <span class="label">桌宠大小</span>
           <input

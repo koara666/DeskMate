@@ -60,6 +60,8 @@ export interface General {
   pet_scale: number;
   idle_animation: boolean;
   dnd: boolean;
+  /** 显卡加速（重启后生效） */
+  gpu_acceleration: boolean;
 }
 
 export interface Price {

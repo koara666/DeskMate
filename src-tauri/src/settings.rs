@@ -80,6 +80,8 @@ pub struct Settings {
     pub idle_animation: bool,
     /// 勿扰模式
     pub dnd: bool,
+    /// 显卡加速（默认关：省约 80 MB 内存；重启后生效，见 DECISIONS #25）
+    pub gpu_acceleration: bool,
     /// 上次位置；None 表示使用默认角落
     pub pet_position: Option<SavedPosition>,
     /// 默认停靠角落
@@ -110,6 +112,7 @@ impl Default for Settings {
             pet_scale: 1.0,
             idle_animation: true,
             dnd: false,
+            gpu_acceleration: false,
             pet_position: None,
             corner: Corner::BottomRight,
             backends: backends::default_configs(),

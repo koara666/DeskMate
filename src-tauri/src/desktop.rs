@@ -70,23 +70,40 @@ fn window_config(app: &AppHandle, label: &str) -> tauri::utils::config::WindowCo
         .unwrap_or_else(|| panic!("tauri.conf.json 缺少 {label} 窗口配置"))
 }
 
+/// WebView2 浏览器参数（DECISIONS #25）：
+/// - 默认关掉 GPU 加速：GPU 进程从约 95 MB 降到约 13 MB，透明窗口显示不变，说话动画的 CPU 反而更低；
+///   设置里可以重新打开（重启后生效）。
+/// - `--process-per-site`：三个窗口同源，共用一个渲染进程，省掉约 25 MB。
+/// - 前面一段是 wry 的默认参数，自定义参数时必须保留。
+pub fn browser_args(gpu: bool, cdp_port: Option<u16>) -> String {
+    let mut a = String::from(
+        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --process-per-site",
+    );
+    if !gpu {
+        a.push_str(" --disable-gpu");
+    }
+    if let Some(port) = cdp_port {
+        a.push_str(&format!(" --remote-debugging-port={port}"));
+    }
+    a
+}
+
+/// 同一个 WebView 数据目录下所有窗口的浏览器参数必须一致，所以启动时算一次，之后不再变
+static BROWSER_ARGS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
 /// 按配置准备窗口；测试模式下使用独立的 WebView 数据目录（以及可选的调试端口）
 fn window_builder<'a>(
     app: &'a AppHandle,
     label: &str,
 ) -> tauri::Result<WebviewWindowBuilder<'a, Wry, AppHandle>> {
     let mut b = WebviewWindowBuilder::from_config(app, &window_config(app, label))?;
+    let st = app.state::<AppState>();
     if crate::paths::test_mode() {
-        let root = app.state::<AppState>().paths.root().to_path_buf();
-        b = b.data_directory(root.join("EBWebView"));
-        if let Some(port) = crate::paths::cdp_port() {
-            // 同一个数据目录下所有窗口的浏览器参数必须一致
-            b = b.additional_browser_args(&format!(
-                "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"
-            ));
-        }
+        b = b.data_directory(st.paths.root().join("EBWebView"));
     }
-    Ok(b)
+    let args = BROWSER_ARGS
+        .get_or_init(|| browser_args(st.settings().gpu_acceleration, crate::paths::cdp_port()));
+    Ok(b.additional_browser_args(args))
 }
 
 fn work_rect(m: &tauri::Monitor) -> Rect {
@@ -590,6 +607,18 @@ fn handle_menu_now(app: &AppHandle, id: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_args_keep_wry_defaults() {
+        let off = browser_args(false, None);
+        assert!(off.starts_with("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"));
+        assert!(off.contains("--process-per-site"));
+        assert!(off.contains("--disable-gpu"));
+        assert!(!off.contains("remote-debugging"));
+        let on = browser_args(true, Some(9333));
+        assert!(!on.contains("--disable-gpu"));
+        assert!(on.ends_with("--remote-debugging-port=9333"));
+    }
 
     #[test]
     fn settings_arg_parsing() {

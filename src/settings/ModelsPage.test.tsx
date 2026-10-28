@@ -7,7 +7,7 @@ import type { SettingsView } from '../lib/types';
 afterEach(cleanup);
 
 const view: SettingsView = {
-  general: { always_on_top: true, pet_scale: 1, idle_animation: true, dnd: false },
+  general: { always_on_top: true, pet_scale: 1, idle_animation: true, dnd: false, gpu_acceleration: false },
   backends: [
     {
       config: {

@@ -20,6 +20,8 @@ pub struct General {
     pub pet_scale: f64,
     pub idle_animation: bool,
     pub dnd: bool,
+    /// 显卡加速（重启后生效）
+    pub gpu_acceleration: bool,
 }
 
 #[derive(Serialize)]
@@ -95,6 +97,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
             pet_scale: s.pet_scale,
             idle_animation: s.idle_animation,
             dnd: s.dnd,
+            gpu_acceleration: s.gpu_acceleration,
         },
         backends,
         kinds: backends::kinds()
@@ -126,6 +129,7 @@ pub fn settings_save_general(
         s.pet_scale = general.pet_scale;
         s.idle_animation = general.idle_animation;
         s.dnd = general.dnd;
+        s.gpu_acceleration = general.gpu_acceleration;
     });
     if before.always_on_top != general.always_on_top {
         desktop::set_always_on_top(&app, general.always_on_top).map_err(|e| e.to_string())?;
