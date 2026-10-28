@@ -101,8 +101,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         if seen != current {
             state.update_settings(|s| s.seen_version = current.to_string());
         }
-        (!onboarding && !paths::test_mode() && update::is_newer(if seen.is_empty() { "0.2.0" } else { &seen }, current))
-            .then_some(seen)
+        (!onboarding
+            && !paths::test_mode()
+            && update::is_newer(if seen.is_empty() { "0.2.0" } else { &seen }, current))
+        .then_some(seen)
     };
     if !notes.is_empty() {
         state.set_notice(notes.join(" "));

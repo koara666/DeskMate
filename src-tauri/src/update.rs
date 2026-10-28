@@ -302,7 +302,10 @@ pub fn spawn_whats_new(app: &AppHandle) {
         tokio::time::sleep(std::time::Duration::from_secs(20)).await;
         let st = app.state::<AppState>();
         let head = st
-            .line("update.whats_new", &[("版本", env!("CARGO_PKG_VERSION").into())])
+            .line(
+                "update.whats_new",
+                &[("版本", env!("CARGO_PKG_VERSION").into())],
+            )
             .unwrap_or_else(|| format!("更新到 {} 了，多了这些：", env!("CARGO_PKG_VERSION")));
         let mut item = crate::proactive::Item::new(
             crate::proactive::Kind::Briefing,
