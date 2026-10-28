@@ -25,6 +25,11 @@
 | T10 | **隐私外泄** | 无遥测、无自动更新；只连接用户配置的模型接口；日志不含对话内容 | `logging.rs`、设置「关于与隐私」页 | 🟡 |
 
 ## 3. 复查记录
+- 2026-10-28：体验与轻量优化复查——
+  - 新的自定义协议 `deskmate-img` 只提供用户角色目录 `characters/<id>/assets/` 里、按表情命名的图片：id 和图片名白名单字符（防 `../`）、路径段数固定、只服务已加载的角色、不跟随符号链接、≤ 5 MB、读取后再校验文件头，只返回 PNG/WebP/GIF/JPEG，带 `X-Content-Type-Options: nosniff`；用户目录的 SVG 仍然不提供（有测试）。CSP 的 img-src 只多了这一个地址。没有启用 Tauri 的 asset 协议。
+  - WebView2 参数只加了 `--disable-gpu`、`--process-per-site`，调试端口仍然只在测试模式且显式设置 `DESKMATE_CDP_PORT` 时打开。
+  - 新命令 `chat_fit` 只接受一个数字（非有限数忽略，结果限制在 120~250），只授权给聊天窗口。
+  - 第一次使用的引导只是一段固定文字，不调用模型。
 - 2026-10-28：Bug 修复 + 新后端复查——
   - 「Claude Code（用订阅额度）」聊天后端：只通过官方 `claude` 命令行，不读取登录令牌；`--tools ""` + `--restricted` + `--strict-mcp-config` + `--disable-slash-commands` 关掉所有工具和扩展；在空的临时目录运行；不经 cmd.exe；模型名不能以 `-` 开头（防止伪装成别的参数，比如跳过权限的参数）；程序位置只能是 .exe/.cmd；花费估算计入上限。
   - 测试模式（`DESKMATE_DATA_DIR`）：凭据服务名 `DeskMate-dev`，绝不读写正式安装保存的 Key；调试端口只有同时设置 `DESKMATE_CDP_PORT` 时才打开，正式使用（没有这两个环境变量）永远不会打开。能给 DeskMate 进程设置环境变量的人本来就能在这台电脑上执行任意程序，所以不算新增风险。

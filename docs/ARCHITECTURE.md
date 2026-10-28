@@ -47,6 +47,8 @@ src/
   settings/*.tsx               设置：常规、模型（Key/测试连接）、用量、关于
   lib/ipc.ts                   唯一的 IPC 封装（组件通过接口调用，测试时换成假实现）
   lib/types.ts typewriter.ts clipboard.ts
+  lib/time.ts                  聊天记录的时间显示（30 分钟分段，和后端会话划分一致）
+  lib/memo.ts                  极简 memo（不引入 preact/compat）
   styles/*.css                 设计变量在 base.css（含深色模式）
 src-tauri/src/
   lib.rs                       装配：插件、状态、窗口事件、命令注册
@@ -92,7 +94,13 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 ## 4. 窗口
 - `pet`：透明、无边框、不在任务栏、尺寸 = 角色大小。点击开关 chat，右键菜单，拖动后由 Rust 去抖处理吸附与保存位置。
 - `chat`：透明无边框，紧贴 pet 窗口一侧（根据所在角落自动选择方向），气泡模式/面板模式两种尺寸。
+  气泡模式宽度固定、高度跟着内容在 120~250 之间变化（前端量出高度 → `chat_fit` → 后端改窗口大小，生成中只长不缩）；
+  桌宠在下半屏时底边对齐向上长，上半屏时顶边对齐向下长，`chat-placement` 事件带 `{side, top}` 决定气泡尾巴位置。
 - `settings`：普通窗口，按需创建、关闭即销毁，节省内存。
+- WebView2 参数（`desktop::browser_args`，DECISIONS #25）：默认 `--disable-gpu --process-per-site`，三个窗口共用一个渲染进程；
+  设置里的「显卡加速」重启后生效（同一数据目录下所有窗口参数必须一致，启动时只算一次）。
+- 用户角色图片走自定义协议 `deskmate-img`（Windows 上是 `http://deskmate-img.localhost/<角色>/<图片名>?v=<修改时间-大小>`，
+  `character::serve_image` 在后台线程读取并重新校验，DECISIONS #26）；内置占位 SVG 用 data URL。
 
 ## 5. 存储
 单个 SQLite 文件 `%APPDATA%\DeskMate\deskmate.db`，`PRAGMA user_version` 记录结构版本，启动时按顺序执行迁移（迁移前自动备份）。

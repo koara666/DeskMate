@@ -9,7 +9,7 @@
 ### [ ] 0. 安装 DeskMate（想用的时候）
 - **为什么**：程序已经可以用了，安装需要你本人双击确认。
 - **怎么做**：
-  1. 打开文件夹 `D:\DeskMate\src-tauri\target\release\bundle\nsis\`，双击 `DeskMate_0.1.1_x64-setup.exe`。
+  1. 打开文件夹 `D:\DeskMate\src-tauri\target\release\bundle\nsis\`，双击 `DeskMate_0.1.2_x64-setup.exe`。
   2. 如果出现「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」（安装包没有购买数字签名才会这样提示）。
   3. 安装位置**保持默认**，不要选 `D:\DeskMate`（那是源代码文件夹，装进去以后卸载程序可能会删掉源代码里的文件）。
   4. 安装完桌面右下角会出现小鲸鱼。使用说明见项目根目录的 `README.md`。
@@ -17,7 +17,7 @@
 - **⚠ 你现在的安装在 `D:\DeskMate` 里（2026-10-28 发现），请按下面换个位置**：
   1. 右键点任务栏右下角托盘里的 DeskMate 图标 →「退出」。
   2. **不要**双击 `D:\DeskMate\uninstall.exe`。直接删掉这两个文件：`D:\DeskMate\deskmate.exe`、`D:\DeskMate\uninstall.exe`（只删这两个，别的不要动）。
-  3. 双击新的安装包 `D:\DeskMate\src-tauri\target\release\bundle\nsis\DeskMate_0.1.1_x64-setup.exe`，安装位置保持默认。如果它问要不要先卸载旧版本，选「不卸载」/ 直接继续。
+  3. 双击新的安装包 `D:\DeskMate\src-tauri\target\release\bundle\nsis\DeskMate_0.1.2_x64-setup.exe`，安装位置保持默认。如果它问要不要先卸载旧版本，选「不卸载」/ 直接继续。
   4. 你的聊天记录、记忆、Key 不在程序目录里，换位置不会丢。
 
 ### [ ] 1. 填写至少一个聊天模型的 API Key（想真正聊天时再做）
