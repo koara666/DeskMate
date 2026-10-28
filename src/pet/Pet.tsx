@@ -21,6 +21,8 @@ export function Pet({ api, random = Math.random }: Props) {
   const [init, setInit] = useState<PetInit | null>(null);
   const [state, setState] = useState<PetState>('idle');
   const [pose, setPose] = useState<Pose>('');
+  /** 说话 / 思考时的离散帧（不用无限循环的 CSS 动画） */
+  const [frame, setFrame] = useState(0);
   const revert = useRef<ReturnType<typeof setTimeout> | null>(null);
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
 
@@ -70,6 +72,25 @@ export function Pet({ api, random = Math.random }: Props) {
     };
   }, [animate, state, random]);
 
+  // 说话：两帧来回切；思考：三个点轮流亮。窗口不可见时跳过，不渲染
+  useEffect(() => {
+    if (state !== 'talking' && state !== 'thinking') return;
+    const n = state === 'talking' ? 2 : 3;
+    let i = 0;
+    const t = setInterval(
+      () => {
+        if (document.hidden) return;
+        i = (i + 1) % n;
+        setFrame(i);
+      },
+      state === 'talking' ? 220 : 320,
+    );
+    return () => {
+      clearInterval(t);
+      setFrame(0);
+    };
+  }, [state]);
+
   const onPointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     press.current = { x: e.screenX, y: e.screenY, dragging: false };
@@ -107,7 +128,7 @@ export function Pet({ api, random = Math.random }: Props) {
 
   return (
     <div
-      class={`pet state-${state} ${placeholder ? 'placeholder' : ''} ${pose ? `pose-${pose}` : ''} ${mood >= 30 ? 'mood-good' : mood <= -30 ? 'mood-low' : ''}`}
+      class={`pet state-${state} frame-${frame} ${placeholder ? 'placeholder' : ''} ${pose ? `pose-${pose}` : ''} ${mood >= 30 ? 'mood-good' : mood <= -30 ? 'mood-low' : ''}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

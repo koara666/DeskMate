@@ -77,10 +77,10 @@
 - [x] 测试 + 安全复查（没有用真实视觉模型实测：要花用户的钱，见 NEEDS_USER）
 
 ### P8 打磨
-- [ ] 动画在不可见 / 被遮挡 / 全屏时暂停；查清「说话」动画 CPU
+- [x] 动画在不可见 / 被遮挡 / 全屏时暂停；查清「说话」动画 CPU
 - [ ] 性能优化，与 V1_AUDIT 对比
-- [ ] SECURITY.md 新增屏幕感知、活动日志、外部数据源的威胁与对策
-- [ ] README 更新
+- [x] SECURITY.md 新增屏幕感知、活动日志、外部数据源的威胁与对策
+- [x] README 更新
 
 ## v1 已完成（2026-10-27 ~ 10-28，详情见 git 历史和 `progress-archive`）
 - [x] M0 骨架：Tauri 2 + Preact、测试框架、`npm run check`、gitleaks 钩子、CI

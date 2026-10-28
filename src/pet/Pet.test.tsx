@@ -98,4 +98,16 @@ describe('Pet 桌宠', () => {
     fireEvent.pointerMove(el, { buttons: 1, screenX: 130, screenY: 100 });
     expect(api.touch).toHaveBeenCalledWith('drag');
   });
+
+  it('说话时用离散的帧切换（定时器），不是无限 CSS 动画；停下来就回到第 0 帧', async () => {
+    const f = await mount();
+    f.setState('talking');
+    expect(f.el.className).toContain('frame-0');
+    act(() => {
+      vi.advanceTimersByTime(230);
+    });
+    expect(f.el.className).toContain('frame-1');
+    f.setState('idle');
+    expect(f.el.className).toContain('frame-0');
+  });
 });

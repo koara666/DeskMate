@@ -38,14 +38,11 @@ body,
   transform: scaleY(0.975);
 }
 
-/* —— 状态 —— */
-.state-talking .pet-img {
-  animation: pet-talk 0.45s ease-in-out infinite alternate;
-}
-@keyframes pet-talk {
-  to {
-    transform: translateY(-3px) scale(1.01, 0.99);
-  }
+/* —— 状态 ——
+   说话、思考也用离散的帧（前端定时器每 0.2~0.3 秒切一次类名，每次只渲染一帧），
+   不用无限循环的 CSS 动画：窗口不可见时定时器直接跳过，CPU 不会被白白占用（DECISIONS #46） */
+.state-talking.frame-1 .pet-img {
+  transform: translateY(-3px) scale(1.01, 0.99);
 }
 
 .state-happy .pet-img {
@@ -87,19 +84,13 @@ body,
   height: 6px;
   border-radius: 50%;
   background: #8a87a0;
-  animation: dot 1s ease-in-out infinite;
+  opacity: 0.35;
 }
-.pet-thinking span:nth-child(2) {
-  animation-delay: 0.15s;
-}
-.pet-thinking span:nth-child(3) {
-  animation-delay: 0.3s;
-}
-@keyframes dot {
-  50% {
-    opacity: 0.3;
-    transform: translateY(-2px);
-  }
+.frame-0 .pet-thinking span:nth-child(1),
+.frame-1 .pet-thinking span:nth-child(2),
+.frame-2 .pet-thinking span:nth-child(3) {
+  opacity: 1;
+  transform: translateY(-2px);
 }
 
 .pet-zzz {
