@@ -58,6 +58,9 @@ const COMMANDS: &[&str] = &[
     "reminder_list",
     "reminder_delete",
     "reminder_set_status",
+    "briefing_save",
+    "city_search",
+    "briefing_now",
 ];
 
 fn main() {

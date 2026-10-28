@@ -1,0 +1,137 @@
+# 常用城市（DECISIONS #39）：中文名、别名（| 分隔）、英文名、国家代码、纬度、经度、时区。
+# 坐标和时区由 Open-Meteo 地理编码（https://open-meteo.com/en/docs/geocoding-api，数据来自 GeoNames，CC BY 4.0）按英文名查得。
+北京		Beijing	CN	39.9075	116.3972	Asia/Shanghai
+上海		Shanghai	CN	31.2222	121.4581	Asia/Shanghai
+天津		Tianjin	CN	39.1422	117.1767	Asia/Shanghai
+重庆		Chongqing	CN	29.5603	106.5577	Asia/Shanghai
+哈尔滨		Harbin	CN	45.7500	126.6500	Asia/Shanghai
+长春		Changchun	CN	43.8800	125.3228	Asia/Shanghai
+沈阳		Shenyang	CN	41.7922	123.4328	Asia/Shanghai
+呼和浩特		Hohhot	CN	40.8106	111.6522	Asia/Shanghai
+石家庄		Shijiazhuang	CN	38.0414	114.4786	Asia/Shanghai
+太原		Taiyuan	CN	37.8694	112.5603	Asia/Shanghai
+济南		Jinan	CN	36.6683	116.9972	Asia/Shanghai
+郑州		Zhengzhou	CN	34.7578	113.6486	Asia/Shanghai
+西安		Xi'an	CN	34.2583	108.9286	Asia/Shanghai
+兰州		Lanzhou	CN	36.0570	103.8399	Asia/Shanghai
+银川		Yinchuan	CN	38.4681	106.2731	Asia/Shanghai
+西宁		Xining	CN	36.6255	101.7574	Asia/Shanghai
+乌鲁木齐		Urumqi	CN	43.8010	87.6005	Asia/Urumqi
+合肥		Hefei	CN	31.8639	117.2808	Asia/Shanghai
+南京		Nanjing	CN	32.0617	118.7778	Asia/Shanghai
+杭州		Hangzhou	CN	30.2936	120.1614	Asia/Shanghai
+福州		Fuzhou	CN	26.0614	119.3061	Asia/Shanghai
+南昌		Nanchang	CN	28.6840	115.8531	Asia/Shanghai
+长沙		Changsha	CN	28.1987	112.9709	Asia/Shanghai
+武汉		Wuhan	CN	30.5833	114.2667	Asia/Shanghai
+广州		Guangzhou	CN	23.1167	113.2500	Asia/Shanghai
+南宁		Nanning	CN	22.8167	108.3167	Asia/Shanghai
+海口		Haikou	CN	20.0342	110.3465	Asia/Shanghai
+成都		Chengdu	CN	30.6667	104.0667	Asia/Shanghai
+贵阳		Guiyang	CN	26.5833	106.7167	Asia/Shanghai
+昆明		Kunming	CN	25.0389	102.7183	Asia/Shanghai
+拉萨		Lhasa	CN	29.6500	91.1000	Asia/Shanghai
+深圳		Shenzhen	CN	22.5455	114.0683	Asia/Shanghai
+苏州		Suzhou	CN	31.3041	120.5954	Asia/Shanghai
+青岛		Qingdao	CN	36.0649	120.3804	Asia/Shanghai
+大连		Dalian	CN	38.9122	121.6022	Asia/Shanghai
+厦门		Xiamen	CN	24.4798	118.0819	Asia/Shanghai
+宁波		Ningbo	CN	29.8782	121.5494	Asia/Shanghai
+无锡		Wuxi	CN	31.5689	120.2886	Asia/Shanghai
+东莞		Dongguan	CN	23.0180	113.7487	Asia/Shanghai
+佛山		Foshan	CN	23.0268	113.1315	Asia/Shanghai
+珠海		Zhuhai	CN	22.2769	113.5678	Asia/Shanghai
+三亚		Sanya	CN	18.2543	109.5095	Asia/Shanghai
+桂林		Guilin	CN	25.2802	110.2964	Asia/Shanghai
+洛阳		Luoyang	CN	34.6735	112.4368	Asia/Shanghai
+烟台		Yantai	CN	37.4765	121.4408	Asia/Shanghai
+温州		Wenzhou	CN	27.9994	120.6668	Asia/Shanghai
+常州		Changzhou	CN	31.7736	119.9540	Asia/Shanghai
+南通		Nantong	CN	32.0303	120.8747	Asia/Shanghai
+徐州		Xuzhou	CN	34.2044	117.2839	Asia/Shanghai
+扬州		Yangzhou	CN	32.3972	119.4358	Asia/Shanghai
+绍兴		Shaoxing	CN	30.0024	120.5786	Asia/Shanghai
+嘉兴		Jiaxing	CN	30.7522	120.7500	Asia/Shanghai
+金华		Jinhua	CN	29.1068	119.6442	Asia/Shanghai
+泉州		Quanzhou	CN	24.9139	118.5858	Asia/Shanghai
+惠州		Huizhou	CN	23.1115	114.4152	Asia/Shanghai
+中山		Zhongshan	CN	22.5231	113.3791	Asia/Shanghai
+汕头		Shantou	CN	23.3549	116.6788	Asia/Shanghai
+潍坊		Weifang	CN	36.7100	119.1019	Asia/Shanghai
+唐山		Tangshan	CN	39.6438	118.1832	Asia/Shanghai
+保定		Baoding	CN	38.8729	115.4625	Asia/Shanghai
+秦皇岛		Qinhuangdao	CN	39.9410	119.5894	Asia/Shanghai
+大同		Datong	CN	40.0936	113.2914	Asia/Shanghai
+包头		Baotou	CN	40.6516	109.8439	Asia/Shanghai
+吉林		Jilin	CN	43.8465	126.5608	Asia/Shanghai
+大庆		Daqing	CN	46.5833	125.0000	Asia/Shanghai
+芜湖		Wuhu	CN	31.3526	118.4295	Asia/Shanghai
+赣州		Ganzhou	CN	25.8466	114.9326	Asia/Shanghai
+宜昌		Yichang	CN	30.7144	111.2847	Asia/Shanghai
+襄阳		Xiangyang	CN	32.0422	112.1448	Asia/Shanghai
+绵阳		Mianyang	CN	31.4678	104.6817	Asia/Shanghai
+遵义		Zunyi	CN	27.6867	106.9072	Asia/Shanghai
+大理		Dali	CN	25.5847	100.2123	Asia/Shanghai
+丽江		Lijiang	CN	26.8688	100.2207	Asia/Shanghai
+柳州		Liuzhou	CN	24.3240	109.4070	Asia/Shanghai
+北海		Beihai	CN	21.4835	109.1155	Asia/Shanghai
+湛江		Zhanjiang	CN	21.2339	110.3875	Asia/Shanghai
+开封		Kaifeng	CN	34.7986	114.3074	Asia/Shanghai
+宝鸡		Baoji	CN	34.3678	107.2370	Asia/Shanghai
+喀什		Kashgar	CN	39.4672	75.9868	Asia/Urumqi
+香港		Hong Kong	HK	22.2783	114.1747	Asia/Hong_Kong
+澳门	澳門	Macau	MO	22.2006	113.5461	Asia/Macau
+台北	臺北	Taipei	TW	25.0531	121.5264	Asia/Taipei
+高雄		Kaohsiung	TW	22.6163	120.3133	Asia/Taipei
+台中	臺中	Taichung	TW	24.1469	120.6839	Asia/Taipei
+东京	東京	Tokyo	JP	35.6895	139.6917	Asia/Tokyo
+大阪		Osaka	JP	34.6938	135.5011	Asia/Tokyo
+京都		Kyoto	JP	35.0211	135.7538	Asia/Tokyo
+横滨	横浜	Yokohama	JP	35.4333	139.6500	Asia/Tokyo
+名古屋		Nagoya	JP	35.1815	136.9064	Asia/Tokyo
+札幌	北海道	Sapporo	JP	43.0667	141.3500	Asia/Tokyo
+福冈	福岡	Fukuoka	JP	33.6000	130.4167	Asia/Tokyo
+神户	神戸	Kobe	JP	34.6913	135.1830	Asia/Tokyo
+仙台		Sendai	JP	38.2667	140.8667	Asia/Tokyo
+广岛	広島	Hiroshima	JP	34.4000	132.4500	Asia/Tokyo
+奈良		Nara	JP	34.6850	135.8049	Asia/Tokyo
+那霸	那覇|冲绳|沖縄	Naha	JP	26.2130	127.6785	Asia/Tokyo
+千叶	千葉	Chiba	JP	35.6000	140.1167	Asia/Tokyo
+埼玉		Saitama	JP	35.9081	139.6566	Asia/Tokyo
+川崎		Kawasaki	JP	35.5206	139.7172	Asia/Tokyo
+金泽	金沢	Kanazawa	JP	36.6000	136.6167	Asia/Tokyo
+静冈	静岡	Shizuoka	JP	34.9833	138.3833	Asia/Tokyo
+新潟		Niigata	JP	37.9226	139.0412	Asia/Tokyo
+熊本		Kumamoto	JP	32.8059	130.6918	Asia/Tokyo
+鹿儿岛	鹿児島	Kagoshima	JP	31.5667	130.5500	Asia/Tokyo
+长崎	長崎	Nagasaki	JP	32.7500	129.8833	Asia/Tokyo
+函馆	函館	Hakodate	JP	41.7758	140.7367	Asia/Tokyo
+首尔		Seoul	KR	37.5660	126.9784	Asia/Seoul
+釜山		Busan	KR	35.1017	129.0300	Asia/Seoul
+新加坡		Singapore	SG	1.2897	103.8501	Asia/Singapore
+曼谷		Bangkok	TH	13.7540	100.5014	Asia/Bangkok
+吉隆坡		Kuala Lumpur	MY	3.1412	101.6865	Asia/Kuala_Lumpur
+河内		Hanoi	VN	21.0245	105.8412	Asia/Bangkok
+胡志明市		Ho Chi Minh City	VN	10.8230	106.6296	Asia/Ho_Chi_Minh
+马尼拉		Manila	PH	14.6042	120.9822	Asia/Manila
+雅加达		Jakarta	ID	-6.2146	106.8451	Asia/Jakarta
+悉尼		Sydney	AU	-33.8678	151.2073	Australia/Sydney
+墨尔本		Melbourne	AU	-37.8140	144.9633	Australia/Melbourne
+奥克兰		Auckland	NZ	-36.8485	174.7635	Pacific/Auckland
+伦敦		London	GB	51.5085	-0.1257	Europe/London
+巴黎		Paris	FR	48.8534	2.3488	Europe/Paris
+柏林		Berlin	DE	52.5244	13.4105	Europe/Berlin
+罗马		Rome	IT	41.8919	12.5113	Europe/Rome
+马德里		Madrid	ES	40.4165	-3.7026	Europe/Madrid
+阿姆斯特丹		Amsterdam	NL	52.3740	4.8897	Europe/Amsterdam
+莫斯科		Moscow	RU	55.7520	37.6178	Europe/Moscow
+纽约		New York	US	40.7143	-74.0060	America/New_York
+洛杉矶		Los Angeles	US	34.0522	-118.2437	America/Los_Angeles
+旧金山		San Francisco	US	37.7749	-122.4194	America/Los_Angeles
+西雅图		Seattle	US	47.6062	-122.3321	America/Los_Angeles
+芝加哥		Chicago	US	41.8500	-87.6500	America/Chicago
+波士顿		Boston	US	42.3584	-71.0598	America/New_York
+华盛顿		Washington	US	38.8951	-77.0364	America/New_York
+多伦多		Toronto	CA	43.7064	-79.3986	America/Toronto
+温哥华		Vancouver	CA	49.2497	-123.1193	America/Vancouver
+迪拜		Dubai	AE	25.0772	55.3093	Asia/Dubai

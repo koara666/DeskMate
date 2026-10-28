@@ -438,6 +438,12 @@ pub async fn run_turn_with_notes(
 ) {
     let state = app.state::<AppState>();
     let cancel = state.chat.begin(&request_id);
+    let mut notes = notes;
+    // 问天气：查好放进背景资料（问的是别的城市就查那个城市；失败就告诉角色没查到）
+    if let Some(n) = crate::briefing::weather_note(&state, &user_text).await {
+        emit_pet_state(&app, PetState::Thinking);
+        notes.push(n);
+    }
     let character = state.current_character();
     let character_id = character
         .as_ref()

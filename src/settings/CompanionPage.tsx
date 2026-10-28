@@ -3,6 +3,7 @@ import { useState } from 'preact/hooks';
 import type { SettingsApi } from '../lib/ipc';
 import type { CompanionSettings, DailySettings, Frequency, SettingsView } from '../lib/types';
 import { StatusLine, useStatus } from './SettingsApp';
+import { BriefingSection } from './BriefingSection';
 
 interface Props {
   api: SettingsApi;
@@ -117,6 +118,8 @@ export function CompanionPage({ api, view }: Props) {
           </span>
         </label>
       </div>
+
+      <BriefingSection api={api} initial={view.briefing} />
 
       <div class="card">
         <h2>很久没聊天时打个招呼</h2>

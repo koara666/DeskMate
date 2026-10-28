@@ -71,6 +71,9 @@ pub struct Manifest {
     pub expressions: BTreeMap<String, String>,
     #[serde(default)]
     pub lines: Lines,
+    /// 角色自己的生日（"MM-DD"，可选）：那天每日播报里会提到
+    #[serde(default)]
+    pub birthday: String,
 }
 
 fn default_order() -> i32 {

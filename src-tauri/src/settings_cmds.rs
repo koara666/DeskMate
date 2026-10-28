@@ -58,6 +58,7 @@ pub struct SettingsView {
     pub daily: crate::daily::DailySettings,
     pub companion: crate::proactive::CompanionSettings,
     pub advanced: crate::abilities::AdvancedSettings,
+    pub briefing: crate::briefing::BriefingSettings,
 }
 
 fn is_builtin_id(id: &str) -> bool {
@@ -119,6 +120,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         daily: s.daily.clone(),
         companion: s.companion.clone(),
         advanced: s.advanced.clone(),
+        briefing: s.briefing.clone(),
     }
 }
 
@@ -395,6 +397,52 @@ pub fn advanced_save(
     let saved = state.update_settings(|s| s.advanced = a).advanced;
     desktop::broadcast_settings_changed(&app);
     Ok(saved)
+}
+
+/// 每日播报设置
+#[tauri::command]
+pub fn briefing_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    briefing: crate::briefing::BriefingSettings,
+) -> CmdResult<crate::briefing::BriefingSettings> {
+    for f in &briefing.feeds {
+        crate::briefing::news::check_feed_url(&f.url)?;
+    }
+    let saved = state.update_settings(|s| s.briefing = briefing).briefing;
+    desktop::broadcast_settings_changed(&app);
+    Ok(saved)
+}
+
+/// 找城市：先查内置表（中文名），没有再用 Open-Meteo 地理编码查（用户点「查找」时才联网）
+#[tauri::command]
+pub async fn city_search(
+    app: AppHandle,
+    query: String,
+) -> CmdResult<Vec<crate::briefing::city::City>> {
+    use crate::briefing::city;
+    let q: String = query.trim().chars().take(60).collect();
+    let local = city::search_local(&q);
+    if !local.is_empty() {
+        return Ok(local);
+    }
+    let http = app.state::<AppState>().http.clone();
+    let found = city::search_online(&http, &q).await?;
+    if found.is_empty() && !q.is_ascii() {
+        return Err(
+            "没找到。常用城市可以直接输中文；别的城市请输英文或拼音，比如 Lijiang、Sapporo。"
+                .into(),
+        );
+    }
+    Ok(found)
+}
+
+/// 「现在播报一次」（设置里试听）
+#[tauri::command]
+pub async fn briefing_now(app: AppHandle) -> CmdResult<()> {
+    let hour = chrono::Timelike::hour(&crate::reminders::now_local());
+    crate::briefing::run(&app, crate::briefing::Occasion::at(hour), "manual", true).await;
+    Ok(())
 }
 
 #[tauri::command]

@@ -462,3 +462,13 @@ input[type='search'] {
 .card .reminder-form {
   font-size: 13px;
 }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  font-size: 12px;
+}

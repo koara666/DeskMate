@@ -60,3 +60,39 @@ describe('高级设置', () => {
     expect((screen.getByLabelText('添加允许读取的文件夹') as HTMLInputElement).value).toBe('');
   });
 });
+
+describe('每日播报设置', () => {
+  it('查找城市后选中保存；添加播报时间和纪念日', async () => {
+    const saved: unknown[] = [];
+    const api = {
+      saveCompanion: async () => {},
+      saveDaily: async () => {},
+      saveBriefing: async (b: unknown) => {
+        saved.push(b);
+        return b;
+      },
+      citySearch: async (q: string) => (q === '大阪' ? [{ name: '大阪', country: 'JP', lat: 34.69, lon: 135.5, tz: 'Asia/Tokyo' }] : []),
+      briefingNow: async () => {},
+    } as unknown as SettingsApi;
+    render(<CompanionPage api={api} view={testView()} />);
+    expect(screen.getByText('还没有选城市')).toBeTruthy();
+    fireEvent.input(screen.getByLabelText('城市'), { target: { value: '大阪' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '查找' }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '选这个' }));
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect((saved.at(-1) as { city: { name: string } }).city.name).toBe('大阪');
+    expect(screen.getByText('现在：大阪（JP）')).toBeTruthy();
+
+    fireEvent.input(screen.getByLabelText('新的播报时间'), { target: { value: '23:00' } });
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: '添加' })[0]);
+    });
+    expect((saved.at(-1) as { times: string[] }).times).toEqual(['23:00']);
+  });
+});

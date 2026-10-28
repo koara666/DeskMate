@@ -37,6 +37,8 @@ pub struct AppState {
     pub proactive: crate::proactive::ProactiveState,
     /// 提醒定时器
     pub reminders: crate::reminders::ReminderState,
+    /// 每日播报：天气缓存、上次播报时间
+    pub briefing: crate::briefing::BriefingState,
 }
 
 impl AppState {
@@ -67,6 +69,7 @@ impl AppState {
             daily: Default::default(),
             proactive: Default::default(),
             reminders: Default::default(),
+            briefing: Default::default(),
         }
     }
 

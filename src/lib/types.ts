@@ -152,6 +152,45 @@ export interface SettingsView {
   daily: DailySettings;
   companion: CompanionSettings;
   advanced: AdvancedSettings;
+  briefing: BriefingSettings;
+}
+
+export interface City {
+  name: string;
+  country: string;
+  lat: number;
+  lon: number;
+  tz: string;
+}
+
+export interface Feed {
+  name: string;
+  url: string;
+  enabled: boolean;
+}
+
+export interface SpecialDate {
+  /** MM-DD */
+  date: string;
+  label: string;
+}
+
+export type Region = 'Auto' | 'CN' | 'JP' | 'US' | 'Other';
+
+export interface BriefingSettings {
+  on_startup: boolean;
+  times: string[];
+  weather: boolean;
+  holiday: boolean;
+  meal: boolean;
+  news: boolean;
+  reminders: boolean;
+  special: boolean;
+  weather_in_chat: boolean;
+  city: City | null;
+  region: Region;
+  feeds: Feed[];
+  special_dates: SpecialDate[];
 }
 
 export type Frequency = 'rare' | 'sometimes' | 'often';

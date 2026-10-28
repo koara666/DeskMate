@@ -2,6 +2,7 @@
 
 pub mod abilities;
 pub mod backends;
+pub mod briefing;
 pub mod canon;
 pub mod character;
 pub mod character_cmds;
@@ -202,6 +203,9 @@ pub fn run() {
             settings_cmds::reminder_set_status,
             settings_cmds::companion_save,
             settings_cmds::advanced_save,
+            settings_cmds::briefing_save,
+            settings_cmds::city_search,
+            settings_cmds::briefing_now,
             settings_cmds::settings_get,
             settings_cmds::settings_save_general,
             settings_cmds::backend_save,

@@ -425,6 +425,18 @@ pub fn tick(app: &AppHandle) {
     }
 }
 
+/// 用户自己点的（比如「现在播报一次」）：不排队、不看冷却，马上说
+pub fn say_now(app: &AppHandle, item: Item) {
+    let id = {
+        let st = app.state::<AppState>();
+        let mut g = st.proactive.lock();
+        g.last_spoke = memory::now_secs();
+        g.next_id += 1;
+        g.next_id
+    };
+    deliver(app, item, Decision::Speak, id);
+}
+
 fn deliver(app: &AppHandle, item: Item, decision: Decision, id: u64) {
     let st = app.state::<AppState>();
     if item.store

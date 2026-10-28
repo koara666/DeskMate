@@ -43,6 +43,9 @@
     "allow-reminder-save",
     "allow-reminder-list",
     "allow-reminder-delete",
-    "allow-reminder-set-status"
+    "allow-reminder-set-status",
+    "allow-briefing-save",
+    "allow-city-search",
+    "allow-briefing-now"
   ]
 }

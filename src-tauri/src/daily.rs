@@ -270,6 +270,8 @@ pub fn spawn(app: AppHandle) {
             }
             if tick % 10 == 0 {
                 check_proactive(&app).await;
+                // 每日播报：每天第一次、用户设定的时间点
+                crate::briefing::check(&app);
             }
         }
     });

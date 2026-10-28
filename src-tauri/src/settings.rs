@@ -106,6 +106,8 @@ pub struct Settings {
     pub companion: crate::proactive::CompanionSettings,
     /// 高级：委托外部 agent、能力层（允许读取的文件夹、常用程序）
     pub advanced: crate::abilities::AdvancedSettings,
+    /// 每日播报：时间点、内容模块、城市、新闻源、特殊日期
+    pub briefing: crate::briefing::BriefingSettings,
 }
 
 impl Default for Settings {
@@ -131,6 +133,7 @@ impl Default for Settings {
             daily: Default::default(),
             companion: Default::default(),
             advanced: Default::default(),
+            briefing: Default::default(),
         }
     }
 }
@@ -147,6 +150,7 @@ impl Settings {
         self.daily = std::mem::take(&mut self.daily).sanitize();
         self.companion = std::mem::take(&mut self.companion).sanitize();
         self.advanced = std::mem::take(&mut self.advanced).sanitize();
+        self.briefing = std::mem::take(&mut self.briefing).sanitize();
         self.global_prefs = std::mem::take(&mut self.global_prefs).sanitize();
         self.character_prefs = std::mem::take(&mut self.character_prefs)
             .into_iter()
