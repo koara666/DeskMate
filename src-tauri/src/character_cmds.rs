@@ -22,6 +22,9 @@ pub struct CharacterItem {
     pub preview: String,
     /// 用户提供了图片的状态
     pub user_images: Vec<String>,
+    /// 原作台词库（quotes.md）里常驻的段数 / 按关键词取用的段数
+    pub quotes_fixed: usize,
+    pub quotes_keyed: usize,
     /// 这个角色专属的禁词和自定义要求
     pub prefs: CharacterPrefs,
 }
@@ -59,6 +62,8 @@ fn view(state: &AppState) -> CharactersView {
                 .cloned()
                 .unwrap_or_default(),
             user_images: character::user_image_states(c),
+            quotes_fixed: c.quotes.fixed_count,
+            quotes_keyed: c.quotes.keyed.len(),
             prefs: s
                 .character_prefs
                 .get(&c.manifest.id)

@@ -5,6 +5,7 @@
 //! 2. 用户：`%APPDATA%\DeskMate\characters\<id>\`
 //!    - 有 `character.json` + `persona.md`（+ 可选的 `canon.md`）：完整的用户角色包（新增角色或替换内置设定）
 //!    - 只有 `assets/`：给内置角色换上用户自己的图片
+//!    - 可选的 `quotes.md`（原作台词库，DECISIONS #31）：内置角色也从这里读，台词原文不进公开仓库
 //!
 //! 安全（防恶意角色包，见 SECURITY.md T6）：id 和图片名只允许 `[a-z0-9_-]`；
 //! 只读取固定文件名；文件大小有上限；图片校验文件头；用户目录里的 SVG 不读取。
@@ -16,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::canon::{self, CanonEntry};
+use crate::quotes::{self, Quotes};
 
 /// 桌宠的表情状态
 pub const STATES: [&str; 6] = ["idle", "talking", "thinking", "happy", "sad", "sleep"];
@@ -23,6 +25,7 @@ pub const STATES: [&str; 6] = ["idle", "talking", "thinking", "happy", "sad", "s
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_PERSONA_BYTES: u64 = 64 * 1024;
 const MAX_CANON_BYTES: u64 = 64 * 1024;
+const MAX_QUOTES_BYTES: u64 = 128 * 1024;
 const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_SVG_BYTES: u64 = 256 * 1024;
 const IMAGE_EXTS: [&str; 5] = ["png", "webp", "gif", "jpg", "jpeg"];
@@ -90,6 +93,8 @@ pub struct Character {
     pub persona: String,
     /// 原作往事（canon.md，可选），按关键词取用，见 `canon.rs`
     pub canon: Arc<Vec<CanonEntry>>,
+    /// 原作台词库（quotes.md，可选），见 `quotes.rs`
+    pub quotes: Arc<Quotes>,
     pub origin: Origin,
     /// 内置角色包目录（读取占位 SVG）
     pub builtin_dir: Option<PathBuf>,
@@ -186,6 +191,34 @@ fn load_canon(dir: &Path) -> Arc<Vec<CanonEntry>> {
     }
 }
 
+/// 读取可选的 quotes.md：按顺序找，用第一个存在的。没有就是空的；读不了只记日志，不影响角色本身。
+fn load_quotes(dirs: &[&Path]) -> Arc<Quotes> {
+    let Some(path) = dirs
+        .iter()
+        .map(|d| d.join("quotes.md"))
+        .find(|p| p.exists())
+    else {
+        return Arc::default();
+    };
+    match read_limited(&path, MAX_QUOTES_BYTES) {
+        Ok(raw) => {
+            let q = quotes::parse(&String::from_utf8_lossy(&raw));
+            if q.fixed_dropped > 0 {
+                log::warn!(
+                    "{} 的常驻台词超出预算，后面 {} 段没有用上",
+                    path.display(),
+                    q.fixed_dropped
+                );
+            }
+            Arc::new(q)
+        }
+        Err(e) => {
+            log::warn!("{} 无效，已忽略：{e}", path.display());
+            Arc::default()
+        }
+    }
+}
+
 /// 扫描内置目录和用户目录，返回全部可用角色（按 id 排序）。坏掉的角色包记日志后跳过。
 pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character> {
     let mut map: BTreeMap<String, Character> = BTreeMap::new();
@@ -194,15 +227,18 @@ pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character>
             match load_pack(&dir) {
                 Ok((manifest, persona)) => {
                     let id = manifest.id.clone();
+                    let user_dir = user_root.join(&id);
                     map.insert(
                         id.clone(),
                         Character {
                             manifest,
                             persona,
                             canon: load_canon(&dir),
+                            // 用户目录优先：炼化出来的台词原文只放在用户目录
+                            quotes: load_quotes(&[&user_dir, &dir]),
                             origin: Origin::Builtin,
                             builtin_dir: Some(dir.clone()),
-                            user_dir: user_root.join(&id),
+                            user_dir,
                         },
                     );
                 }
@@ -224,6 +260,7 @@ pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character>
                         manifest,
                         persona,
                         canon: load_canon(&dir),
+                        quotes: load_quotes(&[&dir]),
                         origin: Origin::User,
                         builtin_dir,
                         user_dir: dir.clone(),
@@ -554,6 +591,51 @@ mod tests {
                 .canon
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn quotes_come_from_user_dir_first() {
+        let b = tempfile::tempdir().unwrap();
+        let u = tempfile::tempdir().unwrap();
+        // 内置角色：用户目录里只放了台词库（没有 character.json），也要读到
+        write_pack(b.path(), "cat", r#"{"id":"cat","name":"猫"}"#);
+        fs::create_dir_all(u.path().join("cat")).unwrap();
+        fs::write(u.path().join("cat/quotes.md"), "## 打招呼\n猫：喵。\n").unwrap();
+        // 用户目录优先于内置目录
+        let d = write_pack(b.path(), "dog", r#"{"id":"dog","name":"狗"}"#);
+        fs::write(
+            d.join("quotes.md"),
+            "## 内置\n狗：汪。\n## 内置2\n狗：汪汪。\n",
+        )
+        .unwrap();
+        fs::create_dir_all(u.path().join("dog")).unwrap();
+        fs::write(
+            u.path().join("dog/quotes.md"),
+            "## 用户\n关键词：骨头\n狗：骨头！\n",
+        )
+        .unwrap();
+        // 太大的台词库忽略，角色照常可用
+        write_pack(b.path(), "owl", r#"{"id":"owl","name":"猫头鹰"}"#);
+        fs::create_dir_all(u.path().join("owl")).unwrap();
+        fs::write(
+            u.path().join("owl/quotes.md"),
+            "x".repeat(MAX_QUOTES_BYTES as usize + 1),
+        )
+        .unwrap();
+        // 用户完整角色包：读自己目录里的
+        let d = write_pack(u.path(), "fox", r#"{"id":"fox","name":"狐狸"}"#);
+        fs::write(d.join("quotes.md"), "## 片段\n狐狸：嗯。\n").unwrap();
+
+        let all = load_all(Some(b.path()), u.path());
+        assert_eq!(all.len(), 4);
+        let q = |id: &str| {
+            let c = all.iter().find(|c| c.manifest.id == id).unwrap();
+            (c.quotes.fixed_count, c.quotes.keyed.len())
+        };
+        assert_eq!(q("cat"), (1, 0));
+        assert_eq!(q("dog"), (0, 1), "用了用户目录的，没有和内置的混在一起");
+        assert_eq!(q("owl"), (0, 0));
+        assert_eq!(q("fox"), (1, 0));
     }
 
     #[test]

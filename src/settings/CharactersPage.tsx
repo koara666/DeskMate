@@ -106,6 +106,11 @@ function CharacterDetail({ api, view, c, onUpdated }: DetailProps) {
         <p>{c.description}</p>
         {c.source && <p class="muted small">{c.source}</p>}
         {c.origin === 'user' && <p class="muted small">这是你自己放进去的角色包。</p>}
+        {c.quotes_fixed + c.quotes_keyed > 0 && (
+          <p class="muted small">
+            已加载原作台词库：常驻 {c.quotes_fixed} 段，聊到相关话题时再用 {c.quotes_keyed} 段。
+          </p>
+        )}
       </div>
 
       <div class="card">

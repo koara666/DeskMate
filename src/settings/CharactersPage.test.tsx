@@ -18,6 +18,8 @@ const view: CharactersView = {
       origin: 'builtin',
       preview: '',
       user_images: ['idle'],
+      quotes_fixed: 12,
+      quotes_keyed: 30,
       prefs: { banned_words: [], custom_rules: [] },
     },
     {
@@ -29,6 +31,8 @@ const view: CharactersView = {
       origin: 'builtin',
       preview: '',
       user_images: [],
+      quotes_fixed: 0,
+      quotes_keyed: 0,
       prefs: { banned_words: [], custom_rules: [] },
     },
   ],
@@ -71,5 +75,16 @@ describe('CharactersPage', () => {
       fireEvent.click(screen.getByText('切换'));
     });
     expect(api.selectCharacter).toHaveBeenCalledWith('naiwa');
+  });
+
+  it('加载了原作台词库时显示段数，没有时不显示', async () => {
+    const api = fakeApi();
+    render(<CharactersPage api={api} />);
+    await act(async () => {});
+    expect(screen.getByText(/常驻 12 段，聊到相关话题时再用 30 段/)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByText('奶蛙'));
+    });
+    expect(screen.queryByText(/原作台词库/)).toBeNull();
   });
 });

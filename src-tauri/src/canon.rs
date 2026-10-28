@@ -25,38 +25,75 @@ pub struct CanonEntry {
 }
 
 /// 最多读取的条目数（防止异常大的角色包拖慢每轮匹配）
-const MAX_ENTRIES: usize = 300;
-/// 每轮最多放几条
-const MAX_RECALL: usize = 3;
-/// 只被角色上一句回复命中（用户这句没提到）的条目最多放几条：接得上话就够了
-const MAX_REPLY_ONLY: usize = 1;
-/// 每轮往事最多占用的 token
-const RECALL_TOKENS: usize = 500;
+pub(crate) const MAX_ENTRIES: usize = 300;
 
+/// 每轮取用的上限
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RecallLimits {
+    /// 每轮最多放几条
+    pub max: usize,
+    /// 只被角色上一句回复命中（用户这句没提到）的条目最多放几条
+    pub max_reply_only: usize,
+    /// 每轮最多占用的 token
+    pub tokens: usize,
+}
+
+/// 往事：最多 3 条、约 500 token；只靠上一句回复命中的最多 1 条（接得上话就够了）
+const CANON_LIMITS: RecallLimits = RecallLimits {
+    max: 3,
+    max_reply_only: 1,
+    tokens: 500,
+};
+
+/// 往事只要有关键词的条目（没有关键词的永远用不上）
 pub fn parse(src: &str) -> Vec<CanonEntry> {
+    let mut out: Vec<CanonEntry> = parse_all(src)
+        .into_iter()
+        .filter(|e| !e.keywords.is_empty())
+        .collect();
+    out.truncate(MAX_ENTRIES);
+    out
+}
+
+/// 解析全部有正文的条目，包括没写「关键词」行的（台词库 `quotes.rs` 把它们当常驻片段）。
+/// 写了「关键词」行、但没有一个能用的关键词（比如全是单字）的条目丢掉，免得被误当成常驻。
+pub(crate) fn parse_all(src: &str) -> Vec<CanonEntry> {
     let mut out = Vec::new();
-    let mut cur: Option<CanonEntry> = None;
+    // (条目, 是否写了关键词行)
+    let mut cur: Option<(CanonEntry, bool)> = None;
+    let mut push = |cur: Option<(CanonEntry, bool)>| {
+        if let Some((e, had_kw)) = cur
+            && !e.text.is_empty()
+            && (!had_kw || !e.keywords.is_empty())
+        {
+            out.push(e);
+        }
+    };
     for line in src.lines() {
         if let Some(t) = line.strip_prefix("## ") {
-            if let Some(e) = cur.take() {
-                push(&mut out, e);
-            }
-            cur = Some(CanonEntry {
-                title: t.trim().to_string(),
-                keywords: Vec::new(),
-                text: String::new(),
-            });
+            push(cur.take());
+            cur = Some((
+                CanonEntry {
+                    title: t.trim().to_string(),
+                    keywords: Vec::new(),
+                    text: String::new(),
+                },
+                false,
+            ));
             continue;
         }
-        let Some(e) = cur.as_mut() else { continue };
+        let Some((e, had_kw)) = cur.as_mut() else {
+            continue;
+        };
         let l = line.trim();
-        if e.keywords.is_empty()
+        if !*had_kw
             && e.text.is_empty()
             && let Some(k) = l
                 .strip_prefix("关键词：")
                 .or_else(|| l.strip_prefix("关键词:"))
         {
             e.keywords = split_keywords(k);
+            *had_kw = true;
             continue;
         }
         if !l.is_empty() {
@@ -66,18 +103,8 @@ pub fn parse(src: &str) -> Vec<CanonEntry> {
             e.text.push_str(l);
         }
     }
-    if let Some(e) = cur.take() {
-        push(&mut out, e);
-    }
-    out.truncate(MAX_ENTRIES);
+    push(cur.take());
     out
-}
-
-fn push(out: &mut Vec<CanonEntry>, e: CanonEntry) {
-    // 没有关键词或没有正文的条目永远用不上
-    if !e.keywords.is_empty() && !e.text.is_empty() {
-        out.push(e);
-    }
 }
 
 fn split_keywords(s: &str) -> Vec<String> {
@@ -107,6 +134,19 @@ fn contains_word(hay: &str, k: &str) -> bool {
 /// 用户这句话命中的关键词记 2 分，角色上一句回复命中的记 1 分（接着聊同一件事时也想得起来）；
 /// 按得分从高到低、同分按文件顺序，在条数和 token 预算内返回。
 pub fn recall(entries: &[CanonEntry], user_text: &str, last_reply: &str) -> Vec<String> {
+    recall_with(entries, user_text, last_reply, CANON_LIMITS, |e| {
+        format!("{}：{}", e.title, e.text)
+    })
+}
+
+/// 按关键词取用条目，`render` 决定每条放进提示词的样子（往事和台词库共用）
+pub(crate) fn recall_with(
+    entries: &[CanonEntry],
+    user_text: &str,
+    last_reply: &str,
+    limits: RecallLimits,
+    render: impl Fn(&CanonEntry) -> String,
+) -> Vec<String> {
     let user = user_text.to_lowercase();
     let reply = last_reply.to_lowercase();
     let mut scored: Vec<(usize, bool, usize)> = entries
@@ -128,21 +168,20 @@ pub fn recall(entries: &[CanonEntry], user_text: &str, last_reply: &str) -> Vec<
         .collect();
     scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.2.cmp(&b.2)));
 
-    let mut left = RECALL_TOKENS;
+    let mut left = limits.tokens;
     let mut reply_only = 0;
     let mut out = Vec::new();
     for (_, by_user, i) in scored {
-        if out.len() >= MAX_RECALL {
+        if out.len() >= limits.max {
             break;
         }
         if !by_user {
-            if reply_only >= MAX_REPLY_ONLY {
+            if reply_only >= limits.max_reply_only {
                 continue;
             }
             reply_only += 1;
         }
-        let e = &entries[i];
-        let line = format!("{}：{}", e.title, e.text);
+        let line = render(&entries[i]);
         let cost = estimate_tokens(&line);
         if cost > left {
             continue;
@@ -242,15 +281,29 @@ mod tests {
             src.push_str(&format!("## 条目{i}\n关键词：共同\n{}\n", "字".repeat(100)));
         }
         let v = parse(&src);
-        assert_eq!(recall(&v, "共同", "").len(), MAX_RECALL);
+        assert_eq!(recall(&v, "共同", "").len(), CANON_LIMITS.max);
         let big = parse(&format!(
             "## 大\n关键词：共同\n{}\n",
-            "字".repeat(RECALL_TOKENS + 1)
+            "字".repeat(CANON_LIMITS.tokens + 1)
         ));
         assert!(recall(&big, "共同", "").is_empty(), "超出预算的条目不放");
         let many: String = (0..MAX_ENTRIES + 5)
             .map(|i| format!("## {i}\n关键词：词{i}\n正文\n"))
             .collect();
         assert_eq!(parse(&many).len(), MAX_ENTRIES);
+    }
+
+    #[test]
+    fn parse_all_keeps_entries_without_keyword_line_only() {
+        let v = parse_all(
+            "## 有关键词\n关键词：研究所\n甲\n## 没写关键词行\n乙\n## 关键词全是单字\n关键词：我、你\n丙\n## 没正文\n关键词：空的\n",
+        );
+        let titles: Vec<&str> = v.iter().map(|e| e.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            vec!["有关键词", "没写关键词行"],
+            "写了关键词行却没有能用的关键词：丢掉，不当成常驻"
+        );
+        assert!(v[1].keywords.is_empty());
     }
 }

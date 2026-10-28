@@ -177,6 +177,9 @@ export interface CharacterItem {
   origin: 'builtin' | 'user';
   preview: string;
   user_images: string[];
+  /** 原作台词库（quotes.md）：常驻段数 / 按关键词取用的段数 */
+  quotes_fixed: number;
+  quotes_keyed: number;
   prefs: CharacterPrefs;
 }
 

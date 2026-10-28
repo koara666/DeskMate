@@ -9,6 +9,7 @@ use crate::character::{self, Character};
 use crate::filter::{BannedWords, StreamFilter};
 use crate::memory::{self, conversation, forget};
 use crate::prompt::{self, MemorySnippet, PromptBudget, PromptParts};
+use crate::quotes;
 use crate::state::AppState;
 use crate::task_marker::{self, MarkerFilter};
 use crate::usage;
@@ -428,10 +429,16 @@ pub async fn run_turn_with_notes(
     let turn = prepare_turn(&state, &character_id, &user_text, now, notes);
 
     let req = {
-        let (name, persona) = character
+        let (name, persona, quotes_fixed) = character
             .as_ref()
-            .map(|c| (c.manifest.name.clone(), c.persona.clone()))
-            .unwrap_or_else(|| ("小伙伴".into(), String::new()));
+            .map(|c| {
+                (
+                    c.manifest.name.clone(),
+                    c.persona.clone(),
+                    c.quotes.fixed.clone(),
+                )
+            })
+            .unwrap_or_else(|| ("小伙伴".into(), String::new(), String::new()));
         // 角色往事：按用户这句话和角色上一句回复里的关键词取用
         let last_reply = turn
             .history
@@ -444,6 +451,11 @@ pub async fn run_turn_with_notes(
             .as_ref()
             .map(|c| canon::recall(&c.canon, &user_text, last_reply))
             .unwrap_or_default();
+        // 原作台词：常驻的已在角色加载时排好；按关键词的只看用户这句话
+        let quotes = character
+            .as_ref()
+            .map(|c| quotes::recall(&c.quotes, &user_text))
+            .unwrap_or_default();
         let now_text = now_text();
         let parts = PromptParts {
             character_name: &name,
@@ -452,6 +464,8 @@ pub async fn run_turn_with_notes(
             banned_words: &prefs.banned_words,
             profile_facts: &turn.profile,
             canon: &canon,
+            quotes_fixed: &quotes_fixed,
+            quotes: &quotes,
             memories: &turn.memories,
             notes: &turn.notes,
             history: &turn.history,

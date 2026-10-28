@@ -44,6 +44,11 @@ characters/*/assets/*.webp
 characters/*/assets/*.gif
 /user-characters/
 
+# ===== 原作语料与台词库（DECISIONS #31） =====
+# 原作台词原文只放在用户数据目录（%APPDATA%\DeskMate），不进公开仓库
+characters/*/quotes.md
+/corpus/
+
 # ===== 日志 =====
 *.log
 /logs/

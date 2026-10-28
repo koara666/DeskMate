@@ -16,6 +16,7 @@ pub mod memory;
 pub mod memory_cmds;
 pub mod paths;
 pub mod prompt;
+pub mod quotes;
 pub mod redact;
 pub mod secrets;
 pub mod settings;

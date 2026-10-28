@@ -462,6 +462,9 @@ async fn greeting_text(st: &AppState) -> String {
         banned_words: &prefs.banned_words,
         profile_facts: &turn.profile,
         canon: &[],
+        // 常驻台词和聊天时一样带上：语气一致，系统提示词也和聊天时相同（提示缓存能命中）
+        quotes_fixed: &c.quotes.fixed,
+        quotes: &[],
         memories: &[],
         notes: &turn.notes,
         history: &[],
