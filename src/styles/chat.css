@@ -722,3 +722,7 @@ body,
   line-height: 1.6;
   margin: 0;
 }
+.msg-note {
+  margin-top: 4px;
+  font-size: 11px;
+}

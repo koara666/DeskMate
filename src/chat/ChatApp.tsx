@@ -46,6 +46,8 @@ export interface UiMessage {
   reminderForm?: boolean;
   /** 小事件的选项（id 是主动消息的编号） */
   choices?: { id: number; options: string[] };
+  /** 下面一行小字（比如看屏幕时「看了「Hades」· 遮住 2 处」） */
+  note?: string;
 }
 
 let seq = 0;
@@ -127,6 +129,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
             status: 'done',
             at: nowSecs(),
             choices: m.choices?.length ? { id: m.id, options: m.choices } : undefined,
+            note: m.note || undefined,
           },
         ]);
         armProactive(m);
@@ -525,6 +528,7 @@ const Message = memo(function Message({
         msg.text && <div class="text">{msg.text}</div>
       )}
       {msg.status === 'stopped' && <div class="note">（已停止）</div>}
+      {msg.note && <div class="note msg-note">{msg.note}</div>}
       {msg.choices && onChoose && (
         <div class="choices">
           {msg.choices.options.map((o, i) => (

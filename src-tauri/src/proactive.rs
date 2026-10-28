@@ -277,6 +277,8 @@ pub struct Item {
     pub choices: Option<crate::companion::Choice>,
     /// 只是一句小反应（摸头等），不记进聊天记录
     pub ephemeral: bool,
+    /// 气泡下面的一行小字（比如「看了「Hades」· 遮住 2 处」），不进聊天记录
+    pub note: String,
 }
 
 impl Item {
@@ -290,6 +292,7 @@ impl Item {
             key: String::new(),
             choices: None,
             ephemeral: false,
+            note: String::new(),
         }
     }
 }
@@ -305,6 +308,8 @@ pub struct ProactiveMessage {
     /// 小事件的选项（点了调用 `event_choose`）
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub choices: Vec<String>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub note: String,
 }
 
 #[derive(Default)]
@@ -533,6 +538,7 @@ fn deliver(app: &AppHandle, item: Item, decision: Decision, id: u64) {
             .as_ref()
             .map(|c| c.options.clone())
             .unwrap_or_default(),
+        note: item.note.clone(),
     };
     if let Some(c) = &item.choices {
         let mut g = st

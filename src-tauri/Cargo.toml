@@ -35,6 +35,8 @@ reqwest = { version = "0.13", default-features = false, features = ["native-tls"
 keyring = { version = "3.6", features = ["windows-native", "apple-native"] }
 tauri-plugin-notification = "2"
 png = "0.18"
+# 截图编码成 JPEG（纯 Rust、没有依赖；比 PNG 小三分之二，上传更快）
+jpeg-encoder = "0.6"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
@@ -47,6 +49,18 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_Power",
   "Win32_System_Threading",
   "Win32_UI_Accessibility",
+  "Win32_Graphics_Dwm",
+] }
+# 看屏幕时的隐私保护：UI Automation（焦点是不是密码框）、Windows 自带的文字识别（本地涂黑敏感文字）。
+# tauri 本来就依赖 windows 0.62，这里只多开几个功能
+windows = { version = "0.62", features = [
+  "Win32_System_Com",
+  "Win32_UI_Accessibility",
+  "Media_Ocr",
+  "Graphics_Imaging",
+  "Globalization",
+  "Security_Cryptography",
+  "Storage_Streams",
 ] }
 
 [dev-dependencies]

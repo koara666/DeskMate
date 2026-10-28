@@ -69,6 +69,13 @@ pub const SCENES: &[(&str, &[&str])] = &[
     ("event.choice", &["称呼"]),
     ("diary.open", &[]),
     ("diary.close", &["称呼"]),
+    ("vision.ack", &["称呼"]),
+    ("vision.refuse_password", &["称呼"]),
+    ("vision.refuse_app", &["称呼"]),
+    ("vision.refuse_title", &["称呼"]),
+    ("vision.refuse_private", &["称呼"]),
+    ("vision.nothing", &["称呼"]),
+    ("vision.error", &["称呼"]),
 ];
 
 /// 小游戏的场景：`game.<事件>`（通用）或 `game.<游戏>.<事件>`；抽签的解读是 `game.fortune.<签的等级>`

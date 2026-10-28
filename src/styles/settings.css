@@ -484,3 +484,34 @@ input[type='search'] {
   line-height: 1.7;
   margin: 4px 0 0;
 }
+
+/* 看屏幕：隐私说明、预览、记录 */
+.privacy-box {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent, #8b6fd6) 8%, transparent);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.privacy-box ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.vision-preview {
+  margin-top: 10px;
+}
+.vision-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  margin: 6px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border, #ddd);
+}
+.look-records {
+  margin: 4px 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-weak);
+}

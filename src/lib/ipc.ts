@@ -4,6 +4,8 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
   VisionSettings,
+  VisionPreview,
+  LookRecord,
   LlmGameStart,
   LlmGameTurn,
   Fortune,
@@ -186,6 +188,8 @@ export const settingsApi = {
   companionStatus: () => invoke<CompanionStatus>('companion_status'),
   saveVision: (vision: VisionSettings) => invoke<VisionSettings>('vision_save', { vision }),
   visionCost: () => invoke<[number, number]>('vision_cost'),
+  visionPreview: () => invoke<VisionPreview>('vision_preview'),
+  visionRecords: () => invoke<LookRecord[]>('vision_records'),
   saveNickname: (nickname: string) => invoke<string>('nickname_save', { nickname }),
   diaryList: () => invoke<Diary[]>('diary_list'),
   diaryDelete: (id: number) => invoke<boolean>('diary_delete', { id }),

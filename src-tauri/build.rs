@@ -81,6 +81,8 @@ const COMMANDS: &[&str] = &[
     "llm_game_give_up",
     "vision_save",
     "vision_cost",
+    "vision_preview",
+    "vision_records",
 ];
 
 fn main() {

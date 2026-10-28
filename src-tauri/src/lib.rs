@@ -26,6 +26,7 @@ pub mod memory;
 pub mod memory_cmds;
 pub mod notify;
 pub mod paths;
+pub mod privacy;
 pub mod proactive;
 pub mod prompt;
 pub mod quotes;
@@ -244,6 +245,8 @@ pub fn run() {
             settings_cmds::nickname_save,
             settings_cmds::vision_save,
             settings_cmds::vision_cost,
+            settings_cmds::vision_preview,
+            settings_cmds::vision_records,
             settings_cmds::settings_get,
             settings_cmds::settings_save_general,
             settings_cmds::backend_save,

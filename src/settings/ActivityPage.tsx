@@ -6,7 +6,7 @@ import { StatusLine, useStatus } from './SettingsApp';
 import { VisionSection } from './VisionSection';
 
 type Api = Pick<SettingsApi, 'activityOverview' | 'saveActivity' | 'deleteActivity'> &
-  Partial<Pick<SettingsApi, 'saveVision' | 'visionCost'>>;
+  Partial<Pick<SettingsApi, 'saveVision' | 'visionCost' | 'visionPreview' | 'visionRecords'>>;
 
 export const CATEGORIES: { id: ActivityCategory; name: string; def: ActivityAction }[] = [
   { id: 'game', name: '玩游戏', def: 'comment' },
@@ -216,9 +216,14 @@ export function ActivityPage({ api, view }: { api: Api; view: SettingsView }) {
         <StatusLine status={status} />
       </div>
 
-      {api.saveVision && api.visionCost && (
+      {api.saveVision && api.visionCost && api.visionPreview && api.visionRecords && (
         <VisionSection
-          api={{ saveVision: api.saveVision, visionCost: api.visionCost }}
+          api={{
+            saveVision: api.saveVision,
+            visionCost: api.visionCost,
+            visionPreview: api.visionPreview,
+            visionRecords: api.visionRecords,
+          }}
           view={view}
           games={Array.from(
             new Set(

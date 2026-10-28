@@ -78,6 +78,8 @@ export interface ProactiveMessage {
   popped: boolean;
   /** 小事件的选项 */
   choices?: string[];
+  /** 气泡下面的一行小字（比如「看了「Hades」· 遮住 2 处」） */
+  note?: string;
 }
 
 export interface CompanionStatus {
@@ -236,9 +238,32 @@ export interface VisionSettings {
   enabled: boolean;
   backend: string;
   hotkey: string;
-  games: string[];
-  game_interval_minutes: number;
+  /** 主动看：在做这些事时偶尔看一眼（game / video / coding / writing） */
+  auto_categories: string[];
+  /** 不主动看的程序（程序名 / 游戏名） */
+  exclude: string[];
+  interval_minutes: number;
   daily_max: number;
+  /** 发送前在本机用文字识别涂黑敏感文字 */
+  mask_text: boolean;
+}
+
+/** 「预览她会看到什么」：只在设置窗口里显示，不发送、不保存 */
+export interface VisionPreview {
+  image: string | null;
+  app: string;
+  masked: number;
+  ocr_missing: boolean;
+  refused: string | null;
+}
+
+/** 本次运行里看过的记录（不存图、不存标题） */
+export interface LookRecord {
+  at: number;
+  trigger: 'hotkey' | 'auto' | 'preview';
+  app: string;
+  outcome: string;
+  masked: number;
 }
 
 export type ActivityCategory =

@@ -316,13 +316,13 @@ pub fn sample(app: &AppHandle) {
     for e in events {
         handle_event(app, &s, &e, action, now);
     }
-    // 第三层：在玩允许偶尔看画面的游戏，到时间就看一眼（默认关闭）
+    // 第三层：在做允许主动看的事（默认是玩游戏），到时间就看一眼（「看屏幕」默认关闭）
     if let Some(c) = &cur
-        && c.category == Category::Game
+        && !sample.private
         && action != Action::Avoid
         && let Some(g) = &c.label
     {
-        crate::vision::maybe_look_game(app, g);
+        crate::vision::maybe_look(app, c.category, g, c.start);
     }
 }
 

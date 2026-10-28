@@ -613,6 +613,18 @@ pub fn vision_cost(state: State<'_, AppState>) -> (i64, f64) {
     crate::usage::purpose_total(&state.db(), crate::usage::purpose::VISION)
 }
 
+/// 「预览她会看到什么」：和按快捷键时一样截图、做隐私处理，结果只给设置窗口看（不发送、不保存）
+#[tauri::command]
+pub async fn vision_preview(state: State<'_, AppState>) -> CmdResult<crate::vision::PreviewView> {
+    Ok(crate::vision::preview(&state).await)
+}
+
+/// 本次运行里看过的记录（不存图、不存标题）
+#[tauri::command]
+pub fn vision_records(state: State<'_, AppState>) -> Vec<crate::vision::LookRecord> {
+    state.vision.records()
+}
+
 #[tauri::command]
 pub fn reminder_list(state: State<'_, AppState>) -> CmdResult<Vec<crate::reminders::ReminderView>> {
     let now = crate::reminders::now_local();
