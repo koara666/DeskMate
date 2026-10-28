@@ -278,9 +278,31 @@ pub fn locate(exec: Executor, configured: &str) -> Option<Program> {
     None
 }
 
+/// 启动 claude / codex 时不传下去的环境变量（DECISIONS #29）：
+/// - API Key / 第三方接口地址：Claude Code 在 `-p` 模式下只要看到 `ANTHROPIC_API_KEY` 就优先用它，
+///   不走订阅登录——Key 无效时报「Invalid API key」，有效时按 API 计费花钱，都不是「用订阅额度」该有的样子。
+/// - 父级 Claude Code 会话的变量：DeskMate 碰巧是从 Claude Code 里启动的时候才会有，
+///   传下去会让子进程以为自己嵌套在别的会话里，还会把那个会话的通信令牌带过去。
+pub const SCRUBBED_ENV: [&str; 11] = [
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "CLAUDECODE",
+    "CLAUDE_PID",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_SESSION_ATTENDED",
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_MESSAGING_TOKEN",
+];
+
 fn command(prog: &Program) -> tokio::process::Command {
     let mut c = tokio::process::Command::new(&prog.exe);
     c.args(&prog.pre_args);
+    for k in SCRUBBED_ENV {
+        c.env_remove(k);
+    }
     #[cfg(windows)]
     c.creation_flags(CREATE_NO_WINDOW);
     c
@@ -719,6 +741,38 @@ mod tests {
         assert!(p.contains("把截图按日期分类"));
         assert!(p.contains("D:\\W"));
         assert!(p.contains("不要想办法绕过"));
+    }
+
+    #[test]
+    fn cli_does_not_inherit_api_keys_or_parent_session() {
+        let prog = Program {
+            exe: PathBuf::from("claude"),
+            pre_args: vec![],
+        };
+        let c = command(&prog);
+        let removed: Vec<String> = c
+            .as_std()
+            .get_envs()
+            .filter(|(_, v)| v.is_none())
+            .map(|(k, _)| k.to_string_lossy().into_owned())
+            .collect();
+        for k in [
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "CLAUDECODE",
+            "CLAUDE_CODE_MESSAGING_TOKEN",
+        ] {
+            assert!(
+                removed.iter().any(|r| r.eq_ignore_ascii_case(k)),
+                "{k} 应该被去掉"
+            );
+        }
+        // 用户自己的 Claude Code 配置（比如 Windows 上的 Git Bash 路径）照常传下去
+        assert!(
+            !removed
+                .iter()
+                .any(|r| r.eq_ignore_ascii_case("CLAUDE_CODE_GIT_BASH_PATH"))
+        );
     }
 
     #[tokio::test]

@@ -200,7 +200,12 @@ pub fn parse_line(line: &str, st: &mut CliState) -> Option<String> {
 fn classify_error(text: &str) -> BackendError {
     let lower = text.to_lowercase();
     let detail = crate::redact::redact_secrets(&text.chars().take(300).collect::<String>());
-    if lower.contains("login")
+    if lower.contains("external api key") {
+        // DeskMate 已经不传环境变量里的 Key（tasks::SCRUBBED_ENV），还出现说明 Key 写在 Claude Code 自己的设置里
+        BackendError::Cli(format!(
+            "Claude Code 用的是另外配置的 API Key，不是订阅登录，而且这个 Key 无效。请检查 %USERPROFILE%\\.claude\\settings.json 里的 apiKeyHelper 或 env 设置：{detail}"
+        ))
+    } else if lower.contains("login")
         || lower.contains("api key")
         || lower.contains("auth")
         || lower.contains("credential")
@@ -389,6 +394,8 @@ mod tests {
             "rate_limited"
         );
         assert_eq!(classify_error("something else").kind(), "cli");
+        let e = classify_error("Invalid API key · Fix external API key").to_string();
+        assert!(e.contains("不是订阅登录"), "{e}");
     }
 
     #[tokio::test]
