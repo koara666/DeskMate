@@ -43,6 +43,7 @@ AGENTS.md / CLAUDE.md          agent 规则
 docs/                          文档（见 AGENTS.md 文档地图）
 characters/<id>/               内置角色包（character.json、persona.md、可选 canon.md、assets/placeholder.svg）
 characters/_fallback.svg       没有任何图片时的通用占位形象
+characters/_common/lines/      通用台词（角色没写的场景用；`_` 开头的目录不是角色）
 pet.html chat.html settings.html   三个窗口的入口
 src/
   pet/Pet.tsx                  桌宠：形象、状态、点击/拖动/右键
@@ -77,7 +78,10 @@ src-tauri/src/
   markers.rs                   聊天回复里 [[任务/打开/读取：…]] 动作标记的识别与隐藏（流式）
   abilities.rs                 内置能力层：打开网址/文件夹/文件/登记的程序、在允许的文件夹里读文本、电量；「高级」设置
   proactive.rs                 主动行为调度器（优先级、冷却、勿扰/全屏/安静时段、被忽略降频、每日预算）；「陪伴」设置
-  notify.rs                    系统通知（全屏时到了的提醒）
+  notify.rs                    系统通知（全屏时到了的提醒、重要提醒；tauri-plugin-notification，只在 Rust 端用）
+  lines.rs                     预写台词池：解析角色包 lines/*.md（场景、条件、占位符）、挑一句不重复的、通用台词兜底
+  reminders/                   提醒：mod.rs（数据、触发、定时器、补提醒）、parse.rs（本地中文时间解析、重复规则）、
+                               model.rs（本地解析不了时调用一次模型，输出 JSON）、chat.rs（聊天里吩咐 → 复述确认）
   daily.rs                     日常体验：开机自启、全局快捷键、全屏检测、睡眠、主动搭话（低频循环）
   character_cmds.rs memory_cmds.rs  设置窗口「角色」「记忆」页的命令
   logging.rs redact.rs         轮换日志、密钥脱敏
@@ -117,6 +121,7 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 - v1 `settings(key, value JSON)`：全部设置（不含 Key）
 - v2 `usage`：每次模型调用的 token 与估算费用（按日/月索引）
 - v4 `tasks`：任务执行记录；v5 `memories.decayed_at`：记忆降权时间
+- v6 `reminders`：提醒（内容、触发方式 at/startup/activity、下次时间、重复规则 JSON、活动、到时台词、重要、状态）
 - v3 记忆：`conversations`（每个角色的会话，含提取状态、是否暂停记忆）、`messages`（脱敏后的原文）、
   `memories`（fact/summary，scope、来源、可信度、重要度、使用次数、状态与取代关系）、
   `memory_fts`（FTS5，rowid = memories.id，tokens = 切分后的文本）
@@ -156,8 +161,12 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 - `abilities.rs` + `markers.rs`：回复里的 `[[打开/读取：…]]` → `ChatEvent::Done.actions`（后端预检查的按钮）→ 用户点击 →
   `ability_open` / `ability_read`（后端再检查一次）。读取后用 `run_turn_with_notes` 让角色说说内容（文件内容是不可信资料）。
 
+- `lines.rs`：台词池。`AppState::line(场景, 占位符)` 先找当前角色的，没有再用通用台词，最近说过的尽量不重复。
+- `reminders/`：聊天里「……提醒我……」→ `chat::run_turn` 先交给 `reminders::chat::handle`（本地解析 → 不行再调用一次模型）
+  → `ChatEvent::Done.reminder`（待确认）→ 用户点「好」→ `reminder_save`（后端再检查）→ 定时器（`reminders::spawn`，
+  按下一个到期时间睡眠、最多 60 秒）→ 到期交给调度器（种类 Reminder）。启动时补上关机期间错过的。
+
 计划中的模块（实现后移到上面）：
-- `lines.rs`：台词池解析与挑选（条件、占位符、避免重复）。
 - `reminders.rs`：提醒的解析、存储、定时触发、补提醒。
 - `briefing/`：每日播报（天气、节假日、吃饭、RSS、特殊日期）。
 - `activity/`：前台窗口事件、分类规则、隐私名单、活动日志、关怀。

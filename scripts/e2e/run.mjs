@@ -234,6 +234,7 @@ async function main() {
     const tabs = [
       ['常规', '常规'],
       ['陪伴', '陪伴'],
+      ['提醒', '提醒'],
       ['角色', '角色'],
       ['记忆', '记忆'],
       ['模型', '模型'],
@@ -460,6 +461,21 @@ async function main() {
       const shown = await chat.eval(`document.querySelector('.bubble-area, .messages').innerText`);
       if (shown.includes('[[打开')) throw new Error('标记原文不该显示出来');
       await chat.shot('chat-action.png');
+    });
+    await test('提醒：聊天里吩咐 → 复述 → 点「好」保存，设置「提醒」页能看到', async () => {
+      await chat.input('textarea[aria-label="输入消息"]', '半小时后提醒我收衣服');
+      await chat.key('textarea[aria-label="输入消息"]', { key: 'Enter' });
+      await chat.waitFor(`!!document.querySelector('.reminder-card .reminder-buttons')`, '确认卡片', 10000);
+      const what = await chat.eval(`document.querySelector('.reminder-what').innerText`);
+      if (!what.includes('30 分钟后') || !what.includes('收衣服')) throw new Error(`复述不对：${what}`);
+      await chat.click('好');
+      // 保存后角色接一句（气泡只显示最新一条，确认卡片那条就看不到了）
+      await chat.waitFor(`!document.querySelector('.reminder-buttons') && !!document.querySelector('.bubble-area .msg-assistant')`, '保存后角色接话', 5000);
+      await chat.shot('chat-reminder.png');
+      await settings.click('提醒');
+      await settings.waitFor(`document.querySelector('main h1')?.innerText === '提醒'`, '提醒页');
+      await settings.waitText('收衣服');
+      await settings.shot('settings-提醒-有内容.png');
     });
     await test('任务卡片能打开和关闭（开了委托后，回复里的任务标记弹出卡片）', async () => {
       await chat.input('textarea[aria-label="输入消息"]', '/mock task 统计字数');
