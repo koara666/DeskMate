@@ -188,7 +188,9 @@ async function waitVisible(pid, which, want, timeout = 5000) {
     if ((v === '1') === want) return;
     await sleep(200);
   }
-  throw new Error(`${which} 窗口应该${want ? '显示' : '隐藏'}，但没有`);
+  // 诊断：列出这个进程的全部窗口（同名窗口可能不止一个）
+  const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', resolve('scripts/e2e/window.ps1'), '-ProcessId', String(pid)], { encoding: 'utf8' });
+  throw new Error(`${which} 窗口应该${want ? '显示' : '隐藏'}，但没有（窗口：${(r.stdout ?? '').trim().split(/\r?\n/).join(' ')}）`);
 }
 
 async function test(name, fn) {
@@ -418,7 +420,7 @@ async function main() {
 
     console.log('\n聊天窗口与桌宠');
     await test('点桌宠打开聊天窗口', async () => {
-      await pet.eval(`(() => { const el = document.querySelector('[data-testid=pet]'); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, screenX: 10, screenY: 10 })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, screenX: 10, screenY: 10 })); })()`);
+      await pet.eval(`(() => { const el = document.querySelector('[data-testid=pet]'); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, screenX: 10, screenY: 10, clientX: 80, clientY: 150 })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, screenX: 10, screenY: 10, clientX: 80, clientY: 150 })); })()`);
       await waitVisible(pid, 'chat', true);
     });
     await test('发送消息并收到 mock 回复', async () => {
@@ -515,13 +517,13 @@ async function main() {
       await waitVisible(pid, 'chat', false);
     });
     await test('按 Esc 关闭聊天窗口', async () => {
-      await pet.eval(`(() => { const el = document.querySelector('[data-testid=pet]'); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 })); })()`);
+      await pet.eval(`(() => { const el = document.querySelector('[data-testid=pet]'); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 80, clientY: 150 })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 80, clientY: 150 })); })()`);
       await waitVisible(pid, 'chat', true);
       await chat.key('window', { key: 'Escape' });
       await waitVisible(pid, 'chat', false);
     });
     await test('再点一次桌宠能收起聊天窗口', async () => {
-      const clickPet = `(() => { const el = document.querySelector('[data-testid=pet]'); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 })); })()`;
+      const clickPet = `(() => { const el = document.querySelector('[data-testid=pet]'); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 80, clientY: 150 })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 80, clientY: 150 })); })()`;
       await pet.eval(clickPet);
       await waitVisible(pid, 'chat', true);
       await pet.eval(clickPet);
@@ -536,7 +538,7 @@ async function main() {
       if ((await targets()).some((t) => t.url.includes('settings.html'))) throw new Error('设置窗口没有关掉');
     });
     await test('关掉后还能从聊天窗口重新打开设置', async () => {
-      await pet.eval(`(() => { const el = document.querySelector('[data-testid=pet]'); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 })); })()`);
+      await pet.eval(`(() => { const el = document.querySelector('[data-testid=pet]'); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 80, clientY: 150 })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 80, clientY: 150 })); })()`);
       await waitVisible(pid, 'chat', true);
       await chat.click('[aria-label="设置"]');
       const t = await waitTarget('settings.html', 8000);

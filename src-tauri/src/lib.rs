@@ -135,7 +135,7 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             // 第二个实例启动时：把已有的桌宠显示出来；带 --settings 时打开设置
             if let Some(w) = desktop::pet(app) {
-                let _ = w.show();
+                let _ = desktop::show_window(&w);
             }
             if let Some(tab) = argv.iter().find_map(|a| desktop::parse_settings_arg(a)) {
                 desktop::open_settings_tab_async(app, tab);
@@ -185,7 +185,11 @@ pub fn run() {
             // 桌宠和聊天窗口不真正关闭（比如误按 Alt+F4），只隐藏
             ("pet" | "chat", WindowEvent::CloseRequested { api, .. }) => {
                 api.prevent_close();
-                let _ = w.hide();
+                if let Some(ww) = w.app_handle().get_webview_window(w.label()) {
+                    let _ = desktop::hide_window(&ww);
+                } else {
+                    let _ = w.hide();
+                }
             }
             _ => {}
         })

@@ -245,7 +245,7 @@ pub fn on_hotkey(app: &AppHandle, state: ShortcutState) {
     if let Some(p) = desktop::pet(app)
         && !p.is_visible().unwrap_or(true)
     {
-        let _ = p.show();
+        let _ = desktop::show_window(&p);
     }
     interact(app);
     // 快捷键回调在主线程：放到后台执行，避免创建聊天窗口时死锁
@@ -301,7 +301,7 @@ fn check_fullscreen(app: &AppHandle) {
                 .store(true, Ordering::Relaxed);
             let _ = desktop::hide_chat(app);
             if let Some(p) = desktop::pet(app) {
-                let _ = p.hide();
+                let _ = desktop::hide_window(&p);
             }
             log::info!("检测到全屏程序，已自动隐藏");
         }

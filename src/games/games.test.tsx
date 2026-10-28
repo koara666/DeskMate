@@ -65,9 +65,8 @@ describe('小游戏', () => {
     await flush();
     expect(screen.getByText('你赢 3 · 她赢 1 · 平 0')).toBeTruthy();
     fireEvent.click(screen.getByText('今日运势'));
-    await flush();
-    await flush();
-    fireEvent.click(screen.getByRole('button', { name: '抽签' }));
+    // 游戏组件是按需加载的：等它出现
+    fireEvent.click(await screen.findByRole('button', { name: '抽签' }, { timeout: 3000 }));
     await flush();
     expect(screen.getByText('大吉')).toBeTruthy();
     expect(screen.getByText('好日子')).toBeTruthy();

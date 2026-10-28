@@ -219,7 +219,7 @@ fn set_avoid(app: &AppHandle, avoid: bool) {
     if avoid {
         let _ = crate::desktop::hide_chat(app);
         if let Some(p) = crate::desktop::pet(app) {
-            let _ = p.hide();
+            let _ = crate::desktop::hide_window(&p);
         }
         ::log::info!("前台是需要回避的程序，桌宠暂时藏起来");
     } else if let Some(p) = crate::desktop::pet(app) {

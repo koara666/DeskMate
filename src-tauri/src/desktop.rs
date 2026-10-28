@@ -163,6 +163,34 @@ fn px(logical: f64, scale: f64) -> i32 {
     (logical * scale).round() as i32
 }
 
+/// 隐藏窗口。除了 Tauri 的 hide，再用系统调用藏一次：
+/// 窗口有时是用系统调用「不抢焦点地显示」的（`daily::show_no_activate`），Tauri 内部还以为它是隐藏的，
+/// 这时只调 Tauri 的 hide 会被当成「已经隐藏」直接跳过，窗口就关不掉了（DECISIONS #43）。
+pub fn hide_window(w: &WebviewWindow) -> tauri::Result<()> {
+    let r = w.hide();
+    #[cfg(windows)]
+    if let Ok(h) = w.hwnd() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{SW_HIDE, ShowWindow};
+        unsafe {
+            ShowWindow(h.0 as _, SW_HIDE);
+        }
+    }
+    r
+}
+
+/// 显示窗口（会激活）。同上：Tauri 内部状态可能和实际不一致，再用系统调用显示一次。
+pub fn show_window(w: &WebviewWindow) -> tauri::Result<()> {
+    let r = w.show();
+    #[cfg(windows)]
+    if let Ok(h) = w.hwnd() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{SW_SHOW, ShowWindow};
+        unsafe {
+            ShowWindow(h.0 as _, SW_SHOW);
+        }
+    }
+    r
+}
+
 pub fn pet(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window("pet")
 }
@@ -359,7 +387,7 @@ pub fn fit_compact(app: &AppHandle, height: f64) -> tauri::Result<()> {
 
 pub fn show_chat(app: &AppHandle, focus: bool) -> tauri::Result<()> {
     let c = ensure_chat(app)?;
-    c.show()?;
+    show_window(&c)?;
     position_chat(app)?;
     if focus {
         c.set_focus()?;
@@ -370,7 +398,7 @@ pub fn show_chat(app: &AppHandle, focus: bool) -> tauri::Result<()> {
 
 pub fn hide_chat(app: &AppHandle) -> tauri::Result<()> {
     if let Some(c) = chat(app) {
-        c.hide()?;
+        hide_window(&c)?;
     }
     Ok(())
 }
@@ -395,9 +423,9 @@ pub fn toggle_pet_visible(app: &AppHandle) -> tauri::Result<()> {
     let Some(p) = pet(app) else { return Ok(()) };
     if p.is_visible()? {
         hide_chat(app)?;
-        p.hide()?;
+        hide_window(&p)?;
     } else {
-        p.show()?;
+        show_window(&p)?;
     }
     Ok(())
 }
