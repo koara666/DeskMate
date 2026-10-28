@@ -10,6 +10,7 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMess
     stop: [] as string[],
     regenerate: [] as string[],
     fit: [] as number[],
+    hide: 0,
   };
   let handler: ((e: ChatEvent) => void) | null = null;
   const off = async () => () => {};
@@ -38,7 +39,9 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMess
     fit: async (h) => {
       calls.fit.push(h);
     },
-    hide: async () => {},
+    hide: async () => {
+      calls.hide++;
+    },
     openSettings: async () => {},
     onPlacement: off,
     onFocusInput: off,
@@ -219,5 +222,16 @@ describe('ChatApp 时间', () => {
     const { container } = render(<ChatApp api={f.api} typewriterTickMs={10} />);
     await act(async () => {});
     expect(container.querySelectorAll('.time-sep')).toHaveLength(2);
+  });
+});
+
+describe('ChatApp 键盘', () => {
+  it('输入法组字时按 Esc 只取消候选词，不关窗口；平时按 Esc 关窗口', async () => {
+    const f = await mount();
+    fireEvent.keyDown(window, { key: 'Escape', isComposing: true });
+    fireEvent.keyDown(window, { key: 'Escape', keyCode: 229 });
+    expect(f.calls.hide).toBe(0);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(f.calls.hide).toBe(1);
   });
 });

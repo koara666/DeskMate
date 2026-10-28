@@ -1,6 +1,7 @@
 // 聊天窗口：气泡模式（只显示最新回复）和面板模式（完整历史）。
 // 模型输出一律作为纯文本渲染（Preact 自动转义），绝不使用 dangerouslySetInnerHTML。
 import { Fragment } from 'preact';
+import { memo } from '../lib/memo';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { ChatApi, TaskApi } from '../lib/ipc';
 import { newRequestId } from '../lib/ipc';
@@ -92,7 +93,8 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     const onOnline = () => setOnline(true);
     const onOffline = () => setOnline(false);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') api.hide().catch(() => {});
+      // 输入法组字时按 Esc 是取消候选词，不关窗口
+      if (e.key === 'Escape' && !e.isComposing && e.keyCode !== 229) api.hide().catch(() => {});
     };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
@@ -279,7 +281,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
                 msg={m}
                 isLast={m === lastAssistant && m === lastMsg}
                 generating={generating}
-                onRegenerate={regenerate}
+                onRegenerate={m === lastMsg ? regenerate : undefined}
               />
             </Fragment>
           ))}
@@ -318,10 +320,11 @@ interface MessageProps {
   msg: UiMessage;
   isLast: boolean;
   generating: boolean;
-  onRegenerate: () => void;
+  /** 只有最后一条需要（其余消息的属性不变，打字机每次刷新时就不用重新渲染它们） */
+  onRegenerate?: () => void;
 }
 
-function Message({ msg, isLast, generating, onRegenerate }: MessageProps) {
+const Message = memo(function Message({ msg, isLast, generating, onRegenerate }: MessageProps) {
   const [copied, setCopied] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const thinking = msg.status === 'streaming' && msg.text === '';
@@ -366,7 +369,7 @@ function Message({ msg, isLast, generating, onRegenerate }: MessageProps) {
               {copied ? '已复制' : '复制'}
             </button>
           )}
-          {isLast && !generating && (
+          {isLast && !generating && onRegenerate && (
             <button type="button" class="link-btn" onClick={onRegenerate}>
               {msg.status === 'error' ? '重试' : '重新生成'}
             </button>
@@ -375,4 +378,4 @@ function Message({ msg, isLast, generating, onRegenerate }: MessageProps) {
       )}
     </div>
   );
-}
+});
