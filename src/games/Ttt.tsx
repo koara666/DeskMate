@@ -1,6 +1,7 @@
 // 井字棋：你是 ×、她是 ○，你先手。难度决定她多容易失误（困难下她不会输）。
 import { useEffect, useState } from 'preact/hooks';
 import type { GameProps } from './registry';
+import { ResultBanner } from './Hud';
 import { aiMove, winner, winningLine, type Board, type Difficulty } from './logic/ttt';
 
 const DIFFS: { id: Difficulty; name: string }[] = [
@@ -64,15 +65,16 @@ export function Ttt({ say, finish, random = Math.random }: GameProps & { random?
           <button
             type="button"
             key={i}
-            class={`ttt-cell ${line.includes(i) ? 'hit' : ''}`}
+            class={`ttt-cell ${c === 'X' ? 'x' : c === 'O' ? 'o' : ''} ${line.includes(i) ? 'hit' : ''}`}
             aria-label={`第 ${i + 1} 格${c ? (c === 'X' ? '，你' : '，她') : ''}`}
             disabled={!!c || !!over}
             onClick={() => click(i)}
           >
-            {c === 'X' ? '×' : c === 'O' ? '○' : ''}
+            {c && <span class="piece">{c === 'X' ? '×' : '○'}</span>}
           </button>
         ))}
       </div>
+      {over && <ResultBanner result={over} />}
       {over && (
         <button type="button" class="btn btn-small" onClick={reset}>
           再来一局

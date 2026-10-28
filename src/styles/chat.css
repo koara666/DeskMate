@@ -755,3 +755,7 @@ body,
 .panel.speech:hover .speech-hint {
   opacity: 0.9;
 }
+/* 名牌只有部分皮肤显示（掌机风的对话框） */
+.speech-name {
+  display: none;
+}

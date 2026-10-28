@@ -1,6 +1,7 @@
 import { render } from 'preact';
 import '../styles/base.css';
 import '../styles/pet.css';
+import '../styles/skins/arcade.css';
 import { petApi } from '../lib/ipc';
 import { Pet } from './Pet';
 

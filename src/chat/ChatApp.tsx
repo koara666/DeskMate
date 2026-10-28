@@ -25,6 +25,7 @@ import type {
 import type { UpdateApi } from '../lib/ipc';
 import { UpdateCard } from '../update/UpdateCard';
 import { Composer } from './Composer';
+import { applyTheme } from '../lib/theme';
 import { ReminderForm, emptyReminder } from '../reminders/ReminderForm';
 // 任务卡片（委托外部 agent，高级选项）按需加载：没开委托时根本不加载这部分代码
 type TaskCardType = typeof import('./TaskCard').TaskCard;
@@ -107,6 +108,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const load = useCallback(async () => {
     const init = await api.init();
     setCharacter(init.character);
+    applyTheme(init.character.theme);
     setGreeting(init.greeting);
     if (init.notice) setNotice(init.notice);
     setModeState(init.mode);
@@ -395,7 +397,8 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
       : null;
   const showReconnect =
     online && lastMsg?.status === 'error' && lastMsg.error && NETWORK_KINDS.has(lastMsg.error.kind);
-  const accent = character.color || undefined;
+  // 角色包的界面主题里写了强调色就用主题的（applyTheme 已经设好了），否则用角色的主题色
+  const accent = character.theme?.colors?.accent ? undefined : character.color || undefined;
   const name = character.name || '小伙伴';
 
   return (
@@ -414,6 +417,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     >
       {speech ? (
         <div class="bubble-area speech-area" ref={listRef} onClick={toChat} title="点一下回她" data-testid="speech">
+          <span class="speech-name">{name}</span>
           {lastAssistant && (
             <Message
               msg={lastAssistant}

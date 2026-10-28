@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { MenuApi } from '../lib/ipc';
 import type { MenuItem, MenuShow } from '../lib/types';
+import { applyTheme } from '../lib/theme';
 
 /** 窗口大小（和后端 desktop::MENU_LOGICAL 一致） */
 const W = 340;
@@ -63,6 +64,7 @@ export function Menu({ api }: { api: MenuApi }) {
   useEffect(() => {
     const offs = [
       api.onShow((s) => {
+        applyTheme(s.theme);
         setShow(s);
         setHover(null);
         setSeq((n) => n + 1);

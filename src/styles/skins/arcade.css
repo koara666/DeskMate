@@ -1,0 +1,294 @@
+/* 皮肤「arcade」：掌机 / 像素风（七海千秋）。
+   全部写在 :root[data-skin='arcade'] 下面，别的角色不受影响；颜色取角色包里的 --t-*，没写就用这里的默认值。
+   只用硬阴影、粗边框、等宽字这些静态样式，不加任何常驻动画；不打包字体（等宽字用系统自带的）。 */
+:root[data-skin='arcade'] {
+  --accent: var(--t-accent, #e8789a);
+  --accent-2: var(--t-accent-2, #2f5b5c);
+  --panel: var(--t-panel, #fffaf6);
+  --panel-2: var(--t-panel-2, #f7ece6);
+  --text: var(--t-text, #24353a);
+  --text-weak: var(--t-text-weak, #62767a);
+  --border: var(--t-border, #c9d6d4);
+  --user-bg: var(--t-user-bg, #ffe1ea);
+  --radius: 6px;
+  --hard: 3px 3px 0 color-mix(in srgb, var(--accent-2) 40%, transparent);
+  --shadow: var(--hard);
+  --font-hud: 'Cascadia Mono', Consolas, 'Lucida Console', 'Courier New', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='arcade']:not([data-theme='light']) {
+    --panel: var(--t-dark-panel, #1d2e30);
+    --panel-2: color-mix(in srgb, var(--t-dark-panel, #1d2e30) 80%, #ffffff);
+    --text: var(--t-dark-text, #eef3f2);
+    --text-weak: color-mix(in srgb, var(--t-dark-text, #eef3f2) 65%, transparent);
+    --border: color-mix(in srgb, var(--accent-2) 70%, #ffffff);
+    --user-bg: color-mix(in srgb, var(--accent) 35%, var(--t-dark-panel, #1d2e30));
+    --hard: 3px 3px 0 rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* ———————— 聊天窗口 ———————— */
+[data-skin='arcade'] .panel {
+  border: 3px solid var(--accent-2);
+  border-radius: var(--radius);
+  box-shadow:
+    inset 0 0 0 2px var(--panel),
+    inset 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent),
+    var(--hard);
+}
+[data-skin='arcade'] .panel::after {
+  border: 3px solid var(--accent-2);
+}
+[data-skin='arcade'] .panel.tail-right::after {
+  border-left: none;
+  border-bottom: none;
+  right: -9px;
+}
+[data-skin='arcade'] .panel.tail-left::after {
+  border-right: none;
+  border-top: none;
+  left: -9px;
+}
+[data-skin='arcade'] .panel-header {
+  margin: 3px 3px 4px;
+  padding: 2px 4px 2px 8px;
+  min-height: 26px;
+  border-radius: 3px;
+  background: var(--accent-2);
+}
+[data-skin='arcade'] .panel-header .name {
+  color: #fff;
+  font-family: var(--font-hud), var(--font);
+  letter-spacing: 1px;
+}
+[data-skin='arcade'] .panel-header .name::before {
+  content: '▶ ';
+  color: var(--accent);
+}
+[data-skin='arcade'] .icon-btn {
+  color: color-mix(in srgb, #ffffff 80%, var(--accent-2));
+  border-radius: 3px;
+}
+[data-skin='arcade'] .icon-btn:hover {
+  background: color-mix(in srgb, #ffffff 18%, transparent);
+  color: #fff;
+}
+[data-skin='arcade'] .messages .msg-user {
+  border-radius: 4px;
+  border: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--accent) 30%, transparent);
+}
+[data-skin='arcade'] .messages .msg-assistant {
+  padding-left: 8px;
+  border-left: 3px solid var(--accent);
+}
+[data-skin='arcade'] .time-sep {
+  font-family: var(--font-hud), var(--font);
+  letter-spacing: 1px;
+}
+[data-skin='arcade'] .time-sep::before {
+  content: '— ';
+}
+[data-skin='arcade'] .time-sep::after {
+  content: ' —';
+}
+[data-skin='arcade'] .composer {
+  border-top: 2px dashed color-mix(in srgb, var(--accent-2) 35%, transparent);
+}
+[data-skin='arcade'] .composer textarea {
+  border: 2px solid var(--border);
+  border-radius: 4px;
+}
+[data-skin='arcade'] .composer textarea:focus {
+  border-color: var(--accent);
+}
+[data-skin='arcade'] .btn {
+  border-radius: 4px;
+  border: 2px solid var(--accent-2);
+  box-shadow: 2px 2px 0 var(--accent-2);
+  font-weight: 600;
+}
+[data-skin='arcade'] .btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+[data-skin='arcade'] .btn-send,
+[data-skin='arcade'] .btn-small {
+  background: var(--accent);
+  color: #fff;
+}
+[data-skin='arcade'] .btn-plain {
+  background: var(--panel);
+  color: var(--text);
+}
+[data-skin='arcade'] .thinking span {
+  border-radius: 0;
+  background: var(--accent);
+}
+[data-skin='arcade'] .reminder-card,
+[data-skin='arcade'] .update-card {
+  border: 2px solid var(--accent-2);
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--accent-2) 35%, transparent);
+}
+
+/* 「她说的话」= 游戏里的对话框：深色底、名牌、右下角 ▼ */
+[data-skin='arcade'] .panel.speech {
+  background: var(--accent-2);
+  box-shadow:
+    inset 0 0 0 2px var(--accent-2),
+    inset 0 0 0 4px color-mix(in srgb, #ffffff 70%, var(--accent-2)),
+    var(--hard);
+}
+[data-skin='arcade'] .panel.speech::after {
+  background: var(--accent-2);
+}
+[data-skin='arcade'] .speech-area {
+  padding: 22px 16px 14px;
+  color: #fff;
+}
+[data-skin='arcade'] .speech-area .note {
+  color: color-mix(in srgb, #ffffff 70%, transparent);
+}
+[data-skin='arcade'] .speech-area .link-btn {
+  color: #ffd1dc;
+}
+[data-skin='arcade'] .speech-name {
+  display: block;
+  position: absolute;
+  top: 3px;
+  left: 10px;
+  padding: 0 8px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 1px;
+}
+[data-skin='arcade'] .speech-hint {
+  font-size: 0;
+  opacity: 1;
+}
+[data-skin='arcade'] .speech-hint::after {
+  content: '▼';
+  font-size: 10px;
+  color: var(--accent);
+}
+
+/* ———————— 小游戏 ———————— */
+[data-skin='arcade'] .game-title,
+[data-skin='arcade'] .game-score {
+  font-family: var(--font-hud), var(--font);
+  letter-spacing: 1px;
+}
+[data-skin='arcade'] .game-line {
+  border-radius: 4px;
+  background: var(--accent-2);
+  color: #fff;
+  box-shadow: var(--hard);
+}
+[data-skin='arcade'] .game-pick {
+  border: 2px solid var(--accent-2);
+  border-radius: 4px;
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--accent-2) 30%, transparent);
+}
+[data-skin='arcade'] .game-pick:hover {
+  border-color: var(--accent);
+  box-shadow: 3px 3px 0 var(--accent);
+}
+[data-skin='arcade'] .game-pick b::before {
+  content: '▶ ';
+  color: var(--accent);
+  font-size: 11px;
+}
+[data-skin='arcade'] .rps-hand,
+[data-skin='arcade'] .ttt-cell,
+[data-skin='arcade'] .bj-card,
+[data-skin='arcade'] .llm-input {
+  border: 2px solid var(--accent-2);
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--accent-2) 35%, transparent);
+}
+[data-skin='arcade'] .rps-hand:hover,
+[data-skin='arcade'] .ttt-cell:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+[data-skin='arcade'] .ttt-cell.hit {
+  background: color-mix(in srgb, var(--accent) 35%, var(--panel));
+}
+[data-skin='arcade'] .ttt-diff {
+  border: 2px solid var(--accent-2);
+  border-radius: 4px;
+}
+[data-skin='arcade'] .ttt-diff button.on {
+  background: var(--accent-2);
+}
+[data-skin='arcade'] .bj-card.back {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--accent-2) 0 4px,
+    color-mix(in srgb, var(--accent-2) 70%, #ffffff) 4px 8px
+  );
+  color: transparent;
+}
+[data-skin='arcade'] .llm-puzzle,
+[data-skin='arcade'] .llm-entry {
+  border-radius: 4px;
+}
+
+[data-skin='arcade'] .hud {
+  border: 2px solid var(--accent-2);
+  border-radius: 4px;
+  background: var(--panel);
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--accent-2) 35%, transparent);
+  font-family: var(--font-hud), var(--font);
+}
+[data-skin='arcade'] .game-result b {
+  text-shadow: 2px 2px 0 color-mix(in srgb, var(--accent-2) 30%, transparent);
+}
+
+/* ———————— 头顶气泡菜单 ———————— */
+[data-skin='arcade'] .bubble {
+  border: 3px solid var(--accent-2);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--accent-2) 45%, transparent);
+}
+[data-skin='arcade'] .bubble-label {
+  border-radius: 3px;
+  background: var(--accent-2);
+  color: #fff;
+  font-weight: 600;
+}
+[data-skin='arcade'] .bubble.hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+  box-shadow: 3px 3px 0 var(--accent);
+}
+[data-skin='arcade'] .bubble.hover .bubble-label {
+  background: var(--accent);
+}
+[data-skin='arcade'] .bubble.on {
+  background: color-mix(in srgb, var(--accent-2) 25%, var(--panel));
+}
+
+/* ———————— 桌宠的小装饰 ———————— */
+[data-skin='arcade'] .pet-thinking {
+  border-radius: 3px;
+  border: 2px solid var(--accent-2);
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--accent-2) 40%, transparent);
+}
+[data-skin='arcade'] .pet-thinking span {
+  border-radius: 0;
+  background: var(--accent);
+}
+[data-skin='arcade'] .pet-zzz {
+  color: var(--accent-2);
+  font-family: var(--font-hud), var(--font);
+}
+[data-skin='arcade'] .pet-dnd {
+  border-radius: 2px;
+  background: var(--accent-2);
+}

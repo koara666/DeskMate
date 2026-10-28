@@ -1,6 +1,7 @@
 // 猜拳：三局两胜。她出什么完全随机（不偷看）。
 import { useEffect, useState } from 'preact/hooks';
 import type { GameProps } from './registry';
+import { ResultBanner, Scoreboard } from './Hud';
 
 type Hand = 'rock' | 'scissors' | 'paper';
 const HANDS: { id: Hand; icon: string; name: string }[] = [
@@ -14,10 +15,12 @@ export function judge(me: Hand, her: Hand): 'win' | 'lose' | 'draw' {
   return me === her ? 'draw' : BEATS[me] === her ? 'win' : 'lose';
 }
 
-export function Rps({ say, finish, random = Math.random }: GameProps & { random?: () => number }) {
+export function Rps({ say, finish, name = '她', random = Math.random }: GameProps & { random?: () => number }) {
   const [score, setScore] = useState({ me: 0, her: 0 });
   const [last, setLast] = useState<{ me: Hand; her: Hand } | null>(null);
   const [over, setOver] = useState(false);
+  const [round, setRound] = useState(0);
+  const [result, setResult] = useState<'win' | 'lose' | 'draw' | null>(null);
 
   useEffect(() => say('start'), []);
 
@@ -28,6 +31,8 @@ export function Rps({ say, finish, random = Math.random }: GameProps & { random?
     const next = { me: score.me + (r === 'win' ? 1 : 0), her: score.her + (r === 'lose' ? 1 : 0) };
     setLast({ me, her });
     setScore(next);
+    setRound((n) => n + 1);
+    setResult(r);
     const vars: [string, string][] = [['分数', `${next.me}:${next.her}`]];
     if (next.me === 2 || next.her === 2) {
       const o = next.me === 2 ? 'win' : 'lose';
@@ -42,20 +47,19 @@ export function Rps({ say, finish, random = Math.random }: GameProps & { random?
 
   return (
     <div class="game rps">
-      <div class="game-score">
-        你 {score.me} : {score.her} 她
-      </div>
+      <Scoreboard me={score.me} her={score.her} name={name} label="三局两胜" />
       <div class="rps-show" aria-live="polite">
         {last ? (
-          <>
+          <div class={`rps-reveal r-${result}`} key={round}>
             <span title="你">{icon(last.me)}</span>
             <span class="vs">vs</span>
             <span title="她">{icon(last.her)}</span>
-          </>
+          </div>
         ) : (
           <span class="muted">出拳吧</span>
         )}
       </div>
+      {over && <ResultBanner result={score.me > score.her ? 'win' : 'lose'} />}
       {over ? (
         <button
           type="button"
@@ -64,6 +68,7 @@ export function Rps({ say, finish, random = Math.random }: GameProps & { random?
             setScore({ me: 0, her: 0 });
             setLast(null);
             setOver(false);
+            setResult(null);
             say('start');
           }}
         >

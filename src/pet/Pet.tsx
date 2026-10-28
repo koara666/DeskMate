@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import type { PetApi } from '../lib/ipc';
 import type { PetInit, PetState } from '../lib/types';
+import { applyTheme } from '../lib/theme';
 
 const DRAG_THRESHOLD = 4;
 /** 点在形象上面这一截算摸头 */
@@ -47,7 +48,13 @@ export function Pet({ api, random = Math.random }: Props) {
   const [patted, setPatted] = useState(0);
 
   const load = useCallback(() => {
-    api.init().then(setInit).catch(() => {});
+    api
+      .init()
+      .then((i) => {
+        setInit(i);
+        applyTheme(i.character.theme);
+      })
+      .catch(() => {});
   }, [api]);
 
   useEffect(() => {

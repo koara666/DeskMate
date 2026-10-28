@@ -1,0 +1,104 @@
+/* 小游戏共用的界面小件：比分牌、结果横幅、棋子。只有出现时的一次性动画。
+   颜色用设计变量，掌机风皮肤（skins/arcade.css）会再覆盖一部分。 */
+.hud {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 260px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.hud-side {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.hud-side.her {
+  justify-content: flex-end;
+}
+.hud-side b {
+  font-size: 20px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.hud-side.me b {
+  color: color-mix(in srgb, var(--accent) 80%, #000);
+}
+.hud-side.her b {
+  color: var(--accent-2, var(--text));
+}
+.hud-side small {
+  font-size: 11px;
+  color: var(--text-weak);
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hud-mid {
+  font-size: 11px;
+  color: var(--text-weak);
+}
+
+.game-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: result-pop 0.35s cubic-bezier(0.3, 1.6, 0.6, 1) both;
+}
+.game-result b {
+  font-size: 22px;
+  letter-spacing: 2px;
+  font-family: var(--font-hud, var(--font));
+}
+.game-result small {
+  font-size: 12px;
+  color: var(--text-weak);
+}
+.game-result.win b {
+  color: color-mix(in srgb, var(--accent) 85%, #000);
+}
+.game-result.lose b {
+  color: var(--accent-2, var(--text));
+}
+.game-result.draw b {
+  color: var(--text-weak);
+}
+@keyframes result-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+/* 猜拳：每一回合亮出来时弹一下 */
+.rps-reveal {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  animation: result-pop 0.25s ease-out both;
+}
+.rps-reveal.r-win span:first-child,
+.rps-reveal.r-lose span:last-child {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 70%, transparent));
+}
+
+/* 井字棋的棋子：你是粉色 ×，她是深色 ○；落子时弹一下 */
+.ttt-cell .piece {
+  display: inline-block;
+  animation: result-pop 0.2s ease-out both;
+}
+.ttt-cell.x {
+  color: color-mix(in srgb, var(--accent) 85%, #000);
+  font-weight: 700;
+}
+.ttt-cell.o {
+  color: var(--accent-2, var(--text));
+  font-weight: 700;
+}
+.ttt-cell:disabled {
+  cursor: default;
+}

@@ -31,6 +31,8 @@ pub struct MenuShow {
     pub below: bool,
     /// 按住右键打开的（松开时才决定选不选）
     pub hold: bool,
+    /// 当前角色的界面皮肤
+    pub theme: crate::character::Theme,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -227,6 +229,10 @@ pub fn open(app: &AppHandle, hold: bool) -> tauri::Result<()> {
         ),
         below,
         hold,
+        theme: st
+            .current_character()
+            .map(|c| c.manifest.theme.sanitized())
+            .unwrap_or_default(),
     };
     let _ = app.emit_to("menu", "menu-show", show);
     crate::daily::show_no_activate(&w);

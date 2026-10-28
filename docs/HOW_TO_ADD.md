@@ -38,6 +38,7 @@
 | `call_from_level` | 否 | 亲密度到几级开始用用户设的昵称称呼他（默认 2） |
 | `diary_style` | 否 | 写日记的风格，一两句话 |
 | `game_style` | 否 | 小游戏里的性格：`{"competitive": true, "on_lose": "输了以后的反应"}` |
+| `theme` | 否 | 这个角色自己的界面（见 1.8）：`{"skin": "arcade", "colors": {"accent": "#e8789a", ...}}` |
 
 表情状态：`idle` 待机、`talking` 说话、`thinking` 思考、`happy` 开心、`sad` 难过/困惑、`sleep` 睡觉。
 待机图片的可选变体（只用在用户图片上，没有就用 `idle`）：`idle_good`（心情好）、`idle_low`（心情差）、`idle_rain`、`idle_snow`、`idle_night`（22 点到 5 点）、`idle_summer`、`idle_winter`。
@@ -157,6 +158,15 @@
 所有场景都可以用 `{称呼}`：亲密度够了是用户设的昵称，否则是「你」。
 
 新增场景时：在 `src-tauri/src/lines.rs` 的 `SCENES` 里登记（场景名和能用的占位符），在 `_common/lines/` 里写通用台词，再更新上表。
+
+### 1.8 角色自己的界面（皮肤 + 颜色，DECISIONS #51）
+- `theme.skin`：程序自带的皮肤，现在有 `default`（通用）和 `arcade`（掌机 / 像素风，七海千秋在用）。不认识的当 `default`。
+- `theme.colors`：只认这些名字：`accent`（强调色）、`accent-2`（第二颜色：框、标题栏）、`panel` / `panel-2`（底色）、`text` / `text-weak`（文字）、`border`、`user-bg`（用户消息底色）、`dark-panel` / `dark-text`（深色模式的底色和文字）；值只能是 `#rgb` / `#rrggbb` / `#rrggbbaa`。不写的用皮肤的默认值。
+- **新做一套皮肤**（要改代码）：
+  1. 新建 `src/styles/skins/<名字>.css`，所有规则都写在 `:root[data-skin='<名字>']` / `[data-skin='<名字>'] …` 下面；颜色用 `var(--t-accent, 默认值)` 这样取，深色模式写在 `@media (prefers-color-scheme: dark)` 里。参考 `arcade.css`。
+  2. 在 `src/pet/main.tsx`、`src/chat/main.tsx`、`src/menu/main.tsx` 里 import 它。
+  3. 在 `src-tauri/src/character.rs` 的 `SKINS` 里加上名字。
+  4. 不要用常驻动画、不要打包字体和图片、不要 `url()` 加载外部资源。
 
 ### 1.7 测试
 `cargo test character` 里的 `all_builtin_packs_are_valid` 会检查所有内置角色包；新增内置角色时把 id 加进去。

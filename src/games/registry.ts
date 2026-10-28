@@ -9,6 +9,8 @@ export interface GameProps {
   /** 一局结束（从用户的角度） */
   finish: (outcome: Parameters<GameApi['finish']>[1]) => void;
   api: GameApi;
+  /** 她的名字（比分牌上用） */
+  name?: string;
 }
 
 export interface GameInfo {

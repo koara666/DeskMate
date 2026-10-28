@@ -97,6 +97,61 @@ pub struct Manifest {
     /// 玩小游戏时的性格
     #[serde(default)]
     pub game_style: GameStyle,
+    /// 这个角色自己的一套界面（v2.1 P13，DECISIONS #51）：皮肤 + 颜色
+    #[serde(default)]
+    pub theme: Theme,
+}
+
+/// 程序自带的界面皮肤（样式写在 `src/styles/skins/` 里，角色包只能选，不能带自己的样式代码）
+pub const SKINS: [&str; 2] = ["default", "arcade"];
+/// 角色包可以改的颜色
+pub const THEME_COLORS: [&str; 10] = [
+    "accent",
+    "accent-2",
+    "panel",
+    "panel-2",
+    "text",
+    "text-weak",
+    "border",
+    "user-bg",
+    "dark-panel",
+    "dark-text",
+];
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Theme {
+    /// 皮肤：default（通用）/ arcade（掌机像素风）
+    pub skin: String,
+    /// 颜色变量名 → #rgb / #rrggbb / #rrggbbaa
+    pub colors: BTreeMap<String, String>,
+}
+
+/// 只认 `#` 加 3 / 4 / 6 / 8 位十六进制（防止往样式里塞别的东西）
+pub fn valid_color(c: &str) -> bool {
+    let Some(h) = c.strip_prefix('#') else {
+        return false;
+    };
+    matches!(h.len(), 3 | 4 | 6 | 8) && h.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+impl Theme {
+    /// 不认识的皮肤当 default，不认识的颜色名和坏的颜色值丢掉
+    pub fn sanitized(&self) -> Theme {
+        Theme {
+            skin: if SKINS.contains(&self.skin.as_str()) {
+                self.skin.clone()
+            } else {
+                "default".into()
+            },
+            colors: self
+                .colors
+                .iter()
+                .filter(|(k, v)| THEME_COLORS.contains(&k.as_str()) && valid_color(v))
+                .map(|(k, v)| (k.clone(), v.to_ascii_lowercase()))
+                .collect(),
+        }
+    }
 }
 
 fn default_call_from() -> u8 {
@@ -552,6 +607,30 @@ pub fn pick_line(list: &[String], fallback: &str, seed: u64) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn theme_is_sanitized() {
+        let t = Theme {
+            skin: "../evil".into(),
+            colors: [
+                ("accent".to_string(), "#E8789A".to_string()),
+                (
+                    "panel".to_string(),
+                    "red; background: url(http://x)".to_string(),
+                ),
+                ("unknown".to_string(), "#fff".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        }
+        .sanitized();
+        assert_eq!(t.skin, "default");
+        assert_eq!(t.colors.len(), 1);
+        assert_eq!(t.colors["accent"], "#e8789a");
+        assert!(valid_color("#abc") && valid_color("#aabbccdd"));
+        assert!(!valid_color("#abcde") && !valid_color("abc") && !valid_color("#ggg"));
+    }
+
     use super::*;
     use std::fs;
 

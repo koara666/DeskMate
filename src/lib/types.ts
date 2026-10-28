@@ -17,6 +17,14 @@ export interface CharacterView {
   id: string;
   name: string;
   color: string;
+  /** 角色自己的界面（皮肤 + 颜色）；测试里可以不给 */
+  theme?: Theme;
+}
+
+/** 角色的界面：skin = 程序自带的皮肤（default / arcade），colors = 颜色变量 */
+export interface Theme {
+  skin: string;
+  colors: Record<string, string>;
 }
 
 export interface Appearance {
@@ -100,6 +108,7 @@ export interface MenuShow {
   below: boolean;
   /** 按住右键打开的 */
   hold: boolean;
+  theme?: Theme;
 }
 
 export interface CompanionStatus {

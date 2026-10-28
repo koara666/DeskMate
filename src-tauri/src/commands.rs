@@ -32,12 +32,15 @@ pub struct CharacterView {
     pub id: String,
     pub name: String,
     pub color: String,
+    /// 角色自己的界面（皮肤 + 颜色，已检查过）
+    pub theme: character::Theme,
 }
 
 fn character_view(state: &AppState) -> CharacterView {
     state
         .current_character()
         .map(|c| CharacterView {
+            theme: c.manifest.theme.sanitized(),
             id: c.manifest.id,
             name: c.manifest.name,
             color: c.manifest.color,
@@ -46,6 +49,7 @@ fn character_view(state: &AppState) -> CharacterView {
             id: String::new(),
             name: "小伙伴".into(),
             color: String::new(),
+            theme: character::Theme::default().sanitized(),
         })
 }
 

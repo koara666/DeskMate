@@ -1,6 +1,7 @@
 // 21 点：她当庄家。你要牌 / 停牌；她小于 17 点就要牌。
 import { useEffect, useState } from 'preact/hooks';
 import type { GameProps } from './registry';
+import { ResultBanner } from './Hud';
 import { dealerPlay, isBlackjack, newDeck, score, settle, type Card } from './logic/blackjack';
 
 function CardView({ c, hidden }: { c: Card; hidden?: boolean }) {
@@ -82,7 +83,7 @@ export function Blackjack({ say, finish, random = Math.random }: GameProps & { r
       </div>
       {over ? (
         <div class="bj-actions">
-          <b>{over === 'win' ? '你赢了' : over === 'lose' ? '她赢了' : '平局'}</b>
+          <ResultBanner result={over} />
           <button type="button" class="btn btn-small" onClick={deal}>
             再来一局
           </button>

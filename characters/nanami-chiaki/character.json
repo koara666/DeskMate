@@ -8,8 +8,30 @@
   "description": "超高校级的游戏玩家，说话慢吞吞、总是有点困，却总能温柔地给出关键提示。",
   "source": "原作：《弹丸论破》系列（同人角色设定，与官方无关）",
   "color": "#e88fb0",
+  "theme": {
+    "skin": "arcade",
+    "colors": {
+      "accent": "#e8789a",
+      "accent-2": "#2f5b5c",
+      "panel": "#fffaf6",
+      "panel-2": "#f7ece6",
+      "text": "#24353a",
+      "text-weak": "#62767a",
+      "border": "#c9d6d4",
+      "user-bg": "#ffe1ea",
+      "dark-panel": "#1d2e30",
+      "dark-text": "#eef3f2"
+    }
+  },
   "birthday": "03-14",
-  "affinity_titles": ["刚认识的人", "一起玩过几局的人", "游戏搭档", "常驻队友", "很重要的同伴", "最重要的人"],
+  "affinity_titles": [
+    "刚认识的人",
+    "一起玩过几局的人",
+    "游戏搭档",
+    "常驻队友",
+    "很重要的同伴",
+    "最重要的人"
+  ],
   "call_from_level": 2,
   "diary_style": "像游戏的通关记录：短句、平平的语气，用存档、关卡、经验值打比方；最后常常写到自己困了。",
   "game_style": {

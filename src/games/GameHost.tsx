@@ -4,6 +4,7 @@ import type { ComponentType } from 'preact';
 import type { GameApi } from '../lib/ipc';
 import type { GameStats } from '../lib/types';
 import { GAMES, type GameInfo, type GameProps } from './registry';
+import '../styles/games.css';
 
 interface Props {
   api: GameApi;
@@ -41,6 +42,7 @@ export function GameHost({ api, name, onClose, initial }: Props) {
   const props: GameProps | null = game
     ? {
         api,
+        name,
         say: (event, vars) => {
           const n = ++seq.current;
           api

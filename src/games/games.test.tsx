@@ -48,7 +48,7 @@ describe('小游戏', () => {
     // random() = 0.5：她总是出剪刀，你出石头连赢两局
     render(<Rps api={f.api} say={(e) => f.said.push(e)} finish={(o) => f.finished.push(o)} random={() => 0.5} />);
     fireEvent.click(screen.getByLabelText('石头'));
-    expect(screen.getByText('你 1 : 0 她')).toBeTruthy();
+    expect(screen.getByLabelText('比分：你 1，她 0')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('石头'));
     expect(f.finished).toEqual(['win']);
     expect(f.said).toEqual(['start', 'round_win', 'win']);
