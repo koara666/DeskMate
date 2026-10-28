@@ -34,8 +34,13 @@
 | `expressions` | 否 | 状态 → 图片文件名（不含扩展名），如 `{"sad": "confused"}`；不写就用同名图片 |
 | `lines` | 否 | 固定台词（不调用模型，省钱）：`greeting`、`error`、`offline`、`budget`、`not_configured`，每项是字符串数组，随机挑一句 |
 | `birthday` | 否 | 角色自己的生日 `MM-DD`，那天每日播报里会提到 |
+| `affinity_titles` | 否 | 6 个字符串：亲密度 0~5 级时，用户对她来说是什么人（不写用通用的「刚认识的人……最重要的人」） |
+| `call_from_level` | 否 | 亲密度到几级开始用用户设的昵称称呼他（默认 2） |
+| `diary_style` | 否 | 写日记的风格，一两句话 |
+| `game_style` | 否 | 小游戏里的性格：`{"competitive": true, "on_lose": "输了以后的反应"}` |
 
 表情状态：`idle` 待机、`talking` 说话、`thinking` 思考、`happy` 开心、`sad` 难过/困惑、`sleep` 睡觉。
+待机图片的可选变体（只用在用户图片上，没有就用 `idle`）：`idle_good`（心情好）、`idle_low`（心情差）、`idle_rain`、`idle_snow`、`idle_night`（22 点到 5 点）、`idle_summer`、`idle_winter`。
 
 ### 1.3 persona.md 写法
 按这几节写（参考 `characters/makise-kurisu/persona.md`）：身份背景（简短）、性格关键词、说话方式与语气、称呼用户的方式、口癖倾向、会做的事、不会做的事、示范对话（5~10 段，**必须原创，不能摘抄原作台词**，标题里写「原创」）。
@@ -138,6 +143,15 @@
 | `care.water` | 喝水 | — |
 | `care.late_night` | 深夜还在电脑前 | — |
 | `care.meal` | 到饭点了 | `{饭}`（午饭 / 晚饭） |
+| `touch.head` / `touch.head_many` | 摸头 / 连着摸了好几下 | `{称呼}` |
+| `touch.body` | 点身体打开聊天时（一半的时候说） | `{称呼}` |
+| `touch.drag` | 被拖动 | `{称呼}` |
+| `affinity.level_up` | 亲密度升级（用 `[亲密度N]` 写每一级的） | `{称呼}` |
+| `event.share` / `event.question` | 随机小事件：分享 / 提问 | `{称呼}` |
+| `event.choice` | 随机小事件：给选项。格式 `问题 \| 选项 => 回应 \| 选项 => 回应`（2~4 个） | `{称呼}` |
+| `diary.open` / `diary.close` | 没有模型时拼日记的开头 / 结尾 | `{称呼}`（结尾） |
+
+所有场景都可以用 `{称呼}`：亲密度够了是用户设的昵称，否则是「你」。
 
 新增场景时：在 `src-tauri/src/lines.rs` 的 `SCENES` 里登记（场景名和能用的占位符），在 `_common/lines/` 里写通用台词，再更新上表。
 
