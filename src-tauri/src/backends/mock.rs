@@ -127,6 +127,19 @@ pub fn reply_for(req: &ChatRequest) -> Result<(String, Duration), BackendError> 
     if req.system_text().contains(crate::memory::extract::MARKER) {
         return Ok((mock_extraction(req), Duration::ZERO));
     }
+    if req.system_text().contains(crate::games_llm::MARKER) {
+        let last = req
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::User)
+            .map(|m| m.content.as_str())
+            .unwrap_or("");
+        return Ok((
+            crate::games_llm::mock_reply(&req.system_text(), last),
+            Duration::ZERO,
+        ));
+    }
     if req.system_text().contains(crate::reminders::model::MARKER) {
         // 提醒解析：mock 不会真的理解，只说「是提醒但没听懂」
         return Ok((

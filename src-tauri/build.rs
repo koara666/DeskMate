@@ -76,6 +76,9 @@ const COMMANDS: &[&str] = &[
     "game_stats",
     "fortune_today",
     "fortune_draw",
+    "llm_game_start",
+    "llm_game_turn",
+    "llm_game_give_up",
 ];
 
 fn main() {

@@ -82,7 +82,10 @@ export function GameHost({ api, name, onClose }: Props) {
               <li key={g.id}>
                 <button type="button" class="game-pick" onClick={() => open(g)}>
                   <b>{g.name}</b>
-                  <small>{g.desc}</small>
+                  <small>
+                    {g.desc}
+                    {g.needsModel ? ' · 需要模型' : ''}
+                  </small>
                   {s && s.played > 0 && (
                     <small class="game-stat">
                       {g.id === 'fortune' ? `抽过 ${s.played} 次` : `你赢 ${s.win} · 她赢 ${s.lose} · 平 ${s.draw}`}

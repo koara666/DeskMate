@@ -45,6 +45,8 @@ pub struct AppState {
     pub care: crate::care::CareRuntime,
     /// 触摸反应、等用户选择的小事件
     pub companion: crate::companion::TouchState,
+    /// 需要模型的小游戏（成语接龙、海龟汤、二十问）的进行中的局
+    pub llm_games: crate::games_llm::LlmGames,
 }
 
 impl AppState {
@@ -79,6 +81,7 @@ impl AppState {
             activity: Default::default(),
             care: Default::default(),
             companion: Default::default(),
+            llm_games: Default::default(),
         }
     }
 

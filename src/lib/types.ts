@@ -123,6 +123,23 @@ export interface Fortune {
   comment: string;
 }
 
+export interface LlmGameStart {
+  session: string;
+  intro: string;
+  puzzle: string | null;
+  limit: number;
+}
+
+export interface LlmGameTurn {
+  line: string;
+  answer: string | null;
+  idiom: string | null;
+  ended: GameOutcome | null;
+  reveal: string | null;
+  asked: number;
+  limit: number;
+}
+
 export interface Diary {
   id: number;
   day: string;

@@ -17,6 +17,8 @@ export interface GameInfo {
   desc: string;
   /** 按需加载 */
   load: () => Promise<ComponentType<GameProps>>;
+  /** 需要连上模型才能玩 */
+  needsModel?: boolean;
 }
 
 export const GAMES: GameInfo[] = [
@@ -24,4 +26,7 @@ export const GAMES: GameInfo[] = [
   { id: 'ttt', name: '井字棋', desc: '三个连成一线就赢，可以选难度', load: () => import('./Ttt').then((m) => m.Ttt) },
   { id: 'blackjack', name: '21 点', desc: '她当庄家，不超过 21 点、比她大就赢', load: () => import('./Blackjack').then((m) => m.Blackjack) },
   { id: 'fortune', name: '今日运势', desc: '每天抽一支签', load: () => import('./Fortune').then((m) => m.FortuneGame) },
+  { id: 'idiom', name: '成语接龙', desc: '接上一个成语的最后一个字', needsModel: true, load: () => import('./LlmGames').then((m) => m.Idiom) },
+  { id: 'turtle', name: '海龟汤', desc: '问是非题，猜出故事背后的真相（题目原创）', needsModel: true, load: () => import('./LlmGames').then((m) => m.Turtle) },
+  { id: 'twenty', name: '二十问', desc: '她想一个东西，你用 20 个是非题猜出来', needsModel: true, load: () => import('./LlmGames').then((m) => m.Twenty) },
 ];

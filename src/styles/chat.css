@@ -655,3 +655,70 @@ body,
   line-height: 1.6;
   margin: 0;
 }
+
+/* 需要模型的小游戏 */
+.game.llm {
+  align-items: stretch;
+  gap: 6px;
+}
+.llm-intro {
+  font-size: 12px;
+  color: var(--text-weak);
+  margin: 0;
+}
+.llm-puzzle {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.llm-log {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.llm-entry {
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  max-width: 90%;
+}
+.llm-entry.me {
+  align-self: flex-end;
+  background: var(--user-bg);
+}
+.llm-entry.her {
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+.llm-input {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+}
+.llm-actions {
+  display: flex;
+  gap: 6px;
+}
+.llm-error {
+  font-size: 12px;
+  color: var(--danger);
+}
+.llm-end {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.llm-reveal {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+}

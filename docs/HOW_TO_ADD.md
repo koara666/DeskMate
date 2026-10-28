@@ -187,6 +187,8 @@
 2. 在 `src/games/registry.ts` 的 `GAMES` 里加一行：`id`（小写字母 / 数字 / 下划线，会用在台词场景名里）、名字、一句介绍、`load: () => import('./你的组件')`。
 3. （可选）给角色写专门的台词：`lines/*.md` 里加 `## game.<id>.<事件>`；不写就用通用的 `game.<事件>`。
 4. （可选）在 `src-tauri/src/diary.rs` 的 `game_name` 里加中文名，日记里就会写游戏名而不是 id。
+- 需要模型主持的游戏（参考成语接龙、海龟汤、二十问）：后端加在 `src-tauri/src/games_llm.rs`（会话、谜底只放后端、模型只输出 JSON、本地检查规则），前端参考 `src/games/LlmGames.tsx`，注册表里标 `needsModel: true`。
+- 加海龟汤题目：在 `src-tauri/data/turtle.md` 里按格式加一道，**必须原创**。
 5. `npm run check`。
 
 ## 4. 新增前端可调用的命令

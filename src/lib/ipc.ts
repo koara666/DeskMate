@@ -3,6 +3,8 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
+  LlmGameStart,
+  LlmGameTurn,
   Fortune,
   GameEvent,
   GameOutcome,
@@ -82,6 +84,10 @@ export interface GameApi {
   stats(): Promise<GameStats[]>;
   fortuneToday(): Promise<Fortune | null>;
   fortuneDraw(): Promise<Fortune>;
+  /** 需要模型的小游戏 */
+  llmStart(game: string): Promise<LlmGameStart>;
+  llmTurn(session: string, kind: 'ask' | 'guess' | 'idiom', input: string): Promise<LlmGameTurn>;
+  llmGiveUp(session: string): Promise<LlmGameTurn>;
 }
 
 export const gameApi: GameApi = {
@@ -90,6 +96,9 @@ export const gameApi: GameApi = {
   stats: () => invoke<GameStats[]>('game_stats'),
   fortuneToday: () => invoke<Fortune | null>('fortune_today'),
   fortuneDraw: () => invoke<Fortune>('fortune_draw'),
+  llmStart: (game) => invoke<LlmGameStart>('llm_game_start', { game }),
+  llmTurn: (session, kind, input) => invoke<LlmGameTurn>('llm_game_turn', { session, kind, input }),
+  llmGiveUp: (session) => invoke<LlmGameTurn>('llm_game_give_up', { session }),
 };
 
 function channel(onEvent: (e: ChatEvent) => void): Channel<ChatEvent> {

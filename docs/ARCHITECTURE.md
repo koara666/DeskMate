@@ -44,7 +44,7 @@ docs/                          文档（见 AGENTS.md 文档地图）
 characters/<id>/               内置角色包（character.json、persona.md、可选 canon.md、assets/placeholder.svg）
 characters/_fallback.svg       没有任何图片时的通用占位形象
 characters/_common/lines/      通用台词（角色没写的场景用；`_` 开头的目录不是角色）
-src-tauri/data/                编进程序的小数据：cities.tsv（常用城市坐标）、holidays.tsv（节假日）
+src-tauri/data/                编进程序的小数据：cities.tsv（常用城市坐标）、holidays.tsv（节假日）、turtle.md（原创海龟汤）、twenty.txt（二十问谜底）
 pet.html chat.html settings.html   三个窗口的入口
 src/
   pet/Pet.tsx                  桌宠：形象、状态、点击/拖动/右键
@@ -91,6 +91,7 @@ src-tauri/src/
                                classify.rs（进程名 / 路径 / 标题 → 分类，纯函数）、tracker.rs（会话状态机）、
                                win.rs（前台窗口与切换事件）、log.rs（活动日志汇总）
   companion.rs                 角色感：心情与亲密度（kv `bond:<角色>`）、触摸反应、随机小事件与选项、聊天里记下生日、待机图片变体
+  games_llm.rs                 需要模型的小游戏（成语接龙、海龟汤、二十问）：会话在内存里、谜底只在后端、模型输出 JSON + 本地规则检查
   games.rs                     小游戏后端：关键时刻的台词（game.<游戏>.<事件> → game.<事件>）、战绩、心情和亲密度、每日抽签
   diary.rs                     桌宠日记：素材（活动汇总、聊天摘要、提醒、心情）→ 模型或模板 → diaries 表 + 记忆
   care.rs                      日常关怀：久坐、喝水、深夜、吃饭（纯函数 due + 每 30 秒检查）

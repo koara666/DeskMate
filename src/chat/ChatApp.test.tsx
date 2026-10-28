@@ -74,6 +74,9 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMess
       stats: async () => [],
       fortuneToday: async () => null,
       fortuneDraw: async () => ({ day: '', level: '', name: '', color: '', item: '', direction: '', comment: '' }),
+      llmStart: async () => ({ session: 's', intro: '', puzzle: null, limit: 0 }),
+      llmTurn: async () => ({ line: '', answer: null, idiom: null, ended: null, reveal: null, asked: 0, limit: 0 }),
+      llmGiveUp: async () => ({ line: '', answer: null, idiom: null, ended: 'lose', reveal: null, asked: 0, limit: 0 }),
     },
     choose: async (_id, index) => (index === 0 ? '那我陪着你。' : '休息一下也好。'),
     saveReminder: async (r) => {

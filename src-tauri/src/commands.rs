@@ -415,6 +415,33 @@ pub fn fortune_draw(app: AppHandle) -> crate::games::Fortune {
     crate::games::fortune_draw(&app)
 }
 
+/// 需要模型的小游戏：开始一局（没有可用模型时返回原因）
+#[tauri::command]
+pub fn llm_game_start(app: AppHandle, game: String) -> CmdResult<crate::games_llm::Start> {
+    crate::daily::interact(&app);
+    crate::games_llm::start(&app, &game)
+}
+
+/// 一步：kind = ask（提问）/ guess（猜）/ idiom（接龙）
+#[tauri::command]
+pub async fn llm_game_turn(
+    app: AppHandle,
+    session: String,
+    kind: String,
+    input: String,
+) -> CmdResult<crate::games_llm::Turn> {
+    if session.len() > 64 || !matches!(kind.as_str(), "ask" | "guess" | "idiom") {
+        return Err("参数不对".into());
+    }
+    crate::daily::interact(&app);
+    crate::games_llm::turn(&app, &session, &kind, &input).await
+}
+
+#[tauri::command]
+pub fn llm_game_give_up(app: AppHandle, session: String) -> CmdResult<crate::games_llm::Turn> {
+    crate::games_llm::give_up(&app, &session)
+}
+
 /// 前端上报主动发言的结果：用户理会了（engaged）或气泡无人理会自动收起了
 #[tauri::command]
 pub fn proactive_feedback(state: State<'_, AppState>, engaged: bool) {

@@ -21,6 +21,12 @@ function fakeApi() {
     stats: async () => [{ game: 'rps', win: 3, lose: 1, draw: 0, played: 4 }],
     fortuneToday: async () => null,
     fortuneDraw: async () => ({ day: 'd', level: 'great', name: '大吉', color: '樱花粉', item: '热茶', direction: '东', comment: '好日子' }),
+    llmStart: async (g) => ({ session: 's1', intro: `开始${g}`, puzzle: g === 'turtle' ? '汤面内容' : null, limit: g === 'twenty' ? 20 : 30 }),
+    llmTurn: async (_s, kind, input) =>
+      kind === 'idiom'
+        ? { line: '接上啦', answer: null, idiom: `${input.slice(-1)}马当先`, ended: null, reveal: null, asked: 2, limit: 0 }
+        : { line: '嗯', answer: '是', idiom: null, ended: null, reveal: null, asked: 1, limit: 30 },
+    llmGiveUp: async () => ({ line: '揭晓', answer: null, idiom: null, ended: 'lose', reveal: '汤底内容', asked: 1, limit: 30 }),
   };
   return { api, said, finished };
 }
@@ -70,5 +76,27 @@ describe('小游戏', () => {
     await flush();
     expect(screen.getByText('大吉')).toBeTruthy();
     expect(screen.getByText('好日子')).toBeTruthy();
+  });
+
+  it('海龟汤：显示汤面，提问、揭晓汤底；成语接龙显示她接的成语', async () => {
+    const { Turtle, Idiom } = await import('./LlmGames');
+    const f = fakeApi();
+    render(<Turtle api={f.api} say={() => {}} finish={() => {}} />);
+    expect(await screen.findByText('汤面内容')).toBeTruthy();
+    fireEvent.input(screen.getByLabelText('你的话'), { target: { value: '她是一个人吗' } });
+    fireEvent.click(screen.getByRole('button', { name: '提问' }));
+    await flush();
+    expect(screen.getByText('是 — 嗯')).toBeTruthy();
+    expect(screen.getByText('已经问了 1 / 30')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '揭晓' }));
+    await flush();
+    expect(screen.getByText('汤底内容')).toBeTruthy();
+    cleanup();
+    render(<Idiom api={f.api} say={() => {}} finish={() => {}} />);
+    await screen.findByText('开始idiom');
+    fireEvent.input(screen.getByLabelText('你的话'), { target: { value: '一心一意' } });
+    fireEvent.click(screen.getByRole('button', { name: '接龙' }));
+    await flush();
+    expect(screen.getByText('意马当先 — 接上啦')).toBeTruthy();
   });
 });
