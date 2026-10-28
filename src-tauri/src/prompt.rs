@@ -4,7 +4,7 @@
 //! 1. 基础规则 + 角色设定 + 用户自定义要求 + 禁词      （可缓存，几乎不变）
 //! 2. 用户档案（关于用户的稳定事实）                  （可缓存，偶尔变）
 //! 3. 最近对话（在 token 预算内从新到旧保留）+ 本轮用户消息
-//! 4. 本轮检索到的相关记忆 + 当前时间：每轮都变，放进 `ChatRequest::context`，
+//! 4. 本轮想起的角色往事（canon.md）+ 检索到的相关记忆 + 当前时间：每轮都变，放进 `ChatRequest::context`，
 //!    由后端附在最后一条用户消息前面——这样系统提示词和历史前缀逐字节不变，提示缓存才能命中。
 
 use crate::backends::{ChatMessage, ChatRequest, Role, SystemBlock, estimate_tokens};
@@ -45,6 +45,8 @@ pub struct PromptParts<'a> {
     pub user_rules: &'a [String],
     pub banned_words: &'a [String],
     pub profile_facts: &'a [String],
+    /// 本轮想起的角色原作往事（「标题：正文」，已按预算取好，见 `canon::recall`）
+    pub canon: &'a [String],
     pub memories: &'a [MemorySnippet],
     /// 程序给模型的提示（比如「刚才按用户要求删除了记忆」），放在每轮的背景资料里
     pub notes: &'a [String],
@@ -127,6 +129,14 @@ pub fn build(parts: &PromptParts<'_>, budget: PromptBudget) -> ChatRequest {
     }
 
     let mut dynamic = String::new();
+    if !parts.canon.is_empty() {
+        dynamic
+            .push_str("【你自己的往事】（你亲身经历过的事，用自己的话自然地提，不要整段复述）\n");
+        for c in parts.canon {
+            dynamic.push_str(&format!("- {}\n", c.trim()));
+        }
+        dynamic.push('\n');
+    }
     let mut mem_lines = String::new();
     for m in parts.memories {
         let tag = if m.untrusted {
@@ -259,6 +269,23 @@ mod tests {
         assert!(!req.system[0].text.contains("禁用词"));
         assert!(!req.system[0].text.contains("额外要求"));
         assert_eq!(req.messages, vec![ChatMessage::user("你好")]);
+    }
+
+    #[test]
+    fn canon_goes_into_per_turn_context_not_system() {
+        let canon = vec!["父亲：关系破裂".to_string()];
+        let req = build(
+            &PromptParts {
+                canon: &canon,
+                ..base()
+            },
+            PromptBudget::default(),
+        );
+        let ctx = req.context.as_deref().unwrap();
+        assert!(ctx.contains("【你自己的往事】") && ctx.contains("- 父亲：关系破裂"));
+        assert!(ctx.find("往事").unwrap() < ctx.find("当前时间").unwrap());
+        // 往事每轮不同，放进系统提示词会让提示缓存失效
+        assert!(!req.system.iter().any(|b| b.text.contains("关系破裂")));
     }
 
     #[test]

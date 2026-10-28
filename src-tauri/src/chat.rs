@@ -4,6 +4,7 @@ use crate::backends::{
     self, BackendConfig, BackendError, ChatBackend, ChatMessage, ChatOutcome, ChatRequest,
     FinishReason, Role,
 };
+use crate::canon;
 use crate::character::{self, Character};
 use crate::filter::{BannedWords, StreamFilter};
 use crate::memory::{self, conversation, forget};
@@ -431,6 +432,18 @@ pub async fn run_turn_with_notes(
             .as_ref()
             .map(|c| (c.manifest.name.clone(), c.persona.clone()))
             .unwrap_or_else(|| ("小伙伴".into(), String::new()));
+        // 角色往事：按用户这句话和角色上一句回复里的关键词取用
+        let last_reply = turn
+            .history
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::Assistant)
+            .map(|m| m.content.as_str())
+            .unwrap_or("");
+        let canon = character
+            .as_ref()
+            .map(|c| canon::recall(&c.canon, &user_text, last_reply))
+            .unwrap_or_default();
         let now_text = now_text();
         let parts = PromptParts {
             character_name: &name,
@@ -438,6 +451,7 @@ pub async fn run_turn_with_notes(
             user_rules: &prefs.custom_rules,
             banned_words: &prefs.banned_words,
             profile_facts: &turn.profile,
+            canon: &canon,
             memories: &turn.memories,
             notes: &turn.notes,
             history: &turn.history,

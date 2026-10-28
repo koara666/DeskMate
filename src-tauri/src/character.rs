@@ -3,7 +3,7 @@
 //! 角色包来源（同 id 时后者覆盖前者）：
 //! 1. 内置：安装目录 `characters/<id>/`（仓库里的 `characters/`）
 //! 2. 用户：`%APPDATA%\DeskMate\characters\<id>\`
-//!    - 有 `character.json` + `persona.md`：完整的用户角色包（新增角色或替换内置设定）
+//!    - 有 `character.json` + `persona.md`（+ 可选的 `canon.md`）：完整的用户角色包（新增角色或替换内置设定）
 //!    - 只有 `assets/`：给内置角色换上用户自己的图片
 //!
 //! 安全（防恶意角色包，见 SECURITY.md T6）：id 和图片名只允许 `[a-z0-9_-]`；
@@ -13,12 +13,16 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use crate::canon::{self, CanonEntry};
 
 /// 桌宠的表情状态
 pub const STATES: [&str; 6] = ["idle", "talking", "thinking", "happy", "sad", "sleep"];
 
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_PERSONA_BYTES: u64 = 64 * 1024;
+const MAX_CANON_BYTES: u64 = 64 * 1024;
 const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_SVG_BYTES: u64 = 256 * 1024;
 const IMAGE_EXTS: [&str; 5] = ["png", "webp", "gif", "jpg", "jpeg"];
@@ -84,6 +88,8 @@ pub enum Origin {
 pub struct Character {
     pub manifest: Manifest,
     pub persona: String,
+    /// 原作往事（canon.md，可选），按关键词取用，见 `canon.rs`
+    pub canon: Arc<Vec<CanonEntry>>,
     pub origin: Origin,
     /// 内置角色包目录（读取占位 SVG）
     pub builtin_dir: Option<PathBuf>,
@@ -165,6 +171,21 @@ pub fn load_pack(dir: &Path) -> Result<(Manifest, String), CharacterError> {
     Ok((manifest, persona))
 }
 
+/// 读取角色包里可选的 canon.md。没有就是空的；读不了只记日志，不影响角色本身。
+fn load_canon(dir: &Path) -> Arc<Vec<CanonEntry>> {
+    let path = dir.join("canon.md");
+    if !path.exists() {
+        return Arc::default();
+    }
+    match read_limited(&path, MAX_CANON_BYTES) {
+        Ok(raw) => Arc::new(canon::parse(&String::from_utf8_lossy(&raw))),
+        Err(e) => {
+            log::warn!("{} 的往事文件无效，已忽略：{e}", dir.display());
+            Arc::default()
+        }
+    }
+}
+
 /// 扫描内置目录和用户目录，返回全部可用角色（按 id 排序）。坏掉的角色包记日志后跳过。
 pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character> {
     let mut map: BTreeMap<String, Character> = BTreeMap::new();
@@ -178,6 +199,7 @@ pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character>
                         Character {
                             manifest,
                             persona,
+                            canon: load_canon(&dir),
                             origin: Origin::Builtin,
                             builtin_dir: Some(dir.clone()),
                             user_dir: user_root.join(&id),
@@ -201,6 +223,7 @@ pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character>
                     Character {
                         manifest,
                         persona,
+                        canon: load_canon(&dir),
                         origin: Origin::User,
                         builtin_dir,
                         user_dir: dir.clone(),
@@ -501,6 +524,39 @@ mod tests {
     }
 
     #[test]
+    fn canon_is_optional_and_size_limited() {
+        let b = tempfile::tempdir().unwrap();
+        let u = tempfile::tempdir().unwrap();
+        let d = write_pack(b.path(), "cat", r#"{"id":"cat","name":"猫"}"#);
+        fs::write(d.join("canon.md"), "## 往事\n关键词：小鱼\n吃过小鱼。\n").unwrap();
+        let d = write_pack(b.path(), "dog", r#"{"id":"dog","name":"狗"}"#);
+        fs::write(d.join("canon.md"), "x".repeat(MAX_CANON_BYTES as usize + 1)).unwrap();
+        write_pack(b.path(), "owl", r#"{"id":"owl","name":"猫头鹰"}"#);
+        let all = load_all(Some(b.path()), u.path());
+        assert_eq!(all.len(), 3, "往事文件坏了不影响角色本身");
+        let canon_of = |id: &str| {
+            all.iter()
+                .find(|c| c.manifest.id == id)
+                .unwrap()
+                .canon
+                .len()
+        };
+        assert_eq!(canon_of("cat"), 1);
+        assert_eq!(canon_of("dog"), 0);
+        assert_eq!(canon_of("owl"), 0);
+        // 用户完整角色包覆盖内置时，用的是用户包自己的往事
+        write_pack(u.path(), "cat", r#"{"id":"cat","name":"用户猫"}"#);
+        let all = load_all(Some(b.path()), u.path());
+        assert!(
+            all.iter()
+                .find(|c| c.manifest.id == "cat")
+                .unwrap()
+                .canon
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn sniffs_images() {
         assert_eq!(sniff_image(b"\x89PNG\r\n\x1a\nxxxx"), Some("image/png"));
         assert_eq!(sniff_image(b"RIFF\0\0\0\0WEBPVP8 "), Some("image/webp"));
@@ -606,6 +662,19 @@ mod tests {
                 "{id} 缺少占位形象"
             );
             assert!(user_image_states(c).is_empty());
+        }
+        // 有原作往事的角色：每条都能被关键词想起
+        for id in ["makise-kurisu", "nanami-chiaki"] {
+            let c = all.iter().find(|c| c.manifest.id == id).unwrap();
+            assert!(c.canon.len() >= 10, "{id} 往事太少");
+            for e in c.canon.iter() {
+                let hit = crate::canon::recall(&c.canon, &e.keywords[0], "");
+                assert!(
+                    hit.iter().any(|h| h.starts_with(&format!("{}：", e.title))),
+                    "{id} 的「{}」用第一个关键词想不起来（太长或被别的条目挤掉）",
+                    e.title
+                );
+            }
         }
     }
 

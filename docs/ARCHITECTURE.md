@@ -38,7 +38,7 @@
 ```
 AGENTS.md / CLAUDE.md          agent 规则
 docs/                          文档（见 AGENTS.md 文档地图）
-characters/<id>/               内置角色包（character.json、persona.md、assets/placeholder.svg）
+characters/<id>/               内置角色包（character.json、persona.md、可选 canon.md、assets/placeholder.svg）
 characters/_fallback.svg       没有任何图片时的通用占位形象
 pet.html chat.html settings.html   三个窗口的入口
 src/
@@ -58,6 +58,7 @@ src-tauri/src/
   commands.rs settings_cmds.rs 前端命令（只做校验和转发）
   chat.rs prompt.rs filter.rs  一轮对话编排、提示词组装、禁词流式过滤
   character.rs                 角色包加载与校验（只读）
+  canon.rs                     角色原作往事（canon.md）解析与按关键词取用
   backends/                    mod.rs（trait、注册表、配置、价格）、http.rs、sse.rs、
                                mock / openai_compat / deepseek / gemini / anthropic / claude_cli
   usage.rs secrets.rs          用量与花费上限、系统凭据管理器
@@ -82,7 +83,7 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 
 ### 3.1 一轮对话
 1. chat 窗口 `invoke('chat_send', { text, onEvent: Channel })`。
-2. `chat::send`：检查花费上限 → 读取当前角色（只读）+ 用户自定义层 → 记忆检索（FTS5，token 预算）→ `prompt::build` 组装消息。
+2. `chat::send`：检查花费上限 → 读取当前角色（只读）+ 用户自定义层 → 记忆检索（FTS5，token 预算）+ 按关键词取角色往事（`canon::recall`）→ `prompt::build` 组装消息。
 3. 从注册表取当前对话后端，`stream_chat(req, sink, cancel)`。
 4. 每个增量经过 `filter::StreamFilter`（禁词跨分片匹配）后通过 Channel 发给前端；同时向 pet 窗口广播状态事件（thinking → talking → idle）。
 5. 结束后：记录用量（usage 表）、把用户消息和回复写入短期记忆（messages 表）。

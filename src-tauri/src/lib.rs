@@ -1,6 +1,7 @@
 //! DeskMate 应用入口：装配插件、状态、窗口、托盘和命令。
 
 pub mod backends;
+pub mod canon;
 pub mod character;
 pub mod character_cmds;
 pub mod chat;

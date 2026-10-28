@@ -461,6 +461,7 @@ async fn greeting_text(st: &AppState) -> String {
         user_rules: &prefs.custom_rules,
         banned_words: &prefs.banned_words,
         profile_facts: &turn.profile,
+        canon: &[],
         memories: &[],
         notes: &turn.notes,
         history: &[],
