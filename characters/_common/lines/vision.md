@@ -21,3 +21,6 @@
 
 ## vision.error
 - 嗯……没看清楚，等会儿再试试吧。
+
+## update.available
+- DeskMate 有新版本 {版本} 了，要更新吗？

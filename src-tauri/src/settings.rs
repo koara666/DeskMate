@@ -116,6 +116,8 @@ pub struct Settings {
     pub care: crate::care::CareSettings,
     /// 活动感知第三层：看一眼屏幕（默认关闭）
     pub vision: crate::vision::VisionSettings,
+    /// 检查更新（默认开，只查 GitHub 上的版本号）
+    pub update: crate::update::UpdateSettings,
 }
 
 impl Default for Settings {
@@ -146,6 +148,7 @@ impl Default for Settings {
             activity: Default::default(),
             care: Default::default(),
             vision: Default::default(),
+            update: Default::default(),
         }
     }
 }
@@ -167,6 +170,7 @@ impl Settings {
         self.activity = std::mem::take(&mut self.activity).sanitize();
         self.care = std::mem::take(&mut self.care).sanitize();
         self.vision = std::mem::take(&mut self.vision).sanitize();
+        self.update = std::mem::take(&mut self.update).sanitize();
         if !self.vision.backend.is_empty()
             && !self.backends.iter().any(|b| b.id == self.vision.backend)
         {

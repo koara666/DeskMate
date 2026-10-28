@@ -19,6 +19,8 @@
     "allow-proactive-feedback",
     "allow-reminder-save",
     "allow-event-choose",
+    "allow-update-install",
+    "allow-update-skip",
     "allow-game-say",
     "allow-game-finish",
     "allow-game-stats",

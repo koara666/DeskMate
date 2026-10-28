@@ -83,6 +83,10 @@ const COMMANDS: &[&str] = &[
     "vision_cost",
     "vision_preview",
     "vision_records",
+    "update_check",
+    "update_save",
+    "update_install",
+    "update_skip",
 ];
 
 fn main() {

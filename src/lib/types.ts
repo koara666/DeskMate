@@ -80,6 +80,8 @@ export interface ProactiveMessage {
   choices?: string[];
   /** 气泡下面的一行小字（比如「看了「Hades」· 遮住 2 处」） */
   note?: string;
+  /** 有新版本：显示更新卡片 */
+  update?: UpdateView;
 }
 
 export interface CompanionStatus {
@@ -232,6 +234,29 @@ export interface SettingsView {
   activity: ActivitySettings;
   care: CareSettings;
   vision: VisionSettings;
+  update: UpdateSettings;
+}
+
+export interface UpdateSettings {
+  auto_check: boolean;
+  skipped: string;
+  last_check: number;
+}
+
+/** 有新版本 */
+export interface UpdateView {
+  version: string;
+  current: string;
+  /** 更新说明（纯文本） */
+  notes: string;
+  page: string;
+  can_install: boolean;
+}
+
+export interface UpdateProgress {
+  phase: 'downloading' | 'verifying' | 'launching' | 'failed';
+  percent: number;
+  message?: string;
 }
 
 export interface VisionSettings {

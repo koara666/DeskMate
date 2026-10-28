@@ -472,3 +472,17 @@ mod tests {
         assert!(check_request_id(&"a".repeat(65)).is_err());
     }
 }
+
+// ---------------- 检查更新（v2.1 P10） ----------------
+
+/// 下载并安装上次检查到的新版本（只下载 GitHub 返回的那个安装包，校验后才运行）
+#[tauri::command]
+pub async fn update_install(app: AppHandle) -> CmdResult<()> {
+    crate::update::install(&app).await
+}
+
+/// 跳过这个版本（不再自动提示）
+#[tauri::command]
+pub fn update_skip(state: State<'_, AppState>, version: String) {
+    crate::update::skip(&state, &version);
+}

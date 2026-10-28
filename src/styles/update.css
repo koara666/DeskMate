@@ -1,0 +1,47 @@
+/* 有新版本的卡片（聊天气泡和设置页共用，跟着组件加载） */
+.update-card {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-bg, transparent));
+  font-size: 13px;
+}
+.update-card.done {
+  border: none;
+  background: none;
+  padding: 2px 0;
+}
+.update-title strong {
+  color: var(--accent);
+}
+.update-notes {
+  margin: 6px 0;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: var(--text-weak);
+}
+.update-progress {
+  margin: 6px 0;
+  font-size: 12px;
+}
+.update-bar {
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.update-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.update-card .update-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}

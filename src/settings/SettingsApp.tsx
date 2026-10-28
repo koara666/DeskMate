@@ -6,6 +6,7 @@ import { GeneralPage } from './GeneralPage';
 import { ModelsPage } from './ModelsPage';
 import { UsagePage } from './UsagePage';
 import { AboutPage } from './AboutPage';
+import { updateApi } from '../lib/ipc';
 import { CharactersPage } from './CharactersPage';
 import { MemoryPage } from './MemoryPage';
 import { CompanionPage } from './CompanionPage';
@@ -105,7 +106,7 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
         ) : tab === 'usage' ? (
           <UsagePage api={api} />
         ) : (
-          <AboutPage api={api} view={view} />
+          <AboutPage api={api} view={view} updateApi={updateApi} />
         )}
       </main>
     </div>

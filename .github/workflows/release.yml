@@ -1,0 +1,55 @@
+# 发布：推送 v* 标签（比如 v0.3.0）时，构建安装包并发布到 GitHub Releases。
+# 发布是公开操作：只有用户确认后才推送标签（见 docs/NEEDS_USER.md）。
+# DeskMate 的「检查更新」读的就是这里发布的最新正式版本；SHA256SUMS.txt 用来校验下载的安装包。
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 构建并发布（Windows）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: 标签必须和程序版本一致
+        shell: bash
+        run: |
+          v=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          test "v$v" = "${GITHUB_REF_NAME}" || { echo "标签 ${GITHUB_REF_NAME} 和版本 v$v 不一致"; exit 1; }
+      - name: 测试
+        run: |
+          npm test
+          cd src-tauri
+          cargo test
+      - name: 构建安装包
+        run: npx tauri build
+      - name: 计算 SHA-256
+        shell: bash
+        working-directory: src-tauri/target/release/bundle/nsis
+        run: sha256sum *.exe > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: 更新说明
+        shell: bash
+        run: |
+          f="docs/release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$f" ]; then cp "$f" notes.md; else echo "DeskMate ${GITHUB_REF_NAME}" > notes.md; fi
+      - name: 发布
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/SHA256SUMS.txt

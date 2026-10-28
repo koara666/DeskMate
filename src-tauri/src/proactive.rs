@@ -279,6 +279,8 @@ pub struct Item {
     pub ephemeral: bool,
     /// 气泡下面的一行小字（比如「看了「Hades」· 遮住 2 处」），不进聊天记录
     pub note: String,
+    /// 有新版本：气泡里显示更新卡片
+    pub update: Option<crate::update::UpdateView>,
 }
 
 impl Item {
@@ -293,6 +295,7 @@ impl Item {
             choices: None,
             ephemeral: false,
             note: String::new(),
+            update: None,
         }
     }
 }
@@ -310,6 +313,8 @@ pub struct ProactiveMessage {
     pub choices: Vec<String>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub note: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update: Option<crate::update::UpdateView>,
 }
 
 #[derive(Default)]
@@ -539,6 +544,7 @@ fn deliver(app: &AppHandle, item: Item, decision: Decision, id: u64) {
             .map(|c| c.options.clone())
             .unwrap_or_default(),
         note: item.note.clone(),
+        update: item.update.clone(),
     };
     if let Some(c) = &item.choices {
         let mut g = st

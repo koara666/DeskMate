@@ -62,6 +62,7 @@ pub struct SettingsView {
     pub activity: crate::activity::ActivitySettings,
     pub care: crate::care::CareSettings,
     pub vision: crate::vision::VisionSettings,
+    pub update: crate::update::UpdateSettings,
 }
 
 fn is_builtin_id(id: &str) -> bool {
@@ -127,6 +128,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         activity: s.activity.clone(),
         care: s.care.clone(),
         vision: s.vision.clone(),
+        update: s.update.clone(),
     }
 }
 
@@ -623,6 +625,28 @@ pub async fn vision_preview(state: State<'_, AppState>) -> CmdResult<crate::visi
 #[tauri::command]
 pub fn vision_records(state: State<'_, AppState>) -> Vec<crate::vision::LookRecord> {
     state.vision.records()
+}
+
+/// 「检查更新」按钮：返回 Some = 有新版本
+#[tauri::command]
+pub async fn update_check(
+    state: State<'_, AppState>,
+) -> CmdResult<Option<crate::update::UpdateView>> {
+    crate::update::check_now(&state).await
+}
+
+/// 启动时自动检查更新的开关
+#[tauri::command]
+pub fn update_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    auto_check: bool,
+) -> CmdResult<crate::update::UpdateSettings> {
+    let saved = state
+        .update_settings(|s| s.update.auto_check = auto_check)
+        .update;
+    desktop::broadcast_settings_changed(&app);
+    Ok(saved)
 }
 
 #[tauri::command]

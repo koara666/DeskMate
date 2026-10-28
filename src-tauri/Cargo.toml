@@ -37,6 +37,8 @@ tauri-plugin-notification = "2"
 png = "0.18"
 # 截图编码成 JPEG（纯 Rust、没有依赖；比 PNG 小三分之二，上传更快）
 jpeg-encoder = "0.6"
+# 校验更新安装包（tauri 本来就依赖它）
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

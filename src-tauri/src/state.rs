@@ -49,6 +49,8 @@ pub struct AppState {
     pub llm_games: crate::games_llm::LlmGames,
     /// 「看一眼」的次数和间隔
     pub vision: crate::vision::VisionState,
+    /// 检查更新：上次查到的版本、是不是正在下载
+    pub update: crate::update::UpdateState,
 }
 
 impl AppState {
@@ -85,6 +87,7 @@ impl AppState {
             companion: Default::default(),
             llm_games: Default::default(),
             vision: Default::default(),
+            update: Default::default(),
         }
     }
 

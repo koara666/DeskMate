@@ -57,6 +57,7 @@ const view: SettingsView = {
     daily_max: 6,
     mask_text: true,
   },
+  update: { auto_check: true, skipped: '', last_check: 0 },
   care: { sit: true, sit_minutes: 60, water: true, water_minutes: 150, late: true, late_time: '00:30', meal: true },
   briefing: {
     on_startup: true,

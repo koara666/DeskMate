@@ -6,6 +6,16 @@
 
 ## 待办
 
+### [ ] 10. （公开操作，要你确认）发布第一个 GitHub Release，让大家都能「检查更新」
+- **为什么**：0.3.0 起 DeskMate 打开后会去 GitHub 查有没有新版本，有就让她提示、点一下就能下载安装（DECISIONS #48）。但它读的是仓库的 **Releases**，现在仓库还一个 Release 都没有，所以要先发布一次。发布是公开的（所有人都能下载），按规定要你确认。
+- **最省事的做法**：直接告诉 agent「发布 0.3.0」。agent 会把代码推送到 GitHub 并推送 `v0.3.0` 标签，GitHub 会自动构建安装包、算好校验码、发布 Release（大约 15 分钟）。以后每个新版本也这样说一句就行。
+- **想自己动手的话**：
+  1. 确认代码已经推送到 GitHub（agent 会告诉你）。
+  2. 打开 https://github.com/koara666/DeskMate/actions ，等最新一次「CI」变成绿色对勾。
+  3. 在项目文件夹里打开 PowerShell，输入 `git tag v0.3.0` 回车，再输入 `git push origin v0.3.0` 回车。
+  4. 回到 Actions 页面，等「Release」跑完（绿色对勾），打开 https://github.com/koara666/DeskMate/releases 就能看到。
+- **之后**：你自己电脑上的 DeskMate 也能用这个功能更新（以后不用再找安装包了）。如果某个版本不想提示，在她的气泡里点「跳过这个版本」；不想检查，在「设置 → 关于」里关掉。
+
 ### [ ] 8. 试用 0.2.0（日常陪伴版）
 - **为什么**：v2 把 DeskMate 改成了陪伴型的桌宠（提醒、每日播报、活动感知、心情亲密度、日记、小游戏）。开发时按规定只用 mock 测试，有些地方要你实际用一阵才知道体验好不好。
 - **安装包**：`D:\DeskMate\src-tauri\target\release\bundle\nsis\DeskMate_0.2.0_x64-setup.exe`。直接双击会覆盖安装到原来的位置（`D:\Apps\DeskMate`），聊天记录、记忆、Key 都不受影响。**安装前先右键托盘里的 DeskMate →「退出」**。也可以告诉 agent「帮我装上 0.2.0」，agent 会在你不在全屏时代为退出旧版并安装。

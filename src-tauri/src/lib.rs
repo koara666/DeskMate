@@ -39,6 +39,7 @@ pub mod settings_cmds;
 pub mod state;
 pub mod task_cmds;
 pub mod tasks;
+pub mod update;
 pub mod usage;
 pub mod vision;
 pub mod worker;
@@ -109,6 +110,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     reminders::spawn(handle.clone());
     // 活动感知：前台窗口切换事件 + 每 30 秒看一眼
     activity::spawn(handle.clone());
+    // 检查更新：1 分钟后查一次 GitHub（每天最多一次，可关）
+    update::spawn_startup_check(&handle);
     {
         let d = handle.state::<AppState>().settings().daily;
         if let Err(e) = daily::apply_hotkey(&handle, d.hotkey_enabled, &d.hotkey) {
@@ -247,6 +250,10 @@ pub fn run() {
             settings_cmds::vision_cost,
             settings_cmds::vision_preview,
             settings_cmds::vision_records,
+            settings_cmds::update_check,
+            settings_cmds::update_save,
+            commands::update_install,
+            commands::update_skip,
             settings_cmds::settings_get,
             settings_cmds::settings_save_general,
             settings_cmds::backend_save,

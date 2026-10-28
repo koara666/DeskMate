@@ -20,7 +20,10 @@ import type {
   Reminder,
   ReminderDraft,
   Role,
+  UpdateView,
 } from '../lib/types';
+import type { UpdateApi } from '../lib/ipc';
+import { UpdateCard } from '../update/UpdateCard';
 import { Composer } from './Composer';
 import { ReminderForm, emptyReminder } from '../reminders/ReminderForm';
 // 任务卡片（委托外部 agent，高级选项）按需加载：没开委托时根本不加载这部分代码
@@ -48,6 +51,8 @@ export interface UiMessage {
   choices?: { id: number; options: string[] };
   /** 下面一行小字（比如看屏幕时「看了「Hades」· 遮住 2 处」） */
   note?: string;
+  /** 有新版本 */
+  update?: UpdateView;
 }
 
 let seq = 0;
@@ -130,6 +135,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
             at: nowSecs(),
             choices: m.choices?.length ? { id: m.id, options: m.choices } : undefined,
             note: m.note || undefined,
+            update: m.update,
           },
         ]);
         armProactive(m);
@@ -445,6 +451,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
                 onAction={onAction}
                 onReminder={onReminder}
                 onChoose={onChoose}
+                updateApi={api.update}
               />
             </Fragment>
           ))}
@@ -460,6 +467,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
               onAction={onAction}
               onReminder={onReminder}
               onChoose={onChoose}
+              updateApi={api.update}
             />
           ) : (
             <div class="msg msg-assistant">
@@ -494,6 +502,8 @@ interface MessageProps {
   onReminder?: (r: Reminder) => Promise<void>;
   /** 小事件选了一项 */
   onChoose?: (msgId: number, id: number, index: number, option: string) => Promise<void>;
+  /** 检查更新（有新版本的消息里显示按钮） */
+  updateApi?: UpdateApi;
 }
 
 const Message = memo(function Message({
@@ -504,6 +514,7 @@ const Message = memo(function Message({
   onAction,
   onReminder,
   onChoose,
+  updateApi,
 }: MessageProps) {
   const [copied, setCopied] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
@@ -529,6 +540,7 @@ const Message = memo(function Message({
       )}
       {msg.status === 'stopped' && <div class="note">（已停止）</div>}
       {msg.note && <div class="note msg-note">{msg.note}</div>}
+      {msg.update && updateApi && <UpdateCard api={updateApi} view={msg.update} />}
       {msg.choices && onChoose && (
         <div class="choices">
           {msg.choices.options.map((o, i) => (

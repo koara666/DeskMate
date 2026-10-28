@@ -3,6 +3,9 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
+  UpdateProgress,
+  UpdateView,
+  UpdateSettings,
   VisionSettings,
   VisionPreview,
   LookRecord,
@@ -78,7 +81,22 @@ export interface ChatApi {
   /** 小事件里选了一项：返回角色的回应 */
   choose(id: number, index: number): Promise<string>;
   games: GameApi;
+  /** 检查更新：下载安装、跳过（不传时气泡里不显示更新按钮） */
+  update?: UpdateApi;
 }
+
+/** 更新：只能安装后端上次查到的版本（前端不能指定下载地址） */
+export interface UpdateApi {
+  install(): Promise<void>;
+  skip(version: string): Promise<void>;
+  onProgress(cb: (p: UpdateProgress) => void): Promise<UnlistenFn>;
+}
+
+export const updateApi: UpdateApi = {
+  install: () => invoke('update_install'),
+  skip: (version) => invoke('update_skip', { version }),
+  onProgress: (cb) => listen<UpdateProgress>('update-progress', (e) => cb(e.payload)),
+};
 
 /** 小游戏用的接口（规则在前端，后端只管台词、战绩、心情、亲密度） */
 export interface GameApi {
@@ -132,6 +150,7 @@ export const chatApi: ChatApi = {
   saveReminder: (reminder) => invoke<SavedReminder>('reminder_save', { reminder }),
   choose: (id, index) => invoke<string>('event_choose', { id, index }),
   games: gameApi,
+  update: updateApi,
 };
 
 export interface PetApi {
@@ -190,6 +209,8 @@ export const settingsApi = {
   visionCost: () => invoke<[number, number]>('vision_cost'),
   visionPreview: () => invoke<VisionPreview>('vision_preview'),
   visionRecords: () => invoke<LookRecord[]>('vision_records'),
+  updateCheck: () => invoke<UpdateView | null>('update_check'),
+  updateSave: (autoCheck: boolean) => invoke<UpdateSettings>('update_save', { autoCheck }),
   saveNickname: (nickname: string) => invoke<string>('nickname_save', { nickname }),
   diaryList: () => invoke<Diary[]>('diary_list'),
   diaryDelete: (id: number) => invoke<boolean>('diary_delete', { id }),
