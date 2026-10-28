@@ -292,6 +292,28 @@ pub fn announce(app: &AppHandle, v: UpdateView) {
     crate::proactive::submit(app, item);
 }
 
+/// 这个版本的新功能（升级后她说一次）
+pub const WHATS_NEW: &str = "右键我（也可以按住右键）头顶会冒出选项气泡；点我的头或在头上蹭蹭是摸头；聊天里说「来一局井字棋」「半小时后提醒我收衣服」「别打扰我」我就直接去做；我可以出声了（设置 → 声音）；看屏幕会自动避开聊天、邮件、付款和密码，还会在你玩游戏时偶尔主动看；新游戏「方块对战」；以后有新版本我会告诉你。";
+
+/// 升级后 20 秒：她介绍一次新功能（走调度器，勿扰 / 全屏时等合适的时候）
+pub fn spawn_whats_new(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        let st = app.state::<AppState>();
+        let head = st
+            .line("update.whats_new", &[("版本", env!("CARGO_PKG_VERSION").into())])
+            .unwrap_or_else(|| format!("更新到 {} 了，多了这些：", env!("CARGO_PKG_VERSION")));
+        let mut item = crate::proactive::Item::new(
+            crate::proactive::Kind::Briefing,
+            format!("{head}\n{WHATS_NEW}"),
+            crate::memory::now_secs() + 24 * 3600,
+        );
+        item.key = "whats_new".into();
+        crate::proactive::submit(&app, item);
+    });
+}
+
 /// 「跳过这个版本」
 pub fn skip(st: &AppState, version: &str) {
     let v: String = version.chars().take(32).collect();

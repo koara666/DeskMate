@@ -194,7 +194,7 @@ pub fn pop_chat(app: &AppHandle) {
 /// 第一次使用时气泡里的引导（只出现一次）
 pub fn onboarding_text(chat_backend: &str) -> String {
     let mut t = String::from(
-        "第一次见面！点角色就能聊天，右键角色可以换角色、换位置、打开设置；快捷键 Alt+Shift+D 随时叫出聊天框。",
+        "第一次见面！点我的身体就能聊天，点头或在头上蹭蹭是摸头；右键（也可以按住右键）头顶会冒出选项气泡；快捷键 Alt+Shift+D 随时叫出聊天框。",
     );
     if chat_backend == "mock" {
         t.push_str("现在是测试模式，到「设置 → 模型」填好 Key 才能真正聊天。");

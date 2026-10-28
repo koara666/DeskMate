@@ -1,6 +1,6 @@
 [package]
 name = "deskmate"
-version = "0.2.0"
+version = "0.3.0"
 description = "常驻桌面的萌系 AI 伙伴"
 edition = "2024"
 rust-version = "1.85"

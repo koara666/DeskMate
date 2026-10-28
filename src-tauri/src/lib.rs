@@ -93,6 +93,17 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         notes.push(daily::onboarding_text(&state.settings().chat_backend));
         state.update_settings(|s| s.onboarded = true);
     }
+    // 升级以后：她用一个气泡介绍新功能（只一次；新安装的不用）
+    let upgraded_from = {
+        let s = state.settings();
+        let seen = s.seen_version.clone();
+        let current = env!("CARGO_PKG_VERSION");
+        if seen != current {
+            state.update_settings(|s| s.seen_version = current.to_string());
+        }
+        (!onboarding && !paths::test_mode() && update::is_newer(if seen.is_empty() { "0.2.0" } else { &seen }, current))
+            .then_some(seen)
+    };
     if !notes.is_empty() {
         state.set_notice(notes.join(" "));
     }
@@ -115,6 +126,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     activity::spawn(handle.clone());
     // 检查更新：1 分钟后查一次 GitHub（每天最多一次，可关）
     update::spawn_startup_check(&handle);
+    if upgraded_from.is_some() {
+        update::spawn_whats_new(&handle);
+    }
     {
         let d = handle.state::<AppState>().settings().daily;
         if let Err(e) = daily::apply_hotkey(&handle, d.hotkey_enabled, &d.hotkey) {

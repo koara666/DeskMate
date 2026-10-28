@@ -84,6 +84,8 @@ pub struct Settings {
     pub gpu_acceleration: bool,
     /// 已经看过第一次使用的引导
     pub onboarded: bool,
+    /// 上次运行的版本（升级后她介绍一次新功能）
+    pub seen_version: String,
     /// 希望角色怎么称呼自己（亲密度够了才会用）
     pub nickname: String,
     /// 上次位置；None 表示使用默认角落
@@ -134,6 +136,7 @@ impl Default for Settings {
             dnd: false,
             gpu_acceleration: false,
             onboarded: false,
+            seen_version: String::new(),
             nickname: String::new(),
             pet_position: None,
             corner: Corner::BottomRight,
