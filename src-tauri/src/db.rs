@@ -102,6 +102,23 @@ pub const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE memories ADD COLUMN decayed_at INTEGER;
     "#,
+    // v6：提醒（v2 P1）。at：定时提醒的下次时间 / 开机提醒从哪天起（Unix 秒）；repeat 是 JSON
+    r#"
+    CREATE TABLE reminders (
+        id            INTEGER PRIMARY KEY,
+        content       TEXT NOT NULL,
+        trigger       TEXT NOT NULL CHECK (trigger IN ('at', 'startup', 'activity')),
+        at            INTEGER,
+        repeat        TEXT NOT NULL DEFAULT '{"type":"none"}',
+        activity      TEXT NOT NULL DEFAULT '',
+        line          TEXT NOT NULL DEFAULT '',
+        important     INTEGER NOT NULL DEFAULT 0,
+        status        TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'done')),
+        created_at    INTEGER NOT NULL,
+        last_fired_at INTEGER
+    );
+    CREATE INDEX reminders_due ON reminders(status, trigger, at);
+    "#,
 ];
 
 pub fn latest_version() -> i64 {

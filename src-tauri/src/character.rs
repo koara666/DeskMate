@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::canon::{self, CanonEntry};
+use crate::lines::Lines as LinePool;
 use crate::quotes::{self, Quotes};
 
 /// 桌宠的表情状态
@@ -95,6 +96,8 @@ pub struct Character {
     pub canon: Arc<Vec<CanonEntry>>,
     /// 原作台词库（quotes.md，可选），见 `quotes.rs`
     pub quotes: Arc<Quotes>,
+    /// 预写台词池（lines/*.md，可选），见 `lines.rs`
+    pub pool: Arc<LinePool>,
     pub origin: Origin,
     /// 内置角色包目录（读取占位 SVG）
     pub builtin_dir: Option<PathBuf>,
@@ -129,7 +132,7 @@ pub fn valid_id(id: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-' || *c == b'_')
 }
 
-fn read_limited(path: &Path, limit: u64) -> Result<Vec<u8>, CharacterError> {
+pub(crate) fn read_limited(path: &Path, limit: u64) -> Result<Vec<u8>, CharacterError> {
     let name = path
         .file_name()
         .unwrap_or_default()
@@ -219,6 +222,24 @@ fn load_quotes(dirs: &[&Path]) -> Arc<Quotes> {
     }
 }
 
+/// 读取台词池：内置包的 lines/，再用用户目录 lines/ 里有的场景整节覆盖
+fn load_lines(dir: &Path, user_dir: Option<&Path>) -> Arc<LinePool> {
+    let mut l = LinePool::load_dir(&dir.join("lines"));
+    if let Some(u) = user_dir {
+        l.overlay(LinePool::load_dir(&u.join("lines")));
+    }
+    Arc::new(l)
+}
+
+/// 程序内置的通用台词（角色没写的场景用它）：内置角色目录下的 `_common/lines/`
+pub fn load_common_lines(builtin_root: Option<&Path>) -> Arc<LinePool> {
+    Arc::new(
+        builtin_root
+            .map(|r| LinePool::load_dir(&r.join("_common").join("lines")))
+            .unwrap_or_default(),
+    )
+}
+
 /// 扫描内置目录和用户目录，返回全部可用角色（按 id 排序）。坏掉的角色包记日志后跳过。
 pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character> {
     let mut map: BTreeMap<String, Character> = BTreeMap::new();
@@ -236,6 +257,7 @@ pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character>
                             canon: load_canon(&dir),
                             // 用户目录优先：炼化出来的台词原文只放在用户目录
                             quotes: load_quotes(&[&user_dir, &dir]),
+                            pool: load_lines(&dir, Some(&user_dir)),
                             origin: Origin::Builtin,
                             builtin_dir: Some(dir.clone()),
                             user_dir,
@@ -261,6 +283,7 @@ pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character>
                         persona,
                         canon: load_canon(&dir),
                         quotes: load_quotes(&[&dir]),
+                        pool: load_lines(&dir, None),
                         origin: Origin::User,
                         builtin_dir,
                         user_dir: dir.clone(),
@@ -284,6 +307,8 @@ fn subdirs(root: &Path) -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = rd
         .flatten()
         .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        // `_` 开头的是程序自己的资料（比如通用台词 `_common`），不是角色
+        .filter(|e| !e.file_name().to_string_lossy().starts_with('_'))
         .map(|e| e.path())
         .collect();
     v.sort();

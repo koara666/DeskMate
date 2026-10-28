@@ -12,6 +12,7 @@ pub mod db;
 pub mod desktop;
 pub mod filter;
 pub mod geometry;
+pub mod lines;
 pub mod logging;
 pub mod markers;
 pub mod memory;
@@ -22,6 +23,7 @@ pub mod proactive;
 pub mod prompt;
 pub mod quotes;
 pub mod redact;
+pub mod reminders;
 pub mod secrets;
 pub mod settings;
 pub mod settings_cmds;
@@ -91,8 +93,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // 后台维护：备份、整理记忆（低频）
     worker::spawn(handle.clone());
-    // 日常体验：全屏检测、睡眠、主动搭话（低频）
+    // 日常体验：全屏检测、睡眠、主动行为调度（低频）
     daily::spawn(handle.clone());
+    // 提醒：补上关机期间错过的，之后按下一个到期时间触发
+    reminders::spawn(handle.clone());
     {
         let d = handle.state::<AppState>().settings().daily;
         if let Err(e) = daily::apply_hotkey(&handle, d.hotkey_enabled, &d.hotkey) {
@@ -131,6 +135,8 @@ pub fn run() {
         }));
     }
     let app = builder
+        // 系统通知：只在 Rust 端用（全屏时的提醒），不给任何窗口授权
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--autostart"]),
@@ -190,6 +196,10 @@ pub fn run() {
             commands::ability_open,
             commands::ability_read,
             commands::proactive_feedback,
+            commands::reminder_save,
+            settings_cmds::reminder_list,
+            settings_cmds::reminder_delete,
+            settings_cmds::reminder_set_status,
             settings_cmds::companion_save,
             settings_cmds::advanced_save,
             settings_cmds::settings_get,

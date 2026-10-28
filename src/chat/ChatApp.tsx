@@ -17,9 +17,12 @@ import type {
   ErrorInfo,
   Placement,
   ProactiveMessage,
+  Reminder,
+  ReminderDraft,
   Role,
 } from '../lib/types';
 import { Composer } from './Composer';
+import { ReminderForm, emptyReminder } from '../reminders/ReminderForm';
 // 任务卡片（委托外部 agent，高级选项）按需加载：没开委托时根本不加载这部分代码
 type TaskCardType = typeof import('./TaskCard').TaskCard;
 
@@ -35,6 +38,10 @@ export interface UiMessage {
   at: number;
   /** 角色提议的打开 / 读取（用户点了才做） */
   actions?: ActionView[];
+  /** 用户吩咐的提醒，等确认 */
+  reminder?: ReminderDraft;
+  /** 没听懂的提醒：给「手动设置」 */
+  reminderForm?: boolean;
 }
 
 let seq = 0;
@@ -206,7 +213,13 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
         if (e.finish === 'cancelled') w.flush();
         const actions = e.actions?.length ? e.actions : undefined;
         w.end(() =>
-          finishWith({ text: e.text || w.text(), status: e.finish === 'cancelled' ? 'stopped' : 'done', actions }),
+          finishWith({
+            text: e.text || w.text(),
+            status: e.finish === 'cancelled' ? 'stopped' : 'done',
+            actions,
+            reminder: e.reminder,
+            reminderForm: e.reminder_form || undefined,
+          }),
         );
         // 只有允许委托外部 agent 时后端才会带上任务（DECISIONS #33）
         if (e.task && taskApi) openTask(e.task);
@@ -266,6 +279,16 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     return api.open(a.target);
   };
   const onAction = useCallback((a: ActionView) => actionRef.current(a), []);
+
+  // 确认 / 手动填写提醒：保存后角色说一句「记下了」
+  const reminderRef = useRef<(r: Reminder) => Promise<void>>(async () => {});
+  reminderRef.current = async (r: Reminder) => {
+    engage();
+    const saved = await api.saveReminder(r);
+    stickToBottom.current = true;
+    setMessages((ms) => [...ms, { id: nextId(), role: 'assistant', text: saved.line, status: 'done', at: nowSecs() }]);
+  };
+  const onReminder = useCallback((r: Reminder) => reminderRef.current(r), []);
 
   const setMode = (m: ChatMode) => {
     setModeState(m);
@@ -358,6 +381,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
                 generating={generating}
                 onRegenerate={m === lastMsg ? regenerate : undefined}
                 onAction={onAction}
+                onReminder={onReminder}
               />
             </Fragment>
           ))}
@@ -371,6 +395,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
               generating={generating}
               onRegenerate={regenerate}
               onAction={onAction}
+              onReminder={onReminder}
             />
           ) : (
             <div class="msg msg-assistant">
@@ -401,9 +426,11 @@ interface MessageProps {
   onRegenerate?: () => void;
   /** 点了动作按钮（打开返回说明文字；读取返回空串） */
   onAction?: (a: ActionView) => Promise<string>;
+  /** 保存提醒 */
+  onReminder?: (r: Reminder) => Promise<void>;
 }
 
-const Message = memo(function Message({ msg, isLast, generating, onRegenerate, onAction }: MessageProps) {
+const Message = memo(function Message({ msg, isLast, generating, onRegenerate, onAction, onReminder }: MessageProps) {
   const [copied, setCopied] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const thinking = msg.status === 'streaming' && msg.text === '';
@@ -427,6 +454,9 @@ const Message = memo(function Message({ msg, isLast, generating, onRegenerate, o
         msg.text && <div class="text">{msg.text}</div>
       )}
       {msg.status === 'stopped' && <div class="note">（已停止）</div>}
+      {(msg.reminder || msg.reminderForm) && onReminder && (
+        <ReminderCard draft={msg.reminder} onSave={onReminder} />
+      )}
       {msg.actions && onAction && (
         <div class="actions">
           {msg.actions.map((a, i) => (
@@ -499,6 +529,51 @@ function ActionChip({ action, onAction }: { action: ActionView; onAction: (a: Ac
         </button>
       )}
       {state && !state.done && <div class="action-note action-err">{state.text}</div>}
+    </div>
+  );
+}
+
+/** 提醒确认卡片：「好」直接保存，「改一下」打开表单，「不用了」就不设 */
+function ReminderCard({ draft, onSave }: { draft?: ReminderDraft; onSave: (r: Reminder) => Promise<void> }) {
+  const [phase, setPhase] = useState<'ask' | 'edit' | 'saved' | 'cancelled'>(draft ? 'ask' : 'edit');
+  const [error, setError] = useState('');
+  const [shown, setShown] = useState(draft ? `${draft.when} · ${draft.reminder.content}` : '');
+  const save = async (r: Reminder) => {
+    await onSave(r);
+    setShown(r.content);
+    setPhase('saved');
+  };
+  if (phase === 'saved') return <div class="reminder-card done">⏰ 已设好{shown ? `：${shown}` : ''}</div>;
+  if (phase === 'cancelled') return <div class="reminder-card done muted">（没有设置提醒）</div>;
+  if (phase === 'edit')
+    return (
+      <div class="reminder-card">
+        <ReminderForm
+          initial={draft?.reminder ?? emptyReminder()}
+          onSave={save}
+          onCancel={() => setPhase(draft ? 'ask' : 'cancelled')}
+        />
+      </div>
+    );
+  return (
+    <div class="reminder-card">
+      <div class="reminder-what">⏰ {shown}</div>
+      {error && <div class="action-note action-err">{error}</div>}
+      <div class="reminder-buttons">
+        <button
+          type="button"
+          class="btn btn-small"
+          onClick={() => draft && save(draft.reminder).catch((e) => setError(String(e)))}
+        >
+          好
+        </button>
+        <button type="button" class="btn btn-small btn-plain" onClick={() => setPhase('edit')}>
+          改一下
+        </button>
+        <button type="button" class="btn btn-small btn-plain" onClick={() => setPhase('cancelled')}>
+          不用了
+        </button>
+      </div>
     </div>
   );
 }

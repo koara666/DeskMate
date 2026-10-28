@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/preact';
 import { ChatApp } from './ChatApp';
 import type { ChatApi } from '../lib/ipc';
-import type { ChatEvent, HistoryMessage, ProactiveMessage } from '../lib/types';
+import type { ChatEvent, HistoryMessage, ProactiveMessage, Reminder } from '../lib/types';
 
 function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMessage[] = []) {
   const calls = {
@@ -14,6 +14,7 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMess
     open: [] as string[],
     read: [] as string[],
     feedback: [] as boolean[],
+    reminders: [] as Reminder[],
   };
   let handler: ((e: ChatEvent) => void) | null = null;
   let proactive: ((m: ProactiveMessage) => void) | null = null;
@@ -65,6 +66,10 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMess
     },
     feedback: async (engaged) => {
       calls.feedback.push(engaged);
+    },
+    saveReminder: async (r) => {
+      calls.reminders.push(r);
+      return { reminder: { ...r, id: 1, when: '30 分钟后' }, line: '记下了，到时候叫你。' };
     },
   };
   const emit = (e: ChatEvent) => act(() => handler!(e));
@@ -346,5 +351,68 @@ describe('ChatApp 主动发言', () => {
     });
     expect(f.calls.hide).toBe(0);
     expect(f.calls.feedback).toEqual([]);
+  });
+});
+
+describe('ChatApp 提醒', () => {
+  const draft = {
+    when: '30 分钟后（15:42）',
+    reminder: {
+      id: 0,
+      content: '收衣服',
+      trigger: 'at' as const,
+      at: 1_800_000_000,
+      repeat: { type: 'none' as const },
+      activity: '',
+      line: '收衣服啦',
+      important: false,
+      status: 'active' as const,
+      created_at: 0,
+      last_fired_at: null,
+    },
+  };
+
+  it('复述后用户点「好」才保存，角色接一句「记下了」', async () => {
+    const f = await mount();
+    await sendText('半小时后提醒我收衣服');
+    f.emit({ type: 'done', text: '好，30 分钟后提醒你收衣服，可以吗？', finish: 'stop', reminder: draft });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByText(/30 分钟后（15:42） · 收衣服/)).toBeTruthy();
+    expect(f.calls.reminders).toHaveLength(0);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '好' }));
+    });
+    await act(async () => {});
+    expect(f.calls.reminders[0].content).toBe('收衣服');
+    expect(assistantText()).toContain('记下了');
+    expect(screen.getByText(/已设好/)).toBeTruthy();
+  });
+
+  it('「不用了」不保存；没听懂时可以手动设置', async () => {
+    const f = await mount();
+    await sendText('半小时后提醒我收衣服');
+    f.emit({ type: 'done', text: '……', finish: 'stop', reminder: draft });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '不用了' }));
+    expect(screen.getByText('（没有设置提醒）')).toBeTruthy();
+    expect(f.calls.reminders).toHaveLength(0);
+
+    await sendText('提醒我那个事');
+    f.emit({ type: 'done', text: '没听懂', finish: 'stop', reminder_form: true });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    fireEvent.input(screen.getByLabelText('要提醒的事'), { target: { value: '吃药' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    });
+    await act(async () => {});
+    expect(f.calls.reminders.at(-1)?.content).toBe('吃药');
+    // 手动填的台词由后端生成
+    expect(f.calls.reminders.at(-1)?.line).toBe('');
   });
 });

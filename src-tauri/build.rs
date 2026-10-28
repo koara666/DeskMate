@@ -54,6 +54,10 @@ const COMMANDS: &[&str] = &[
     "proactive_feedback",
     "companion_save",
     "advanced_save",
+    "reminder_save",
+    "reminder_list",
+    "reminder_delete",
+    "reminder_set_status",
 ];
 
 fn main() {

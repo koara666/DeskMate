@@ -3,6 +3,9 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
+  Reminder,
+  ReminderView,
+  SavedReminder,
   AdvancedSettings,
   CompanionSettings,
   ProactiveMessage,
@@ -52,6 +55,8 @@ export interface ChatApi {
   read(path: string, requestId: string, onEvent: (e: ChatEvent) => void): Promise<void>;
   /** 主动发言的结果：用户理会了 / 无人理会自动收起 */
   feedback(engaged: boolean): Promise<void>;
+  /** 确认（或手动填写）提醒 */
+  saveReminder(reminder: Reminder): Promise<SavedReminder>;
 }
 
 function channel(onEvent: (e: ChatEvent) => void): Channel<ChatEvent> {
@@ -78,6 +83,7 @@ export const chatApi: ChatApi = {
   open: (target) => invoke<string>('ability_open', { target }),
   read: (path, requestId, onEvent) => invoke('ability_read', { path, requestId, onEvent: channel(onEvent) }),
   feedback: (engaged) => invoke('proactive_feedback', { engaged }),
+  saveReminder: (reminder) => invoke<SavedReminder>('reminder_save', { reminder }),
 };
 
 export interface PetApi {
@@ -120,6 +126,10 @@ export const settingsApi = {
   saveDaily: (daily: DailySettings) => invoke('daily_save', { daily }),
   saveCompanion: (companion: CompanionSettings) => invoke('companion_save', { companion }),
   saveAdvanced: (advanced: AdvancedSettings) => invoke<AdvancedSettings>('advanced_save', { advanced }),
+  reminderList: () => invoke<ReminderView[]>('reminder_list'),
+  reminderSave: (reminder: Reminder) => invoke<SavedReminder>('reminder_save', { reminder }),
+  reminderDelete: (id: number) => invoke('reminder_delete', { id }),
+  reminderSetStatus: (id: number, status: 'active' | 'paused') => invoke('reminder_set_status', { id, status }),
   usage: () => invoke<UsageView>('usage_get'),
   openDataDir: (sub?: string) => invoke('open_data_dir', { sub: sub ?? null }),
   characters: () => invoke<CharactersView>('characters_list'),

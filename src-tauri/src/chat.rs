@@ -34,6 +34,12 @@ pub enum ChatEvent {
         task: Option<String>,
         /// 角色提议的打开 / 读取（气泡里的按钮，用户点了才做）
         actions: Vec<ActionView>,
+        /// 用户吩咐的提醒（解析好了，等用户在气泡里确认）
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reminder: Option<crate::reminders::Draft>,
+        /// 没听懂的提醒：气泡里给「手动设置」按钮
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        reminder_form: bool,
     },
     Error {
         kind: String,
@@ -79,7 +85,7 @@ impl ChatState {
     }
 
     /// 开始新一轮：取消正在进行的生成，登记新的取消令牌
-    fn begin(&self, id: &str) -> CancellationToken {
+    pub fn begin(&self, id: &str) -> CancellationToken {
         let mut a = self.active.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(old) = a.take() {
             old.cancel.cancel();
@@ -92,7 +98,7 @@ impl ChatState {
         cancel
     }
 
-    fn end(&self, id: &str) {
+    pub fn end(&self, id: &str) {
         let mut a = self.active.lock().unwrap_or_else(|e| e.into_inner());
         if a.as_ref().is_some_and(|x| x.id == id) {
             *a = None;
@@ -407,12 +413,18 @@ pub fn emit_pet_state(app: &AppHandle, s: PetState) {
 }
 
 /// 执行一轮对话。用户消息在成功或失败时都会记入历史。
+/// 用户在吩咐提醒（「半小时后提醒我收衣服」）时走提醒流程，不进普通聊天。
 pub async fn run_turn(
     app: AppHandle,
     user_text: String,
     request_id: String,
     channel: Channel<ChatEvent>,
 ) {
+    if crate::reminders::parse::looks_like_request(&user_text)
+        && crate::reminders::chat::handle(&app, &user_text, &request_id, &channel).await
+    {
+        return;
+    }
     run_turn_with_notes(app, user_text, request_id, channel, Vec::new()).await
 }
 
@@ -585,6 +597,8 @@ pub async fn run_turn_with_notes(
                 finish: out.finish,
                 task,
                 actions,
+                reminder: None,
+                reminder_form: false,
             });
         }
         Err(e) => {

@@ -451,3 +451,14 @@ input[type='search'] {
   gap: 4px;
   color: var(--text);
 }
+
+.reminder-list li {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.reminder-list li:last-child {
+  border-bottom: none;
+}
+.card .reminder-form {
+  font-size: 13px;
+}

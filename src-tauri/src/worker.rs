@@ -310,16 +310,7 @@ async fn process_one(
 mod tests {
     use super::*;
     use crate::backends::Role;
-    use crate::paths::DataPaths;
-    use crate::secrets::MemoryStore;
-
-    fn test_state(dir: &std::path::Path) -> AppState {
-        let paths = DataPaths::from_root(dir);
-        paths.ensure().unwrap();
-        let conn = crate::db::open(&paths.db(), &paths.backups()).unwrap();
-        let builtin = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
-        AppState::new(paths, conn, Some(builtin), Box::new(MemoryStore::default()))
-    }
+    use crate::state::test_state;
 
     #[tokio::test]
     async fn chat_extract_retrieve_forget_end_to_end() {

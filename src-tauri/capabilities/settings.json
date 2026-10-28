@@ -39,6 +39,10 @@
     "allow-task-open-log",
     "allow-daily-save",
     "allow-companion-save",
-    "allow-advanced-save"
+    "allow-advanced-save",
+    "allow-reminder-save",
+    "allow-reminder-list",
+    "allow-reminder-delete",
+    "allow-reminder-set-status"
   ]
 }

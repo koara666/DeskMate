@@ -439,3 +439,31 @@ body,
   flex-basis: 100%;
   color: var(--danger);
 }
+
+/* 提醒确认卡片 */
+.reminder-card {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  font-size: 12px;
+}
+.reminder-card.done {
+  background: transparent;
+  padding: 2px 0;
+}
+.reminder-what {
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+.reminder-buttons {
+  display: flex;
+  gap: 6px;
+}
+.btn-plain {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.muted {
+  color: var(--text-weak);
+}

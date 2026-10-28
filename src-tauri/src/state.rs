@@ -3,18 +3,23 @@
 use crate::character::{self, Character};
 use crate::chat::ChatState;
 use crate::desktop::DesktopState;
+use crate::lines::{self, LineCtx, Lines};
 use crate::paths::DataPaths;
 use crate::secrets::SecretStore;
 use crate::settings::{self, Settings};
 use rusqlite::Connection;
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard, RwLock};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
 pub struct AppState {
     pub paths: DataPaths,
     db: Mutex<Connection>,
     settings: RwLock<Settings>,
     characters: RwLock<Vec<Character>>,
+    /// 通用台词（角色没写的场景用它）
+    common_lines: RwLock<Arc<Lines>>,
+    /// 每个场景最近说过的台词（尽量不重复）
+    pub recent_lines: crate::lines::Recent,
     pub builtin_characters_dir: Option<PathBuf>,
     pub chat: ChatState,
     pub desktop: DesktopState,
@@ -30,6 +35,8 @@ pub struct AppState {
     pub daily: crate::daily::DailyState,
     /// 主动行为调度器的队列和节奏
     pub proactive: crate::proactive::ProactiveState,
+    /// 提醒定时器
+    pub reminders: crate::reminders::ReminderState,
 }
 
 impl AppState {
@@ -42,11 +49,14 @@ impl AppState {
         let settings = settings::load(&conn);
         let characters =
             character::load_all(builtin_characters_dir.as_deref(), &paths.characters());
+        let common_lines = character::load_common_lines(builtin_characters_dir.as_deref());
         Self {
             paths,
             db: Mutex::new(conn),
             settings: RwLock::new(settings),
             characters: RwLock::new(characters),
+            common_lines: RwLock::new(common_lines),
+            recent_lines: Default::default(),
             builtin_characters_dir,
             chat: ChatState::default(),
             desktop: DesktopState::default(),
@@ -56,6 +66,7 @@ impl AppState {
             tasks: Default::default(),
             daily: Default::default(),
             proactive: Default::default(),
+            reminders: Default::default(),
         }
     }
 
@@ -105,6 +116,38 @@ impl AppState {
             &self.paths.characters(),
         );
         *self.characters.write().unwrap_or_else(|e| e.into_inner()) = list;
+        *self.common_lines.write().unwrap_or_else(|e| e.into_inner()) =
+            character::load_common_lines(self.builtin_characters_dir.as_deref());
+    }
+
+    pub fn common_lines(&self) -> Arc<Lines> {
+        self.common_lines
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// 从当前角色的台词池（没有就用通用台词）里挑一句，填好占位符。挑不到返回 None。
+    pub fn line(&self, scene: &str, vars: &[(&str, String)]) -> Option<String> {
+        use chrono::Timelike;
+        let own = self
+            .current_character()
+            .map(|c| c.pool.clone())
+            .unwrap_or_default();
+        let ctx = LineCtx {
+            affinity: 0,
+            mood: 0,
+            hour: chrono::Local::now().hour(),
+            vars,
+        };
+        lines::pick(
+            &own,
+            &self.common_lines(),
+            scene,
+            &ctx,
+            &self.recent_lines,
+            lines::seed(),
+        )
     }
 
     /// 按 id 找角色
@@ -126,4 +169,19 @@ impl AppState {
             .or_else(|| list.first())
             .cloned()
     }
+}
+
+/// 测试用：临时目录里的完整状态（内置角色包、mock 后端、内存里的凭据）
+#[cfg(test)]
+pub fn test_state(dir: &std::path::Path) -> AppState {
+    let paths = DataPaths::from_root(dir);
+    paths.ensure().unwrap();
+    let conn = crate::db::open(&paths.db(), &paths.backups()).unwrap();
+    let builtin = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+    AppState::new(
+        paths,
+        conn,
+        Some(builtin),
+        Box::new(crate::secrets::MemoryStore::default()),
+    )
 }

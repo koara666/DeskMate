@@ -251,6 +251,45 @@ pub fn ability_read(
     Ok(())
 }
 
+/// 聊天里确认（或手动填写）的提醒：检查后保存，角色说一句「记下了」
+#[derive(Serialize)]
+pub struct SavedReminder {
+    pub reminder: crate::reminders::ReminderView,
+    pub line: String,
+}
+
+#[tauri::command]
+pub fn reminder_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    reminder: crate::reminders::Reminder,
+) -> CmdResult<SavedReminder> {
+    use crate::reminders;
+    let now = crate::memory::now_secs();
+    let mut r = reminder.sanitize(now)?;
+    if r.line.is_empty() {
+        r.line = reminders::make_line(&state, &r.content);
+    }
+    let id = reminders::save(&state.db(), &r, now).map_err(err)?;
+    r.id = id;
+    reminders::notify_changed(&app);
+    let view = r.view(reminders::now_local());
+    let line = state
+        .line(
+            "reminder.saved",
+            &[
+                ("内容", view.reminder.content.clone()),
+                ("时间", view.when.clone()),
+            ],
+        )
+        .unwrap_or_else(|| format!("记下了：{}，{}。", view.when, view.reminder.content));
+    log::info!("保存了提醒 #{id}");
+    Ok(SavedReminder {
+        reminder: view,
+        line,
+    })
+}
+
 /// 前端上报主动发言的结果：用户理会了（engaged）或气泡无人理会自动收起了
 #[tauri::command]
 pub fn proactive_feedback(state: State<'_, AppState>, engaged: bool) {

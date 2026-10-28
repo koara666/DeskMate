@@ -57,3 +57,60 @@ button {
     transition: none !important;
   }
 }
+
+/* 提醒表单（聊天气泡和设置页共用） */
+.reminder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.reminder-form .rf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.reminder-form .rf-row > span {
+  flex: none;
+  width: 4.5em;
+  color: var(--text-weak);
+}
+.reminder-form input:not([type='checkbox']),
+.reminder-form select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+.reminder-form .rf-days {
+  gap: 4px;
+}
+.reminder-form .rf-days button {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.reminder-form .rf-days button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.reminder-form .rf-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.reminder-form .rf-error {
+  color: var(--danger);
+}
+.reminder-form .rf-actions {
+  display: flex;
+  gap: 6px;
+}

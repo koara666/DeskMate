@@ -127,6 +127,13 @@ pub fn reply_for(req: &ChatRequest) -> Result<(String, Duration), BackendError> 
     if req.system_text().contains(crate::memory::extract::MARKER) {
         return Ok((mock_extraction(req), Duration::ZERO));
     }
+    if req.system_text().contains(crate::reminders::model::MARKER) {
+        // 提醒解析：mock 不会真的理解，只说「是提醒但没听懂」
+        return Ok((
+            "{\"is_reminder\": true, \"content\": \"\"}".into(),
+            Duration::ZERO,
+        ));
+    }
     let last = req
         .messages
         .iter()

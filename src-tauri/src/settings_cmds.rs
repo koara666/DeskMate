@@ -398,6 +398,44 @@ pub fn advanced_save(
 }
 
 #[tauri::command]
+pub fn reminder_list(state: State<'_, AppState>) -> CmdResult<Vec<crate::reminders::ReminderView>> {
+    let now = crate::reminders::now_local();
+    Ok(crate::reminders::list(&state.db())
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|r| r.view(now))
+        .collect())
+}
+
+#[tauri::command]
+pub fn reminder_delete(app: AppHandle, state: State<'_, AppState>, id: i64) -> CmdResult<()> {
+    crate::reminders::delete(&state.db(), id).map_err(|e| e.to_string())?;
+    crate::reminders::notify_changed(&app);
+    Ok(())
+}
+
+/// 暂停 / 恢复。恢复时如果定时提醒的时间已经过了：重复的算到下一次，不重复的提示改时间
+#[tauri::command]
+pub fn reminder_set_status(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    status: String,
+) -> CmdResult<()> {
+    use crate::reminders;
+    if !matches!(status.as_str(), "active" | "paused") {
+        return Err("状态不对".into());
+    }
+    let r = reminders::get(&state.db(), id)
+        .map_err(|e| e.to_string())?
+        .ok_or("找不到这个提醒")?;
+    let r = reminders::Reminder { status, ..r }.sanitize(crate::memory::now_secs())?;
+    reminders::save(&state.db(), &r, 0).map_err(|e| e.to_string())?;
+    reminders::notify_changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn daily_save(
     app: AppHandle,
     state: State<'_, AppState>,

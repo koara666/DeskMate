@@ -17,6 +17,7 @@
     "allow-ability-open",
     "allow-ability-read",
     "allow-proactive-feedback",
+    "allow-reminder-save",
     "allow-task-defaults",
     "allow-task-start",
     "allow-task-approve",

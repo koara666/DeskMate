@@ -412,9 +412,10 @@ pub fn set_always_on_top(app: &AppHandle, on: bool) -> tauri::Result<()> {
 }
 
 /// 设置窗口允许直接打开的页面
-pub const SETTINGS_TABS: [&str; 9] = [
+pub const SETTINGS_TABS: [&str; 10] = [
     "general",
     "companion",
+    "reminders",
     "characters",
     "memory",
     "models",
@@ -534,6 +535,7 @@ fn build_menu(app: &AppHandle, for_tray: bool) -> tauri::Result<Menu<Wry>> {
     };
     let toggle = MenuItem::with_id(app, "toggle_pet", toggle_text, true, None::<&str>)?;
     let open_chat = MenuItem::with_id(app, "open_chat", "聊天", true, None::<&str>)?;
+    let reminders = MenuItem::with_id(app, "reminders", "提醒…", true, None::<&str>)?;
     let dnd = CheckMenuItem::with_id(app, "dnd", "勿扰模式", true, s.dnd, None::<&str>)?;
     let top = CheckMenuItem::with_id(
         app,
@@ -556,6 +558,7 @@ fn build_menu(app: &AppHandle, for_tray: bool) -> tauri::Result<Menu<Wry>> {
             app,
             &[
                 &open_chat,
+                &reminders,
                 &characters,
                 &corners,
                 &sep,
@@ -631,6 +634,7 @@ fn handle_menu_now(app: &AppHandle, id: &str) {
                 set_always_on_top(app, on)?;
             }
             "settings" => open_settings(app)?,
+            "reminders" => open_settings_tab(app, Some("reminders".into()))?,
             "quit" => app.exit(0),
             _ => {
                 if let Some(cid) = id.strip_prefix("char:") {

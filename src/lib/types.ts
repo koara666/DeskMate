@@ -83,7 +83,17 @@ export interface ErrorInfo {
 
 export type ChatEvent =
   | { type: 'delta'; text: string }
-  | { type: 'done'; text: string; finish: FinishReason; task?: string | null; actions?: ActionView[] }
+  | {
+      type: 'done';
+      text: string;
+      finish: FinishReason;
+      task?: string | null;
+      actions?: ActionView[];
+      /** 用户吩咐的提醒（等用户确认） */
+      reminder?: ReminderDraft;
+      /** 没听懂的提醒：给「手动设置」按钮 */
+      reminder_form?: boolean;
+    }
   | ({ type: 'error' } & ErrorInfo);
 
 // ---------------- 设置窗口 ----------------
@@ -330,4 +340,46 @@ export interface TaskRecord {
   status: string;
   summary: string;
   cost_usd: number;
+}
+
+// ---------------- 提醒 ----------------
+
+export type Trigger = 'at' | 'startup' | 'activity';
+
+/** 重复规则（星期一 = 1 … 星期日 = 7） */
+export type Repeat =
+  | { type: 'none' }
+  | { type: 'daily' }
+  | { type: 'weekdays' }
+  | { type: 'weekly'; days: number[] }
+  | { type: 'monthly'; day: number };
+
+export interface Reminder {
+  id: number;
+  content: string;
+  trigger: Trigger;
+  /** at：下次提醒时间；startup：从哪天起（那天 0 点）；Unix 秒 */
+  at: number | null;
+  repeat: Repeat;
+  activity: string;
+  line: string;
+  important: boolean;
+  status: 'active' | 'paused' | 'done';
+  created_at: number;
+  last_fired_at: number | null;
+}
+
+/** 列表里的提醒：多一句「什么时候」 */
+export interface ReminderView extends Reminder {
+  when: string;
+}
+
+export interface ReminderDraft {
+  reminder: Reminder;
+  when: string;
+}
+
+export interface SavedReminder {
+  reminder: ReminderView;
+  line: string;
 }

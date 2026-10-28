@@ -33,6 +33,7 @@ base64 = "0.22"
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "stream", "http2", "system-proxy", "charset"] }
 # API Key 存系统凭据管理器
 keyring = { version = "3.6", features = ["windows-native", "apple-native"] }
+tauri-plugin-notification = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

@@ -298,13 +298,17 @@ async function main() {
       await settings.waitText('已保存');
       await settings.eval(`[...document.querySelectorAll('label.row')].find(l => l.innerText.includes('总在最前')).querySelector('input').click()`);
     });
-    await test('常规：「显卡加速」默认关，切换后提示重启生效', async () => {
+    await test('高级：「显卡加速」默认关，切换后提示重启生效', async () => {
+      await settings.click('高级');
+      await settings.waitFor(`document.querySelector('main h1')?.innerText === '高级'`, '高级页');
       const box = `[...document.querySelectorAll('label.row')].find(l => l.innerText.includes('显卡加速')).querySelector('input')`;
       if (await settings.eval(`${box}.checked`)) throw new Error('默认应该关闭');
       await settings.eval(`${box}.click()`);
       await settings.waitText('退出 DeskMate 再打开后生效');
       await settings.eval(`${box}.click()`);
       await settings.waitNoText('退出 DeskMate 再打开后生效');
+      await settings.click('常规');
+      await settings.waitFor(`document.querySelector('main h1')?.innerText === '常规'`, '常规页');
     });
     await test('常规：非法快捷键会提示，合法快捷键能保存', async () => {
       await settings.input('input[aria-label="快捷键"]', 'D');
