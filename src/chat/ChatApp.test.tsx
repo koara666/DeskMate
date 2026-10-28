@@ -51,6 +51,7 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMess
     onPlacement: off,
     onFocusInput: off,
     onCharacterChanged: off,
+    onOpenGames: off,
     onProactive: async (cb) => {
       proactive = cb;
       return () => {};
@@ -66,6 +67,13 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMess
     },
     feedback: async (engaged) => {
       calls.feedback.push(engaged);
+    },
+    games: {
+      say: async () => null,
+      finish: async () => {},
+      stats: async () => [],
+      fortuneToday: async () => null,
+      fortuneDraw: async () => ({ day: '', level: '', name: '', color: '', item: '', direction: '', comment: '' }),
     },
     choose: async (_id, index) => (index === 0 ? '那我陪着你。' : '休息一下也好。'),
     saveReminder: async (r) => {

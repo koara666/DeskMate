@@ -337,6 +337,84 @@ pub fn event_choose(app: AppHandle, id: u64, index: usize) -> CmdResult<String> 
     crate::companion::choose(&app, id, index)
 }
 
+// ---------------- 小游戏（v2 P5） ----------------
+
+/// 游戏的关键时刻：角色说一句（台词池；胜负时偶尔让模型说，只告诉它游戏名和结果）
+#[tauri::command]
+pub async fn game_say(
+    app: AppHandle,
+    game: String,
+    event: String,
+    name: String,
+    vars: Vec<(String, String)>,
+) -> CmdResult<Option<String>> {
+    use crate::games;
+    if !games::valid_game(&game) || !games::EVENTS.contains(&event.as_str()) {
+        return Err("参数不对".into());
+    }
+    // 前端只能传这几个占位符，值也要短
+    let vars: Vec<(&str, String)> = vars
+        .iter()
+        .filter_map(|(k, v)| {
+            let k = ["分数", "点数", "对手点数"].into_iter().find(|x| x == k)?;
+            Some((k, v.chars().take(20).collect()))
+        })
+        .collect();
+    let st = app.state::<AppState>();
+    let pool = games::line(&st, &game, &event, &vars);
+    if matches!(event.as_str(), "win" | "lose") && crate::lines::seed() % 5 == 0 {
+        let style = st
+            .current_character()
+            .map(|c| c.manifest.game_style.on_lose)
+            .unwrap_or_default();
+        let name: String = name.chars().take(20).collect();
+        let result = if event == "win" {
+            "用户赢了、你输了"
+        } else {
+            "你赢了"
+        };
+        let hint = format!(
+            "你刚和用户玩了一局「{name}」，结果：{result}。用一句话自然地反应。{}",
+            if style.is_empty() || event != "win" {
+                String::new()
+            } else {
+                format!("你输了以后通常是这样的：{style}")
+            }
+        );
+        if let Some(t) = crate::proactive::model_say(&st, &hint, 80).await {
+            return Ok(Some(t));
+        }
+    }
+    Ok(pool)
+}
+
+/// 一局结束（从用户的角度：win / lose / draw / done）
+#[tauri::command]
+pub fn game_finish(app: AppHandle, game: String, outcome: crate::games::Outcome) -> CmdResult<()> {
+    if !crate::games::valid_game(&game) {
+        return Err("参数不对".into());
+    }
+    crate::daily::interact(&app);
+    crate::games::finish(&app, &game, outcome);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn game_stats(state: State<'_, AppState>) -> Vec<crate::games::Stats> {
+    crate::games::stats(&state.db(), &current_character_id(&state))
+}
+
+#[tauri::command]
+pub fn fortune_today(state: State<'_, AppState>) -> Option<crate::games::Fortune> {
+    crate::games::fortune_today(&state)
+}
+
+#[tauri::command]
+pub fn fortune_draw(app: AppHandle) -> crate::games::Fortune {
+    crate::daily::interact(&app);
+    crate::games::fortune_draw(&app)
+}
+
 /// 前端上报主动发言的结果：用户理会了（engaged）或气泡无人理会自动收起了
 #[tauri::command]
 pub fn proactive_feedback(state: State<'_, AppState>, engaged: bool) {

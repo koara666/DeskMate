@@ -3,6 +3,10 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
+  Fortune,
+  GameEvent,
+  GameOutcome,
+  GameStats,
   CompanionStatus,
   Diary,
   ActivityOverview,
@@ -56,6 +60,8 @@ export interface ChatApi {
   onCharacterChanged(cb: () => void): Promise<UnlistenFn>;
   /** 角色主动说话（经过调度器） */
   onProactive(cb: (m: ProactiveMessage) => void): Promise<UnlistenFn>;
+  /** 右键菜单「一起玩…」 */
+  onOpenGames(cb: () => void): Promise<UnlistenFn>;
   /** 气泡里点了「打开」 */
   open(target: string): Promise<string>;
   /** 气泡里点了「读取」：读完由角色说说内容（流式） */
@@ -66,7 +72,25 @@ export interface ChatApi {
   saveReminder(reminder: Reminder): Promise<SavedReminder>;
   /** 小事件里选了一项：返回角色的回应 */
   choose(id: number, index: number): Promise<string>;
+  games: GameApi;
 }
+
+/** 小游戏用的接口（规则在前端，后端只管台词、战绩、心情、亲密度） */
+export interface GameApi {
+  say(game: string, event: GameEvent, name: string, vars?: [string, string][]): Promise<string | null>;
+  finish(game: string, outcome: GameOutcome): Promise<void>;
+  stats(): Promise<GameStats[]>;
+  fortuneToday(): Promise<Fortune | null>;
+  fortuneDraw(): Promise<Fortune>;
+}
+
+export const gameApi: GameApi = {
+  say: (game, event, name, vars = []) => invoke<string | null>('game_say', { game, event, name, vars }),
+  finish: (game, outcome) => invoke('game_finish', { game, outcome }),
+  stats: () => invoke<GameStats[]>('game_stats'),
+  fortuneToday: () => invoke<Fortune | null>('fortune_today'),
+  fortuneDraw: () => invoke<Fortune>('fortune_draw'),
+};
 
 function channel(onEvent: (e: ChatEvent) => void): Channel<ChatEvent> {
   const ch = new Channel<ChatEvent>();
@@ -89,11 +113,13 @@ export const chatApi: ChatApi = {
   onFocusInput: (cb) => listen('chat-focus-input', () => cb()),
   onCharacterChanged: (cb) => listen('character-changed', () => cb()),
   onProactive: (cb) => listen<ProactiveMessage>('chat-proactive', (e) => cb(e.payload)),
+  onOpenGames: (cb) => listen('chat-open-games', () => cb()),
   open: (target) => invoke<string>('ability_open', { target }),
   read: (path, requestId, onEvent) => invoke('ability_read', { path, requestId, onEvent: channel(onEvent) }),
   feedback: (engaged) => invoke('proactive_feedback', { engaged }),
   saveReminder: (reminder) => invoke<SavedReminder>('reminder_save', { reminder }),
   choose: (id, index) => invoke<string>('event_choose', { id, index }),
+  games: gameApi,
 };
 
 export interface PetApi {

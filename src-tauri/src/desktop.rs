@@ -538,6 +538,7 @@ fn build_menu(app: &AppHandle, for_tray: bool) -> tauri::Result<Menu<Wry>> {
     let toggle = MenuItem::with_id(app, "toggle_pet", toggle_text, true, None::<&str>)?;
     let open_chat = MenuItem::with_id(app, "open_chat", "聊天", true, None::<&str>)?;
     let reminders = MenuItem::with_id(app, "reminders", "提醒…", true, None::<&str>)?;
+    let games = MenuItem::with_id(app, "games", "一起玩…", true, None::<&str>)?;
     let dnd = CheckMenuItem::with_id(app, "dnd", "勿扰模式", true, s.dnd, None::<&str>)?;
     let top = CheckMenuItem::with_id(
         app,
@@ -560,6 +561,7 @@ fn build_menu(app: &AppHandle, for_tray: bool) -> tauri::Result<Menu<Wry>> {
             app,
             &[
                 &open_chat,
+                &games,
                 &reminders,
                 &characters,
                 &corners,
@@ -637,6 +639,10 @@ fn handle_menu_now(app: &AppHandle, id: &str) {
             }
             "settings" => open_settings(app)?,
             "reminders" => open_settings_tab(app, Some("reminders".into()))?,
+            "games" => {
+                show_chat(app, true)?;
+                let _ = app.emit_to("chat", "chat-open-games", ());
+            }
             "quit" => app.exit(0),
             _ => {
                 if let Some(cid) = id.strip_prefix("char:") {

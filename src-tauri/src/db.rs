@@ -142,6 +142,18 @@ pub const MIGRATIONS: &[&str] = &[
         UNIQUE (day, character_id)
     );
     "#,
+    // v9：小游戏战绩（v2 P5）。outcome 是用户的结果：win / lose / draw / done（没有胜负）
+    r#"
+    CREATE TABLE game_records (
+        id           INTEGER PRIMARY KEY,
+        game         TEXT NOT NULL,
+        character_id TEXT NOT NULL,
+        outcome      TEXT NOT NULL CHECK (outcome IN ('win', 'lose', 'draw', 'done')),
+        ts           INTEGER NOT NULL
+    );
+    CREATE INDEX game_records_char ON game_records(character_id, game);
+    CREATE INDEX game_records_ts ON game_records(ts);
+    "#,
 ];
 
 pub fn latest_version() -> i64 {

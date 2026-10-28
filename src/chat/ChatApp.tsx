@@ -25,6 +25,8 @@ import { Composer } from './Composer';
 import { ReminderForm, emptyReminder } from '../reminders/ReminderForm';
 // 任务卡片（委托外部 agent，高级选项）按需加载：没开委托时根本不加载这部分代码
 type TaskCardType = typeof import('./TaskCard').TaskCard;
+// 小游戏也按需加载：点了 🎮 才加载
+type GameHostType = typeof import('../games/GameHost').GameHost;
 
 export type MsgStatus = 'streaming' | 'done' | 'stopped' | 'error';
 
@@ -84,6 +86,8 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const [ready, setReady] = useState(false);
   const stickToBottom = useRef(true);
   const [TaskCard, setTaskCard] = useState<ComponentType<Parameters<TaskCardType>[0]> | null>(null);
+  const [GameHost, setGameHost] = useState<ComponentType<Parameters<GameHostType>[0]> | null>(null);
+  const [playing, setPlaying] = useState(false);
   /** 主动弹出的气泡：用户理会前，无人理会一段时间就自动收起（悬停在气泡上时不收） */
   const proactive = useRef<{ timer: ReturnType<typeof setTimeout> | null; hovering: boolean } | null>(null);
   /** 用户上次在聊天窗口里打字、发消息的时间（正在聊天时不自动收起） */
@@ -111,6 +115,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
         setNow(nowSecs());
       }),
       api.onCharacterChanged(() => load().catch(() => {})),
+      api.onOpenGames(() => openGamesRef.current()),
       api.onProactive((m) => {
         stickToBottom.current = true;
         setMessages((ms) => [
@@ -322,6 +327,19 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     [],
   );
 
+  const openGamesRef = useRef(() => {});
+  const openGames = () => {
+    engage();
+    if (!GameHost) {
+      import('../games/GameHost')
+        .then((m) => setGameHost(() => m.GameHost))
+        .catch(() => {});
+    }
+    setPlaying(true);
+    setMode('expanded');
+  };
+  openGamesRef.current = openGames;
+
   const setMode = (m: ChatMode) => {
     setModeState(m);
     api.setMode(m).catch(() => {});
@@ -365,6 +383,9 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
               ⤡
             </button>
           )}
+          <button type="button" class="icon-btn" title="一起玩小游戏" aria-label="小游戏" onClick={openGames}>
+            🎮
+          </button>
           <button type="button" class="icon-btn" title="设置" aria-label="设置" onClick={() => api.openSettings().catch(() => {})}>
             ⚙
           </button>
@@ -392,7 +413,13 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
         </div>
       )}
 
-      {mode === 'expanded' ? (
+      {playing ? (
+        GameHost ? (
+          <GameHost api={api.games} name={name} onClose={() => setPlaying(false)} />
+        ) : (
+          <div class="messages muted">加载中…</div>
+        )
+      ) : mode === 'expanded' ? (
         <div
           class="messages"
           ref={listRef}
@@ -447,7 +474,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
           onFinished={(id) => startStream((rid, onEvent) => taskApi.report(id, rid, onEvent))}
         />
       )}
-      <Composer generating={generating} onSend={send} onStop={stop} focusSignal={focusSignal} />
+      {!playing && <Composer generating={generating} onSend={send} onStop={stop} focusSignal={focusSignal} />}
     </div>
   );
 }

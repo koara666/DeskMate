@@ -16,6 +16,7 @@ pub mod db;
 pub mod desktop;
 pub mod diary;
 pub mod filter;
+pub mod games;
 pub mod geometry;
 pub mod lines;
 pub mod logging;
@@ -206,6 +207,11 @@ pub fn run() {
             commands::reminder_save,
             commands::pet_touch,
             commands::event_choose,
+            commands::game_say,
+            commands::game_finish,
+            commands::game_stats,
+            commands::fortune_today,
+            commands::fortune_draw,
             settings_cmds::reminder_list,
             settings_cmds::reminder_delete,
             settings_cmds::reminder_set_status,

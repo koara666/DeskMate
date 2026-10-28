@@ -118,12 +118,17 @@ pub struct Material {
     pub chat_summaries: Vec<String>,
     pub chat_count: i64,
     pub reminders: Vec<String>,
+    /// 一起玩的小游戏：（游戏，用户赢，用户输，平）
+    pub games: Vec<(String, i64, i64, i64)>,
     pub mood: i32,
 }
 
 impl Material {
     pub fn is_empty(&self) -> bool {
-        self.activity.is_empty() && self.chat_count == 0 && self.reminders.is_empty()
+        self.activity.is_empty()
+            && self.chat_count == 0
+            && self.reminders.is_empty()
+            && self.games.is_empty()
     }
 }
 
@@ -163,8 +168,36 @@ pub fn material(db: &Connection, day: NaiveDate, character_id: &str) -> Material
         chat_summaries,
         chat_count,
         reminders,
+        games: crate::games::day_summary(db, start, end),
         mood: crate::companion::load(db, character_id).mood_now(end),
     }
+}
+
+fn game_name(id: &str) -> &str {
+    match id {
+        "rps" => "猜拳",
+        "ttt" => "井字棋",
+        "blackjack" => "21 点",
+        "fortune" => "抽签",
+        "idiom" => "成语接龙",
+        "turtle" => "海龟汤",
+        "twenty" => "二十问",
+        x => x,
+    }
+}
+
+/// 「猜拳（你赢 2 局、我赢 1 局）、抽签」
+fn games_text(g: &[(String, i64, i64, i64)]) -> String {
+    g.iter()
+        .map(|(id, w, l, _)| {
+            if w + l > 0 {
+                format!("{}（你赢 {w} 局、我赢 {l} 局）", game_name(id))
+            } else {
+                game_name(id).to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("、")
 }
 
 /// 没有模型时：模板拼一篇短日记
@@ -182,6 +215,9 @@ pub fn template(st: &AppState, day: NaiveDate, m: &Material) -> String {
     }
     if !m.reminders.is_empty() {
         parts.push(format!("我提醒了你：{}。", m.reminders.join("、")));
+    }
+    if !m.games.is_empty() {
+        parts.push(format!("我们玩了{}。", games_text(&m.games)));
     }
     if let Some(c) = st.line("diary.close", &[]) {
         parts.push(c);
@@ -223,6 +259,9 @@ async fn by_model(st: &AppState, day: NaiveDate, m: &Material) -> Option<String>
     }
     if !m.reminders.is_empty() {
         facts.push(format!("你提醒了用户：{}", m.reminders.join("、")));
+    }
+    if !m.games.is_empty() {
+        facts.push(format!("你们一起玩了：{}", games_text(&m.games)));
     }
     facts.push(format!(
         "你这天结束时的心情：{}",

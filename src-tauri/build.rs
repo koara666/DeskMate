@@ -71,6 +71,11 @@ const COMMANDS: &[&str] = &[
     "diary_delete",
     "companion_status",
     "nickname_save",
+    "game_say",
+    "game_finish",
+    "game_stats",
+    "fortune_today",
+    "fortune_draw",
 ];
 
 fn main() {

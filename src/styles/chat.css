@@ -475,3 +475,183 @@ body,
   gap: 6px;
   margin-top: 6px;
 }
+
+/* —— 小游戏 —— */
+.game-host {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 12px 12px;
+  overflow-y: auto;
+}
+.game-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.game-title {
+  font-weight: 600;
+}
+.game-line {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  font-size: 13px;
+  line-height: 1.5;
+}
+.game-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.game-pick {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.game-pick:hover {
+  border-color: var(--accent);
+}
+.game-pick small {
+  color: var(--text-weak);
+}
+.game {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.game-score {
+  font-size: 15px;
+  font-weight: 600;
+}
+.rps-show {
+  font-size: 40px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 56px;
+}
+.rps-show .vs {
+  font-size: 13px;
+  color: var(--text-weak);
+}
+.rps-hands {
+  display: flex;
+  gap: 10px;
+}
+.rps-hand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 28px;
+  width: 64px;
+  padding: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.rps-hand small {
+  font-size: 11px;
+}
+.ttt-diff {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ttt-diff button {
+  border: none;
+  background: var(--panel);
+  color: var(--text);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ttt-diff button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.ttt-board {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  gap: 4px;
+}
+.ttt-cell {
+  width: 64px;
+  height: 64px;
+  font-size: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.ttt-cell.hit {
+  background: color-mix(in srgb, var(--accent) 25%, var(--panel));
+}
+.bj-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bj-who {
+  width: 64px;
+  font-size: 12px;
+  color: var(--text-weak);
+}
+.bj-card {
+  display: inline-block;
+  min-width: 36px;
+  padding: 8px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  text-align: center;
+  font-size: 15px;
+}
+.bj-card.red {
+  color: #d9485f;
+}
+.bj-card.back {
+  background: var(--panel-2);
+  color: var(--text-weak);
+}
+.bj-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.fortune-level {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+.fortune-level.lv-great {
+  color: #d9485f;
+}
+.fortune-items {
+  font-size: 12px;
+}
+.fortune-comment {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+}

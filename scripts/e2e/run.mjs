@@ -237,6 +237,7 @@ async function main() {
       ['提醒', '提醒'],
       ['活动感知', '活动感知'],
       ['角色', '角色'],
+      ['日记', '日记'],
       ['记忆', '记忆'],
       ['模型', '模型'],
       ['用量与花费', '用量与花费'],
@@ -486,6 +487,19 @@ async function main() {
       await chat.waitFor(`document.querySelector('.panel').innerText !== ${JSON.stringify(before)}`, '播报出现', 15000);
       await waitVisible(pid, 'chat', true);
       await chat.shot('chat-briefing.png');
+    });
+    await test('小游戏：点 🎮 打开，猜拳玩一局，回到聊天', async () => {
+      await chat.click('[aria-label="小游戏"]');
+      await chat.waitFor(`!!document.querySelector('.game-list')`, '游戏列表', 10000);
+      await chat.click('猜拳');
+      await chat.waitFor(`!!document.querySelector('[aria-label="石头"]')`, '猜拳加载', 10000);
+      for (let i = 0; i < 6 && !(await chat.eval(`!!document.querySelector('.rps button.btn')`)); i++) {
+        await chat.click('[aria-label="石头"]');
+      }
+      await chat.waitFor(`!!document.querySelector('.game-line')`, '她说了话', 5000);
+      await chat.shot('chat-game-rps.png');
+      await chat.click('回到聊天');
+      await chat.waitFor(`!!document.querySelector('textarea[aria-label="输入消息"]')`, '回到聊天');
     });
     await test('任务卡片能打开和关闭（开了委托后，回复里的任务标记弹出卡片）', async () => {
       await chat.input('textarea[aria-label="输入消息"]', '/mock task 统计字数');

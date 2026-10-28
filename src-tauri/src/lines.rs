@@ -71,6 +71,29 @@ pub const SCENES: &[(&str, &[&str])] = &[
     ("diary.close", &["称呼"]),
 ];
 
+/// 小游戏的场景：`game.<事件>`（通用）或 `game.<游戏>.<事件>`；抽签的解读是 `game.fortune.<签的等级>`
+const GAME_VARS: &[&str] = &["称呼", "分数", "点数", "对手点数"];
+const FORTUNE_VARS: &[&str] = &["称呼", "签", "颜色", "物品", "方位"];
+
+/// 某个场景能用哪些占位符；不认识的场景返回 None
+pub fn allowed_vars(scene: &str) -> Option<&'static [&'static str]> {
+    if let Some((_, v)) = SCENES.iter().find(|(s, _)| *s == scene) {
+        return Some(v);
+    }
+    let rest = scene.strip_prefix("game.")?;
+    let event = rest.rsplit('.').next()?;
+    if let Some(level) = rest.strip_prefix("fortune.") {
+        return ["great", "good", "small", "fair", "bad"]
+            .contains(&level)
+            .then_some(FORTUNE_VARS);
+    }
+    let game_ok = match rest.split_once('.') {
+        Some((g, _)) => crate::games::valid_game(g),
+        None => true,
+    };
+    (game_ok && crate::games::EVENTS.contains(&event)).then_some(GAME_VARS)
+}
+
 const MAX_FILES: usize = 32;
 const MAX_FILE_BYTES: u64 = 64 * 1024;
 const MAX_LINE_CHARS: usize = 300;
@@ -235,7 +258,7 @@ impl Lines {
     pub fn problems(&self) -> Vec<String> {
         let mut v = Vec::new();
         for (scene, lines) in &self.scenes {
-            let Some((_, allowed)) = SCENES.iter().find(|(s, _)| s == scene) else {
+            let Some(allowed) = allowed_vars(scene) else {
                 v.push(format!("不认识的场景 {scene}"));
                 continue;
             };

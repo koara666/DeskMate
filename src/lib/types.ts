@@ -92,6 +92,37 @@ export interface CompanionStatus {
   call: string;
 }
 
+export type GameOutcome = 'win' | 'lose' | 'draw' | 'done';
+export type GameEvent =
+  | 'start'
+  | 'round_win'
+  | 'round_lose'
+  | 'round_draw'
+  | 'win'
+  | 'lose'
+  | 'draw'
+  | 'lead'
+  | 'behind'
+  | 'special';
+
+export interface GameStats {
+  game: string;
+  win: number;
+  lose: number;
+  draw: number;
+  played: number;
+}
+
+export interface Fortune {
+  day: string;
+  level: string;
+  name: string;
+  color: string;
+  item: string;
+  direction: string;
+  comment: string;
+}
+
 export interface Diary {
   id: number;
   day: string;
