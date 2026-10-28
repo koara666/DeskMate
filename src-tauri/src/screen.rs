@@ -128,6 +128,16 @@ pub fn capture_png() -> Result<Vec<u8>, String> {
 mod tests {
     use super::*;
 
+    /// 本机冒烟（默认忽略）：截一次屏，只检查格式和大小，不保存、不发送
+    #[test]
+    #[ignore]
+    fn real_capture_smoke() {
+        let png = capture_png().expect("截屏失败");
+        assert!(png.starts_with(b"\x89PNG"));
+        println!("PNG {} KB", png.len() / 1024);
+        assert!(png.len() < 3 * 1024 * 1024);
+    }
+
     #[test]
     fn downscale_and_encode() {
         // 2000×1000 的纯红图（BGRA）
