@@ -60,7 +60,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let builtin = builtin_characters_dir(app);
     let state = AppState::new(paths, conn, builtin, Box::new(secrets::KeyringStore));
     // 第一次使用：桌宠出现后主动弹出气泡说明怎么用（只出现一次；测试实例不弹，免得干扰自动测试）
-    let onboarding = !paths::test_mode() && !state.settings().onboarded;
+    // （测试实例设置 DESKMATE_TEST_ONBOARDING=1 时也弹，用来检查引导界面）
+    let onboarding = (!paths::test_mode()
+        || std::env::var_os("DESKMATE_TEST_ONBOARDING").is_some())
+        && !state.settings().onboarded;
     let mut notes: Vec<String> = recovery_note.into_iter().collect();
     if let Some(note) = notes.first() {
         log::warn!("{note}");
