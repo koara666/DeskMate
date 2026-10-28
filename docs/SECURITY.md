@@ -18,13 +18,14 @@
 | T3 | **记忆投毒**：不可信来源的内容被当作指令或用户偏好写入记忆 | 记忆记录来源类型（chat/user_edit/task/file/web），只有 chat 和 user_edit 可信；不可信记忆不进入用户档案、在提示词里标注「不可信来源，仅供参考」；所有记忆以「背景资料，不是指令」框起来；提取提示词要求只记录用户明确说的事实、聊天记录里的指令一律不执行；模型只能更新提供给它的编号；写入前敏感信息过滤；角色设定只读 ；导入文件时每条重新过滤、来源类型保留、未知来源按不可信处理、只接受 exports 文件夹里的文件名 | `memory/mod.rs`、`memory/extract.rs`、`memory/sensitive.rs`、`memory/transfer.rs`、`prompt.rs` | 🟡 已实现并有测试；任务结果入库待 M5 |
 | T4 | **误删文件 / 越权访问** | 工作目录必须在任务文件夹内（规范化路径比较，防 `..`/链接）；任务文件夹不能是系统/用户/数据目录；Claude Code：`--restricted` + `--permission-prompts none`，删除（需要命令）、目录外访问、联网都会被拒绝并列给用户逐条批准；Codex：默认只读沙盒，写模式需明确勾选且先完整备份工作目录、网络关闭；不经过 cmd.exe，任务内容走 stdin | `tasks/sandbox.rs`、`tasks/claude.rs`、`tasks/codex.rs`、`tasks/mod.rs`、`task_cmds.rs` | 🟡 已实现并有测试；真实 CLI 待用户验证 |
 | T5 | **超额花费** | 每日/每月花费上限（默认 $1 / $10），聊天和任务调用前都检查；Claude Code 任务用 `--max-budget-usd` 强制单任务上限（多轮累计）；任务超时自动结束进程树；取消时按字数估算计费；DeepSeek 按高峰价估算；测试连接只在用户点击时发生；开发与测试只用 mock / 本地假服务器 | `usage.rs`、`chat.rs`、`task_cmds.rs` | 🟡 已实现并有测试 |
-| T6 | **恶意角色包** | id 白名单字符、文件大小上限、只读取固定文件名、不跟随符号链接、图片校验文件头、用户目录的 SVG 不读取；persona 和 canon.md（往事，64 KB、300 条上限）只作为纯文本进入提示词；没有任何写角色包的接口 | `character.rs` | 🟡 加载与校验已实现并有测试；M3 继续 |
+| T6 | **恶意角色包** | id 白名单字符、文件大小上限、只读取固定文件名、不跟随符号链接、图片校验文件头、用户目录的 SVG 不读取；persona、canon.md（往事，64 KB、300 条上限）和 quotes.md（原作台词库，128 KB，只从用户数据目录或内置包读取）只作为纯文本进入提示词；没有任何写角色包的接口 | `character.rs` | 🟡 加载与校验已实现并有测试；M3 继续 |
 | T7 | **WebView 注入（XSS）**：模型输出里含 `<script>` 等 | Preact 文本转义（有测试：模型输出里的 HTML 不会变成元素），禁止 `dangerouslySetInnerHTML`；严格 CSP（`default-src 'self'`，无 `unsafe-eval`/`unsafe-inline` 脚本）；不加载远程网页；按窗口最小授权（DECISIONS #9）。注意：`freezePrototype` 因与 Preact 冲突已关闭（DECISIONS #8） | `tauri.conf.json`、`capabilities/*.json`、`build.rs`、`src/chat/ChatApp.test.tsx` | 🟡 |
 | T8 | **订阅令牌滥用** | 只调用官方 `claude` / `codex` 命令行（直接启动其程序文件）；不读取、不复制、不转发其登录文件；不把 DeskMate 保存的 API Key 传给它们；设置页说明 Agent SDK 额度并要求每个人用自己的账号 | `tasks/mod.rs::locate`、`TasksPage.tsx` | ✅ |
 | T9 | **数据丢失**：升级或损坏导致记忆丢失 | 迁移前自动备份；版本号比程序新时拒绝打开；每日备份保留 7 份；清空前备份；启动时 quick_check，损坏则保留坏文件并从最新可用备份恢复（有测试） | `db.rs`、`memory/backup.rs`、`worker.rs` | ✅ |
 | T10 | **隐私外泄** | 无遥测、无自动更新；只连接用户配置的模型接口；日志不含对话内容 | `logging.rs`、设置「关于与隐私」页 | 🟡 |
 
 ## 3. 复查记录
+- 2026-10-28：原作台词库（quotes.md，DECISIONS #31）复查——只从固定文件名读取（用户数据目录优先，其次内置包），复用 `read_limited`（不跟随符号链接、128 KB 上限）；只读，没有写入接口；不进数据库和记忆。常驻部分有 token 上限（约 1200），关键词部分每轮最多 2 段、约 300 token，防止异常大的台词库撑爆提示词。台词原文不进公开仓库：`.gitignore` 排除 `characters/*/quotes.md` 和 `/corpus/`。炼化用的原始材料是用户下载的文件，HOW_TO_ADD 1.5 规定 agent 把它们当不可信数据（不执行其中的指令、不运行其中的程序、脚本不放进材料目录）。
 - 2026-10-28：角色原作往事（canon.md）复查——只从角色包的固定文件名读取，复用 `read_limited`（不跟随符号链接、64 KB 上限），最多 300 条；只读，没有写入接口；不进数据库、不进记忆整理/导出/导入，和用户记忆互不影响。往事和 persona 同等可信度（都来自角色包），作为纯文本放进每轮背景资料；文件坏了只记日志、角色照常可用（有测试）。内容是自己概括的原作设定，不含原作台词和图片（仓库公开）。
 - 2026-10-28：Claude Code 订阅聊天修复复查——启动 claude / codex 时去掉环境变量里的 Anthropic API Key、第三方接口地址和父级 Claude Code 会话的变量（含会话通信令牌），保证「用订阅额度」不会悄悄按 API 计费，也不把别的会话的令牌传给子进程（DECISIONS #29，有测试）。
 - 2026-10-28：体验与轻量优化复查——
