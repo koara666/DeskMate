@@ -1,5 +1,5 @@
 //! 节假日：本地小数据（`data/holidays.tsv`：中国官方放假安排、日本内阁府的祝日）+ 美国联邦假日的规则 + 常见节日。
-//! 不联网。数据每年要更新一次（HOW_TO_ADD 4.1）。
+//! 不联网。数据每年要更新一次（HOW_TO_ADD 5.1）。
 
 use chrono::{Datelike, Duration, NaiveDate, Weekday};
 use serde::{Deserialize, Serialize};
