@@ -161,6 +161,7 @@ pub fn run() {
             commands::chat_regenerate,
             commands::chat_stop,
             commands::chat_set_mode,
+            commands::chat_fit,
             commands::chat_hide,
             commands::open_settings,
             settings_cmds::settings_get,

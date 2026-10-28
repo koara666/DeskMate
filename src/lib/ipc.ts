@@ -23,7 +23,7 @@ import type {
   PetInit,
   PetState,
   SettingsView,
-  Side,
+  Placement,
   TestResult,
   UsageView,
 } from './types';
@@ -34,9 +34,11 @@ export interface ChatApi {
   regenerate(requestId: string, onEvent: (e: ChatEvent) => void): Promise<void>;
   stop(requestId: string): Promise<boolean>;
   setMode(mode: ChatMode): Promise<void>;
+  /** 气泡模式：告诉后端内容需要多高，窗口跟着变 */
+  fit(height: number): Promise<void>;
   hide(): Promise<void>;
   openSettings(): Promise<void>;
-  onPlacement(cb: (side: Side) => void): Promise<UnlistenFn>;
+  onPlacement(cb: (p: Placement) => void): Promise<UnlistenFn>;
   onFocusInput(cb: () => void): Promise<UnlistenFn>;
   onCharacterChanged(cb: () => void): Promise<UnlistenFn>;
   /** 角色主动搭话 */
@@ -57,9 +59,10 @@ export const chatApi: ChatApi = {
     invoke('chat_regenerate', { requestId, onEvent: channel(onEvent) }),
   stop: (requestId) => invoke<boolean>('chat_stop', { requestId }),
   setMode: (mode) => invoke('chat_set_mode', { mode }),
+  fit: (height) => invoke('chat_fit', { height }),
   hide: () => invoke('chat_hide'),
   openSettings: () => invoke('open_settings'),
-  onPlacement: (cb) => listen<Side>('chat-placement', (e) => cb(e.payload)),
+  onPlacement: (cb) => listen<Placement>('chat-placement', (e) => cb(e.payload)),
   onFocusInput: (cb) => listen('chat-focus-input', () => cb()),
   onCharacterChanged: (cb) => listen('character-changed', () => cb()),
   onProactive: (cb) => listen<string>('chat-proactive', (e) => cb(e.payload)),

@@ -4,15 +4,20 @@ import { ChatApp } from './ChatApp';
 import type { ChatApi } from '../lib/ipc';
 import type { ChatEvent } from '../lib/types';
 
-function fakeApi() {
-  const calls = { send: [] as { text: string; rid: string }[], stop: [] as string[], regenerate: [] as string[] };
+function fakeApi(mode: 'compact' | 'expanded' = 'expanded') {
+  const calls = {
+    send: [] as { text: string; rid: string }[],
+    stop: [] as string[],
+    regenerate: [] as string[],
+    fit: [] as number[],
+  };
   let handler: ((e: ChatEvent) => void) | null = null;
   const off = async () => () => {};
   const api: ChatApi = {
     init: async () => ({
       character: { id: 't', name: '测试酱', color: '' },
-      mode: 'expanded',
-      side: 'left',
+      mode,
+      placement: { side: 'left', top: false },
       history: [],
       greeting: '你好呀～',
       notice: null,
@@ -30,6 +35,9 @@ function fakeApi() {
       return true;
     },
     setMode: async () => {},
+    fit: async (h) => {
+      calls.fit.push(h);
+    },
     hide: async () => {},
     openSettings: async () => {},
     onPlacement: off,
@@ -158,5 +166,23 @@ describe('ChatApp 错误提示', () => {
     expect(screen.getByText(/401/)).toBeTruthy();
     expect(screen.getByText(/检查设置里的 Key/)).toBeTruthy();
     expect(screen.getByText('重试')).toBeTruthy();
+  });
+});
+
+describe('ChatApp 气泡高度', () => {
+  it('气泡模式把内容需要的高度告诉后端，高度没变时不重复通知；面板模式不通知', async () => {
+    const f = fakeApi('compact');
+    render(<ChatApp api={f.api} typewriterTickMs={10} />);
+    await act(async () => {});
+    expect(f.calls.fit).toHaveLength(1);
+    expect(f.calls.fit[0]).toBeGreaterThan(0);
+    await sendText('你好');
+    expect(f.calls.fit).toHaveLength(1); // 测试环境没有真实排版，高度不变
+    cleanup();
+
+    const g = fakeApi('expanded');
+    render(<ChatApp api={g.api} typewriterTickMs={10} />);
+    await act(async () => {});
+    expect(g.calls.fit).toHaveLength(0);
   });
 });

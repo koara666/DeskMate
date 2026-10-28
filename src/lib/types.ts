@@ -4,6 +4,12 @@ export type PetState = 'idle' | 'thinking' | 'talking' | 'happy' | 'sad' | 'slee
 export type ChatMode = 'compact' | 'expanded';
 /** 聊天窗口在桌宠的哪一边 */
 export type Side = 'left' | 'right';
+
+/** 聊天窗口在桌宠哪一侧、和桌宠顶部还是底部对齐（决定气泡尾巴的位置） */
+export interface Placement {
+  side: Side;
+  top: boolean;
+}
 export type Role = 'user' | 'assistant';
 export type FinishReason = 'stop' | 'length' | 'cancelled';
 
@@ -33,7 +39,7 @@ export interface ChatMessage {
 export interface ChatInit {
   character: CharacterView;
   mode: ChatMode;
-  side: Side;
+  placement: Placement;
   history: ChatMessage[];
   /** 没有聊天记录时角色说的开场白 */
   greeting: string;

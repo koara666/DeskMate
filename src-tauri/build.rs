@@ -9,6 +9,7 @@ const COMMANDS: &[&str] = &[
     "chat_regenerate",
     "chat_stop",
     "chat_set_mode",
+    "chat_fit",
     "chat_hide",
     "open_settings",
     "settings_get",

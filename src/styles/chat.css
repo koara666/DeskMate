@@ -23,7 +23,20 @@ body,
 .panel.tail-left {
   left: 16px;
 }
-/* 小尾巴：贴在靠近桌宠的一侧、靠下的位置 */
+/* 气泡模式：面板高度跟着内容走，贴着靠近桌宠的那条边（窗口高度由后端跟着调整） */
+.panel.mode-compact {
+  max-height: calc(100% - 12px);
+}
+.panel.mode-compact.anchor-bottom {
+  top: auto;
+}
+.panel.mode-compact.anchor-top {
+  bottom: auto;
+}
+.mode-compact .bubble-area {
+  flex: 0 1 auto;
+}
+/* 小尾巴：贴在靠近桌宠的一侧；桌宠在屏幕下半部分时靠下，上半部分时靠上 */
 .panel::after {
   content: '';
   position: absolute;
@@ -33,6 +46,10 @@ body,
   background: var(--panel);
   border: 1.5px solid color-mix(in srgb, var(--accent) 55%, var(--border));
   transform: rotate(45deg);
+}
+.panel.anchor-top::after {
+  bottom: auto;
+  top: 48px;
 }
 .panel.tail-right::after {
   right: -7.5px;

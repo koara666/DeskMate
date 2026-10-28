@@ -4,8 +4,7 @@
 use crate::backends::ChatMessage;
 use crate::character::{self, Appearance};
 use crate::chat::{self, ChatEvent};
-use crate::desktop::{self, ChatMode};
-use crate::geometry::Side;
+use crate::desktop::{self, ChatMode, Placement};
 use crate::memory::conversation;
 use crate::state::AppState;
 use serde::Serialize;
@@ -91,7 +90,7 @@ pub async fn pet_menu(app: AppHandle) -> CmdResult<()> {
 pub struct ChatInit {
     pub character: CharacterView,
     pub mode: ChatMode,
-    pub side: Side,
+    pub placement: Placement,
     pub history: Vec<ChatMessage>,
     /// 没有聊天记录时角色说的开场白
     pub greeting: String,
@@ -129,7 +128,7 @@ pub fn chat_init(state: State<'_, AppState>) -> ChatInit {
         greeting,
         character: character_view(&state),
         mode: state.desktop.chat_mode(),
-        side: state.desktop.chat_side(),
+        placement: state.desktop.chat_placement(),
         history,
         notice: state.take_notice(),
     }
@@ -183,6 +182,12 @@ pub fn chat_stop(state: State<'_, AppState>, request_id: String) -> bool {
 #[tauri::command]
 pub async fn chat_set_mode(app: AppHandle, mode: ChatMode) -> CmdResult<()> {
     desktop::set_chat_mode(&app, mode).map_err(err)
+}
+
+/// 气泡模式：前端告诉后端内容需要多高（逻辑像素）
+#[tauri::command]
+pub async fn chat_fit(app: AppHandle, height: f64) -> CmdResult<()> {
+    desktop::fit_compact(&app, height).map_err(err)
 }
 
 #[tauri::command]

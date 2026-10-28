@@ -1,11 +1,11 @@
 // 聊天窗口：气泡模式（只显示最新回复）和面板模式（完整历史）。
 // 模型输出一律作为纯文本渲染（Preact 自动转义），绝不使用 dangerouslySetInnerHTML。
-import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { ChatApi, TaskApi } from '../lib/ipc';
 import { newRequestId } from '../lib/ipc';
 import { Typewriter } from '../lib/typewriter';
 import { copyText } from '../lib/clipboard';
-import type { CharacterView, ChatEvent, ChatMode, ErrorInfo, Role, Side } from '../lib/types';
+import type { CharacterView, ChatEvent, ChatMode, ErrorInfo, Placement, Role } from '../lib/types';
 import { Composer } from './Composer';
 import { TaskCard } from './TaskCard';
 
@@ -35,7 +35,7 @@ interface Props {
 export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [mode, setModeState] = useState<ChatMode>('compact');
-  const [side, setSide] = useState<Side>('left');
+  const [place, setPlace] = useState<Placement>({ side: 'left', top: false });
   const [character, setCharacter] = useState<CharacterView>({ id: '', name: '', color: '' });
   const [greeting, setGreeting] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
@@ -46,6 +46,9 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const [focusSignal, setFocusSignal] = useState(0);
   const writer = useRef<Typewriter | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const fitted = useRef(0);
+  const [ready, setReady] = useState(false);
   const stickToBottom = useRef(true);
 
   const load = useCallback(async () => {
@@ -54,7 +57,8 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     setGreeting(init.greeting);
     if (init.notice) setNotice(init.notice);
     setModeState(init.mode);
-    setSide(init.side);
+    setPlace(init.placement);
+    setReady(true);
     setMessages(
       init.history.map((m) => ({ id: nextId(), role: m.role, text: m.content, status: 'done' as const })),
     );
@@ -63,7 +67,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   useEffect(() => {
     load().catch(() => {});
     const offs = [
-      api.onPlacement(setSide),
+      api.onPlacement(setPlace),
       api.onFocusInput(() => setFocusSignal((n) => n + 1)),
       api.onCharacterChanged(() => load().catch(() => {})),
       api.onProactive((text) => {
@@ -93,6 +97,21 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     const el = listRef.current;
     if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
   }, [messages, mode]);
+
+  const generating = requestId !== null;
+
+  // 气泡模式：窗口高度跟着内容走（短回复不留一大块空白）。
+  // 生成过程中只长不缩，避免文字一边出来气泡一边跳；说完再缩到合适的高度。
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const area = listRef.current;
+    if (!ready || mode !== 'compact' || !panel || !area) return;
+    // 内容需要的高度 = 面板现在的高度 + 气泡区被裁掉的部分 + 面板上下各 6px 的留白
+    const need = Math.ceil(panel.offsetHeight + area.scrollHeight - area.clientHeight + 12);
+    if (Math.abs(need - fitted.current) < 2 || (generating && need < fitted.current)) return;
+    fitted.current = need;
+    api.fit(need).catch(() => {});
+  });
 
   const update = (id: number, patch: Partial<UiMessage>) =>
     setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
@@ -161,7 +180,6 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     api.setMode(m).catch(() => {});
   };
 
-  const generating = requestId !== null;
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
   const lastMsg = messages[messages.length - 1];
   const showReconnect =
@@ -171,7 +189,8 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
 
   return (
     <div
-      class={`panel mode-${mode} tail-${side === 'left' ? 'right' : 'left'}`}
+      ref={panelRef}
+      class={`panel mode-${mode} tail-${place.side === 'left' ? 'right' : 'left'} anchor-${place.top ? 'top' : 'bottom'}`}
       style={accent ? ({ '--accent': accent } as Record<string, string>) : undefined}
     >
       <header class="panel-header">

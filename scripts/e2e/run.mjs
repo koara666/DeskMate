@@ -412,6 +412,16 @@ async function main() {
       await chat.waitFor(`!document.querySelector('[aria-label="停止生成"]')`, '生成结束', 10000);
       await chat.shot('chat-reply.png');
     });
+    await test('气泡高度跟着内容走：内容放得下、不留大块空白', async () => {
+      // 窗口高度 ≈ 面板高度 + 上下留白 12px；气泡区不需要滚动
+      await chat.waitFor(
+        `(() => { const p = document.querySelector('.panel'); const a = document.querySelector('.bubble-area');
+          return a.scrollHeight <= a.clientHeight + 1 && Math.abs(window.innerHeight - (p.offsetHeight + 12)) <= 3; })()`,
+        '窗口贴合内容',
+      );
+      const h = await chat.eval('window.innerHeight');
+      if (h < 120 || h >= 250) throw new Error(`三行回复的气泡高度应在 120~250 之间，实际 ${h}`);
+    });
     await test('输入法组字时按 Enter 不发送', async () => {
       await chat.input('textarea[aria-label="输入消息"]', 'nihao');
       await chat.key('textarea[aria-label="输入消息"]', { key: 'Enter', isComposing: true });

@@ -16,7 +16,9 @@ use tauri::{
 };
 
 pub const PET_LOGICAL: (f64, f64) = (160.0, 180.0);
+/// 气泡模式：宽度固定，高度跟着内容在最小值和这个最大值之间变化
 pub const CHAT_COMPACT: (f64, f64) = (340.0, 250.0);
+pub const CHAT_COMPACT_MIN_H: f64 = 120.0;
 pub const CHAT_EXPANDED: (f64, f64) = (380.0, 560.0);
 const SNAP_LOGICAL: f64 = 24.0;
 const MARGIN_LOGICAL: f64 = 8.0;
@@ -31,11 +33,20 @@ pub enum ChatMode {
     Expanded,
 }
 
+/// 聊天窗口相对桌宠的位置：在桌宠哪一侧、和桌宠顶部还是底部对齐（决定气泡尾巴的位置）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Placement {
+    pub side: Side,
+    pub top: bool,
+}
+
 #[derive(Default)]
 pub struct DesktopState {
     move_gen: AtomicU64,
     chat_mode: Mutex<ChatMode>,
-    chat_side: Mutex<Option<Side>>,
+    chat_place: Mutex<Option<Placement>>,
+    /// 气泡模式下内容需要的高度（逻辑像素，0 = 还没量过，用最大值）
+    compact_h: Mutex<f64>,
     /// 设置窗口下次打开时要显示的页面（由 --settings=<页面> 启动参数设置）
     settings_tab: Mutex<Option<String>>,
 }
@@ -52,11 +63,19 @@ impl DesktopState {
             .take()
     }
 
-    pub fn chat_side(&self) -> Side {
-        self.chat_side
+    pub fn chat_placement(&self) -> Placement {
+        self.chat_place
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .unwrap_or(Side::Left)
+            .unwrap_or(Placement {
+                side: Side::Left,
+                top: false,
+            })
+    }
+
+    fn compact_height(&self) -> f64 {
+        let h = *self.compact_h.lock().unwrap_or_else(|e| e.into_inner());
+        if h > 0.0 { h } else { CHAT_COMPACT.1 }
     }
 }
 
@@ -289,7 +308,7 @@ pub fn position_chat(app: &AppHandle) -> tauri::Result<()> {
     let st = app.state::<AppState>();
     let scale = p.scale_factor()?;
     let (lw, lh) = match st.desktop.chat_mode() {
-        ChatMode::Compact => CHAT_COMPACT,
+        ChatMode::Compact => (CHAT_COMPACT.0, st.desktop.compact_height()),
         ChatMode::Expanded => CHAT_EXPANDED,
     };
     let size = (px(lw, scale), px(lh, scale));
@@ -298,14 +317,42 @@ pub fn position_chat(app: &AppHandle) -> tauri::Result<()> {
     let (x, y, side) = geometry::chat_position(pr, size, work, px(GAP_LOGICAL, scale));
     c.set_size(LogicalSize::new(lw, lh))?;
     c.set_position(PhysicalPosition::new(x, y))?;
+    let place = Placement {
+        side,
+        top: geometry::anchor_top(pr, work),
+    };
     let mut last = st
         .desktop
-        .chat_side
+        .chat_place
         .lock()
         .unwrap_or_else(|e| e.into_inner());
-    if *last != Some(side) {
-        *last = Some(side);
-        let _ = app.emit_to("chat", "chat-placement", side);
+    if *last != Some(place) {
+        *last = Some(place);
+        let _ = app.emit_to("chat", "chat-placement", place);
+    }
+    Ok(())
+}
+
+/// 气泡模式下，前端量出内容需要的高度后调用：窗口跟着内容变高变矮（有上下限）
+pub fn fit_compact(app: &AppHandle, height: f64) -> tauri::Result<()> {
+    if !height.is_finite() {
+        return Ok(());
+    }
+    let h = height.round().clamp(CHAT_COMPACT_MIN_H, CHAT_COMPACT.1);
+    let st = app.state::<AppState>();
+    {
+        let mut cur = st
+            .desktop
+            .compact_h
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if (*cur - h).abs() < 1.0 {
+            return Ok(());
+        }
+        *cur = h;
+    }
+    if st.desktop.chat_mode() == ChatMode::Compact {
+        position_chat(app)?;
     }
     Ok(())
 }

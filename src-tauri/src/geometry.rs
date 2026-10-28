@@ -114,9 +114,14 @@ pub enum Side {
 
 /// 聊天窗口位置：桌宠在屏幕右半边就放左边，否则放右边；
 /// 桌宠在下半屏时底边对齐，上半屏时顶边对齐；最后夹紧到工作区内。
+/// 聊天窗口和桌宠顶部对齐（桌宠在屏幕上半部分）还是底部对齐（下半部分）
+pub fn anchor_top(pet: Rect, work: Rect) -> bool {
+    pet.center().1 < work.center().1
+}
+
 pub fn chat_position(pet: Rect, (cw, ch): (i32, i32), work: Rect, gap: i32) -> (i32, i32, Side) {
-    let (pcx, pcy) = pet.center();
-    let (wcx, wcy) = work.center();
+    let (pcx, _) = pet.center();
+    let (wcx, _) = work.center();
     let mut side = if pcx >= wcx { Side::Left } else { Side::Right };
     let mut x = match side {
         Side::Left => pet.x - gap - cw,
@@ -133,7 +138,11 @@ pub fn chat_position(pet: Rect, (cw, ch): (i32, i32), work: Rect, gap: i32) -> (
             x = alt_x;
         }
     }
-    let y = if pcy >= wcy { pet.bottom() - ch } else { pet.y };
+    let y = if anchor_top(pet, work) {
+        pet.y
+    } else {
+        pet.bottom() - ch
+    };
     let (x, y) = clamp_into(Rect::new(x, y, cw, ch), work);
     (x, y, side)
 }
@@ -266,6 +275,24 @@ mod tests {
         let (x, _, side) = chat_position(pet, (340, 220), work, 4);
         assert_eq!(side, Side::Left);
         assert_eq!(x, 56);
+    }
+
+    #[test]
+    fn chat_anchor_follows_pet_half_of_screen() {
+        // 上半屏：顶部对齐，气泡变高时向下长；下半屏：底部对齐，向上长
+        let top_pet = Rect::new(1752, 100, 160, 180);
+        assert!(anchor_top(top_pet, WORK));
+        let (_, y1, _) = chat_position(top_pet, (340, 130), WORK, 4);
+        let (_, y2, _) = chat_position(top_pet, (340, 250), WORK, 4);
+        assert_eq!((y1, y2), (100, 100));
+        let bottom_pet = Rect::new(1752, 852, 160, 180);
+        assert!(!anchor_top(bottom_pet, WORK));
+        let (_, y1, _) = chat_position(bottom_pet, (340, 130), WORK, 4);
+        let (_, y2, _) = chat_position(bottom_pet, (340, 250), WORK, 4);
+        assert_eq!(
+            (y1 + 130, y2 + 250),
+            (bottom_pet.bottom(), bottom_pet.bottom())
+        );
     }
 
     #[test]

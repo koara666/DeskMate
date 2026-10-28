@@ -11,6 +11,7 @@
     "allow-chat-regenerate",
     "allow-chat-stop",
     "allow-chat-set-mode",
+    "allow-chat-fit",
     "allow-chat-hide",
     "allow-open-settings",
     "allow-task-defaults",
