@@ -100,3 +100,19 @@ describe('小游戏', () => {
     expect(screen.getByText('意马当先 — 接上啦')).toBeTruthy();
   });
 });
+
+describe('方块对战', () => {
+  it('先选模式和难度，按 PRESS START 开始倒计时', async () => {
+    const { Blocks } = await import('./Blocks');
+    const said: string[] = [];
+    const api = {} as never;
+    render(<Blocks api={api} name="七海千秋" say={(e) => said.push(e)} finish={() => {}} />);
+    expect(said).toEqual(['start']);
+    fireEvent.click(screen.getByText('生存：先顶到上面的输'));
+    fireEvent.click(screen.getByText('困难'));
+    expect(screen.getByText('困难').getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByText('PRESS START'));
+    expect(screen.getByLabelText('你的棋盘')).toBeTruthy();
+    expect(screen.getByLabelText('七海千秋的棋盘')).toBeTruthy();
+  });
+});

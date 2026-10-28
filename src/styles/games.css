@@ -102,3 +102,148 @@
 .ttt-cell:disabled {
   cursor: default;
 }
+
+/* ———————— 方块对战 ———————— */
+.blocks {
+  position: relative;
+  outline: none;
+  gap: 6px;
+}
+.blocks-menu {
+  gap: 10px;
+  padding-top: 6px;
+}
+.blocks-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.blocks-title b {
+  font-size: 20px;
+  letter-spacing: 3px;
+  font-family: var(--font-hud, var(--font));
+  color: color-mix(in srgb, var(--accent) 85%, #000);
+}
+.blocks-title small,
+.blocks-keys {
+  text-align: center;
+  color: var(--text-weak);
+}
+.blocks-start {
+  height: 30px;
+  padding: 0 18px;
+  letter-spacing: 2px;
+  font-family: var(--font-hud, var(--font));
+}
+.blocks-arena {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  justify-content: center;
+}
+.blocks-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.blocks-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-family: var(--font-hud, var(--font));
+}
+.blocks-name.me {
+  color: color-mix(in srgb, var(--accent) 85%, #000);
+}
+.blocks-name.her {
+  color: var(--accent-2, var(--text));
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blocks-board {
+  width: 112px;
+  height: 224px;
+  border-radius: 4px;
+  border: 2px solid var(--accent-2, var(--border));
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--accent-2, #000) 35%, transparent);
+  image-rendering: pixelated;
+}
+.blocks-mid {
+  width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 16px;
+  font-family: var(--font-hud, var(--font));
+}
+.blocks-time {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.blocks-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+}
+.blocks-stat small {
+  font-size: 9px;
+  color: var(--text-weak);
+  letter-spacing: 1px;
+}
+.blocks-stat b {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.blocks-next {
+  width: 48px;
+  height: 36px;
+  border-radius: 3px;
+  background: #1b2b2d;
+}
+.blocks-vs {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.blocks-pad {
+  display: flex;
+  gap: 3px;
+}
+.blocks-pad button {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.blocks-count {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 3px 3px 0 var(--accent-2, #000);
+  pointer-events: none;
+}
+.blocks-over {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}

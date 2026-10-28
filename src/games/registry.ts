@@ -28,6 +28,12 @@ export const GAMES: GameInfo[] = [
   { id: 'ttt', name: '井字棋', desc: '三个连成一线就赢，可以选难度', load: () => import('./Ttt').then((m) => m.Ttt) },
   { id: 'blackjack', name: '21 点', desc: '她当庄家，不超过 21 点、比她大就赢', load: () => import('./Blackjack').then((m) => m.Blackjack) },
   { id: 'fortune', name: '今日运势', desc: '每天抽一支签', load: () => import('./Fortune').then((m) => m.FortuneGame) },
+  {
+    id: 'blocks',
+    name: '方块对战',
+    desc: '和她同时玩下落方块，消行给对方塞垃圾行（原创玩法，用键盘玩）',
+    load: () => import('./Blocks').then((m) => m.Blocks),
+  },
   { id: 'idiom', name: '成语接龙', desc: '接上一个成语的最后一个字', needsModel: true, load: () => import('./LlmGames').then((m) => m.Idiom) },
   { id: 'turtle', name: '海龟汤', desc: '问是非题，猜出故事背后的真相（题目原创）', needsModel: true, load: () => import('./LlmGames').then((m) => m.Turtle) },
   { id: 'twenty', name: '二十问', desc: '她想一个东西，你用 20 个是非题猜出来', needsModel: true, load: () => import('./LlmGames').then((m) => m.Twenty) },
