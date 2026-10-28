@@ -102,7 +102,7 @@ export function Pet({ api, random = Math.random }: Props) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onContextMenu={onContextMenu}
-      title={name}
+      title={name ? `${name}\n点我聊天 · 右键更多选项` : undefined}
       data-testid="pet"
     >
       {state === 'thinking' && (

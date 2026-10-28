@@ -59,9 +59,18 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let (conn, recovery_note) = memory::backup::open_with_recovery(&paths.db(), &paths.backups())?;
     let builtin = builtin_characters_dir(app);
     let state = AppState::new(paths, conn, builtin, Box::new(secrets::KeyringStore));
-    if let Some(note) = recovery_note {
+    // 第一次使用：桌宠出现后主动弹出气泡说明怎么用（只出现一次；测试实例不弹，免得干扰自动测试）
+    let onboarding = !paths::test_mode() && !state.settings().onboarded;
+    let mut notes: Vec<String> = recovery_note.into_iter().collect();
+    if let Some(note) = notes.first() {
         log::warn!("{note}");
-        state.set_notice(note);
+    }
+    if onboarding {
+        notes.push(daily::onboarding_text(&state.settings().chat_backend));
+        state.update_settings(|s| s.onboarded = true);
+    }
+    if !notes.is_empty() {
+        state.set_notice(notes.join(" "));
     }
     app.manage(state);
 
@@ -88,6 +97,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         tokio::time::sleep(Duration::from_millis(800)).await;
         if let Err(e) = desktop::ensure_chat(&handle) {
             log::warn!("创建聊天窗口失败：{e}");
+            return;
+        }
+        if onboarding {
+            // 等聊天页面加载、量好气泡高度，再不抢焦点地弹出来
+            tokio::time::sleep(Duration::from_millis(1500)).await;
+            daily::pop_chat(&handle);
         }
     });
     Ok(())

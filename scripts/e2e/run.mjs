@@ -419,6 +419,8 @@ async function main() {
           return a.scrollHeight <= a.clientHeight + 1 && Math.abs(window.innerHeight - (p.offsetHeight + 12)) <= 3; })()`,
         '窗口贴合内容',
       );
+      await sleep(200);
+      await chat.shot('chat-bubble-fit.png');
       const h = await chat.eval('window.innerHeight');
       if (h < 120 || h >= 250) throw new Error(`三行回复的气泡高度应在 120~250 之间，实际 ${h}`);
     });

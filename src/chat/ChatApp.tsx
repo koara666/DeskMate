@@ -1,10 +1,12 @@
 // 聊天窗口：气泡模式（只显示最新回复）和面板模式（完整历史）。
 // 模型输出一律作为纯文本渲染（Preact 自动转义），绝不使用 dangerouslySetInnerHTML。
+import { Fragment } from 'preact';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { ChatApi, TaskApi } from '../lib/ipc';
 import { newRequestId } from '../lib/ipc';
 import { Typewriter } from '../lib/typewriter';
 import { copyText } from '../lib/clipboard';
+import { GAP_SECS, formatTime, nowSecs } from '../lib/time';
 import type { CharacterView, ChatEvent, ChatMode, ErrorInfo, Placement, Role } from '../lib/types';
 import { Composer } from './Composer';
 import { TaskCard } from './TaskCard';
@@ -17,12 +19,16 @@ export interface UiMessage {
   text: string;
   status: MsgStatus;
   error?: ErrorInfo;
+  /** 时间（Unix 秒） */
+  at: number;
 }
 
 let seq = 0;
 const nextId = () => ++seq;
 
 const NETWORK_KINDS = new Set(['network', 'timeout']);
+/** 气泡模式的最大高度（和后端 desktop::CHAT_COMPACT 一致） */
+const COMPACT_MAX_H = 250;
 
 interface Props {
   api: ChatApi;
@@ -44,6 +50,8 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const [requestId, setRequestId] = useState<string | null>(null);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [focusSignal, setFocusSignal] = useState(0);
+  /** 打开窗口时刷新：判断最近一条回复是不是「很久以前」的 */
+  const [now, setNow] = useState(nowSecs());
   const writer = useRef<Typewriter | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -60,7 +68,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     setPlace(init.placement);
     setReady(true);
     setMessages(
-      init.history.map((m) => ({ id: nextId(), role: m.role, text: m.content, status: 'done' as const })),
+      init.history.map((m) => ({ id: nextId(), role: m.role, text: m.content, status: 'done' as const, at: m.created_at })),
     );
   }, [api]);
 
@@ -68,13 +76,19 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     load().catch(() => {});
     const offs = [
       api.onPlacement(setPlace),
-      api.onFocusInput(() => setFocusSignal((n) => n + 1)),
+      api.onFocusInput(() => {
+        setFocusSignal((n) => n + 1);
+        setNow(nowSecs());
+      }),
       api.onCharacterChanged(() => load().catch(() => {})),
       api.onProactive((text) => {
         stickToBottom.current = true;
-        setMessages((ms) => [...ms, { id: nextId(), role: 'assistant', text, status: 'done' }]);
+        setMessages((ms) => [...ms, { id: nextId(), role: 'assistant', text, status: 'done', at: nowSecs() }]);
       }),
     ];
+    const onVisible = () => {
+      if (!document.hidden) setNow(nowSecs());
+    };
     const onOnline = () => setOnline(true);
     const onOffline = () => setOnline(false);
     const onKey = (e: KeyboardEvent) => {
@@ -83,7 +97,9 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
     window.addEventListener('keydown', onKey);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
+      document.removeEventListener('visibilitychange', onVisible);
       offs.forEach((p) => p.then((off) => off()).catch(() => {}));
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
@@ -108,6 +124,8 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     if (!ready || mode !== 'compact' || !panel || !area) return;
     // 内容需要的高度 = 面板现在的高度 + 气泡区被裁掉的部分 + 面板上下各 6px 的留白
     const need = Math.ceil(panel.offsetHeight + area.scrollHeight - area.clientHeight + 12);
+    // 窗口还在长高时不显示滚动条（否则每多一行都会闪一下），到最大高度还放不下才显示
+    area.classList.toggle('growing', need <= COMPACT_MAX_H);
     if (Math.abs(need - fitted.current) < 2 || (generating && need < fitted.current)) return;
     fitted.current = need;
     api.fit(need).catch(() => {});
@@ -119,7 +137,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const startStream = (start: (rid: string, onEvent: (e: ChatEvent) => void) => Promise<void>) => {
     const rid = newRequestId();
     const msgId = nextId();
-    setMessages((ms) => [...ms, { id: msgId, role: 'assistant', text: '', status: 'streaming' }]);
+    setMessages((ms) => [...ms, { id: msgId, role: 'assistant', text: '', status: 'streaming', at: nowSecs() }]);
     setRequestId(rid);
     stickToBottom.current = true;
     writer.current?.dispose();
@@ -152,7 +170,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   };
 
   const send = (text: string) => {
-    setMessages((ms) => [...ms, { id: nextId(), role: 'user', text, status: 'done' }]);
+    setMessages((ms) => [...ms, { id: nextId(), role: 'user', text, status: 'done', at: nowSecs() }]);
     startStream((rid, onEvent) => api.send(text, rid, onEvent));
   };
 
@@ -182,6 +200,11 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
   const lastMsg = messages[messages.length - 1];
+  // 上次聊天已经过去很久（新的一次会话）：气泡里不再显示旧回复，换成开场白
+  const bubbleMsg =
+    lastAssistant && (generating || lastAssistant.status !== 'done' || now - lastAssistant.at < GAP_SECS)
+      ? lastAssistant
+      : null;
   const showReconnect =
     online && lastMsg?.status === 'error' && lastMsg.error && NETWORK_KINDS.has(lastMsg.error.kind);
   const accent = character.color || undefined;
@@ -247,22 +270,26 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
           }}
         >
           {messages.length === 0 && <div class="empty">还没有聊天记录，和{name}打个招呼吧～</div>}
-          {messages.map((m) => (
-            <Message
-              key={m.id}
-              msg={m}
-              isLast={m === lastAssistant && m === lastMsg}
-              generating={generating}
-              onRegenerate={regenerate}
-            />
+          {messages.map((m, i) => (
+            <Fragment key={m.id}>
+              {(i === 0 || m.at - messages[i - 1].at >= GAP_SECS) && (
+                <div class="time-sep">{formatTime(m.at, now)}</div>
+              )}
+              <Message
+                msg={m}
+                isLast={m === lastAssistant && m === lastMsg}
+                generating={generating}
+                onRegenerate={regenerate}
+              />
+            </Fragment>
           ))}
         </div>
       ) : (
         <div class="bubble-area" ref={listRef}>
-          {lastAssistant ? (
+          {bubbleMsg ? (
             <Message
-              msg={lastAssistant}
-              isLast={lastAssistant === lastMsg}
+              msg={bubbleMsg}
+              isLast={bubbleMsg === lastMsg}
               generating={generating}
               onRegenerate={regenerate}
             />

@@ -82,6 +82,8 @@ pub struct Settings {
     pub dnd: bool,
     /// 显卡加速（默认关：省约 80 MB 内存；重启后生效，见 DECISIONS #25）
     pub gpu_acceleration: bool,
+    /// 已经看过第一次使用的引导
+    pub onboarded: bool,
     /// 上次位置；None 表示使用默认角落
     pub pet_position: Option<SavedPosition>,
     /// 默认停靠角落
@@ -113,6 +115,7 @@ impl Default for Settings {
             idle_animation: true,
             dnd: false,
             gpu_acceleration: false,
+            onboarded: false,
             pet_position: None,
             corner: Corner::BottomRight,
             backends: backends::default_configs(),

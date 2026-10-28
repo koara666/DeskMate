@@ -36,6 +36,9 @@ body,
 .mode-compact .bubble-area {
   flex: 0 1 auto;
 }
+.mode-compact .bubble-area.growing {
+  overflow-y: hidden;
+}
 /* 小尾巴：贴在靠近桌宠的一侧；桌宠在屏幕下半部分时靠下，上半部分时靠上 */
 .panel::after {
   content: '';
@@ -128,6 +131,12 @@ body,
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.time-sep {
+  align-self: center;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-weak);
 }
 .empty {
   margin: auto;

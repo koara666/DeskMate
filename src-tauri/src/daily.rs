@@ -103,6 +103,18 @@ impl DailyState {
     pub fn is_fullscreen(&self) -> bool {
         self.fullscreen.load(Ordering::Relaxed)
     }
+    pub fn is_sleeping(&self) -> bool {
+        self.sleeping.load(Ordering::Relaxed)
+    }
+}
+
+/// 用户和角色互动（点击、发消息、按快捷键）：记下时间；睡着的话马上醒来
+pub fn interact(app: &AppHandle) {
+    let st = app.state::<AppState>();
+    st.daily.touch();
+    if st.daily.sleeping.swap(false, Ordering::Relaxed) {
+        chat::emit_pet_state(app, PetState::Idle);
+    }
 }
 
 // ---------------- Windows 系统查询 ----------------
@@ -173,6 +185,17 @@ pub fn pop_chat(app: &AppHandle) {
     }
 }
 
+/// 第一次使用时气泡里的引导（只出现一次）
+pub fn onboarding_text(chat_backend: &str) -> String {
+    let mut t = String::from(
+        "第一次见面！点角色就能聊天，右键角色可以换角色、换位置、打开设置；快捷键 Alt+Shift+D 随时叫出聊天框。",
+    );
+    if chat_backend == "mock" {
+        t.push_str("现在是测试模式，到「设置 → 模型」填好 Key 才能真正聊天。");
+    }
+    t
+}
+
 // ---------------- 开机自启与快捷键 ----------------
 
 pub fn apply_autostart(app: &AppHandle, on: bool) -> Result<(), String> {
@@ -221,7 +244,7 @@ pub fn on_hotkey(app: &AppHandle, state: ShortcutState) {
     {
         let _ = p.show();
     }
-    app.state::<AppState>().daily.touch();
+    interact(app);
     // 快捷键回调在主线程：放到后台执行，避免创建聊天窗口时死锁
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -238,8 +261,11 @@ pub fn spawn(app: AppHandle) {
             tokio::time::sleep(Duration::from_secs(3)).await;
             tick += 1;
             check_fullscreen(&app);
-            if tick % 10 == 0 {
+            // 睡着时每 3 秒看一次用户回来没有（只是一次系统调用），醒得及时；平时 30 秒查一次
+            if tick % 10 == 0 || app.state::<AppState>().daily.is_sleeping() {
                 check_sleep(&app);
+            }
+            if tick % 10 == 0 {
                 check_proactive(&app).await;
             }
         }
@@ -281,17 +307,41 @@ fn check_fullscreen(app: &AppHandle) {
     }
 }
 
+/// 睡觉 / 醒来的判断（纯函数，便于测试）：Some(true) = 该睡了，Some(false) = 该醒了，None = 不变
+pub fn sleep_change(
+    sleep_minutes: u32,
+    sleeping: bool,
+    idle_secs: u64,
+    generating: bool,
+) -> Option<bool> {
+    if sleep_minutes > 0 && !sleeping && idle_secs >= sleep_minutes as u64 * 60 && !generating {
+        Some(true)
+    } else if sleeping && (idle_secs < 10 || sleep_minutes == 0) {
+        // 10 秒内动过键盘鼠标 = 用户回来了
+        Some(false)
+    } else {
+        None
+    }
+}
+
 fn check_sleep(app: &AppHandle) {
     let st = app.state::<AppState>();
-    let mins = st.settings().daily.sleep_minutes;
-    let idle = system_idle_secs();
-    let sleeping = st.daily.sleeping.load(Ordering::Relaxed);
-    if mins > 0 && !sleeping && idle >= mins as u64 * 60 && !st.chat.is_generating() {
-        st.daily.sleeping.store(true, Ordering::Relaxed);
-        chat::emit_pet_state(app, PetState::Sleep);
-    } else if sleeping && (idle < 30 || mins == 0) {
-        st.daily.sleeping.store(false, Ordering::Relaxed);
-        chat::emit_pet_state(app, PetState::Idle);
+    let change = sleep_change(
+        st.settings().daily.sleep_minutes,
+        st.daily.is_sleeping(),
+        system_idle_secs(),
+        st.chat.is_generating(),
+    );
+    if let Some(sleep) = change {
+        st.daily.sleeping.store(sleep, Ordering::Relaxed);
+        chat::emit_pet_state(
+            app,
+            if sleep {
+                PetState::Sleep
+            } else {
+                PetState::Idle
+            },
+        );
     }
 }
 
@@ -450,6 +500,32 @@ async fn greeting_text(st: &AppState) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn onboarding_mentions_key_only_in_mock_mode() {
+        assert!(onboarding_text("mock").contains("填好 Key"));
+        assert!(!onboarding_text("deepseek").contains("Key"));
+        assert!(onboarding_text("deepseek").contains("右键"));
+    }
+
+    #[test]
+    fn sleeps_after_idle_and_wakes_when_user_returns() {
+        assert_eq!(sleep_change(10, false, 599, false), None);
+        assert_eq!(sleep_change(10, false, 600, false), Some(true));
+        assert_eq!(sleep_change(10, false, 600, true), None, "正在回复时不睡");
+        assert_eq!(sleep_change(0, false, 99_999, false), None, "设成不睡");
+        assert_eq!(sleep_change(10, true, 700, false), None, "还没人动");
+        assert_eq!(
+            sleep_change(10, true, 2, false),
+            Some(false),
+            "动了鼠标就醒"
+        );
+        assert_eq!(
+            sleep_change(0, true, 700, false),
+            Some(false),
+            "关掉睡觉后醒来"
+        );
+    }
 
     #[test]
     fn hotkey_needs_modifier() {

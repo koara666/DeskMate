@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/preact';
 import { ChatApp } from './ChatApp';
 import type { ChatApi } from '../lib/ipc';
-import type { ChatEvent } from '../lib/types';
+import type { ChatEvent, HistoryMessage } from '../lib/types';
 
-function fakeApi(mode: 'compact' | 'expanded' = 'expanded') {
+function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMessage[] = []) {
   const calls = {
     send: [] as { text: string; rid: string }[],
     stop: [] as string[],
@@ -18,7 +18,7 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded') {
       character: { id: 't', name: '测试酱', color: '' },
       mode,
       placement: { side: 'left', top: false },
-      history: [],
+      history,
       greeting: '你好呀～',
       notice: null,
     }),
@@ -184,5 +184,40 @@ describe('ChatApp 气泡高度', () => {
     render(<ChatApp api={g.api} typewriterTickMs={10} />);
     await act(async () => {});
     expect(g.calls.fit).toHaveLength(0);
+  });
+});
+
+describe('ChatApp 时间', () => {
+  const nowS = Math.floor(Date.now() / 1000);
+  const msg = (role: 'user' | 'assistant', content: string, ago: number): HistoryMessage => ({
+    role,
+    content,
+    created_at: nowS - ago,
+  });
+
+  it('气泡：上次回复是很久以前的，显示开场白；刚刚的回复照常显示', async () => {
+    const old = fakeApi('compact', [msg('user', '晚安', 7300), msg('assistant', '晚安，明天见', 7200)]);
+    render(<ChatApp api={old.api} typewriterTickMs={10} />);
+    await act(async () => {});
+    expect(screen.queryByText('晚安，明天见')).toBeNull();
+    expect(screen.getByText('你好呀～')).toBeTruthy();
+    cleanup();
+
+    const recent = fakeApi('compact', [msg('user', '在吗', 70), msg('assistant', '在呢', 60)]);
+    render(<ChatApp api={recent.api} typewriterTickMs={10} />);
+    await act(async () => {});
+    expect(screen.getByText('在呢')).toBeTruthy();
+  });
+
+  it('面板：每段聊天前显示时间，间隔不到 30 分钟的不重复显示', async () => {
+    const f = fakeApi('expanded', [
+      msg('user', 'A', 7300),
+      msg('assistant', 'B', 7200),
+      msg('user', 'C', 100),
+      msg('assistant', 'D', 90),
+    ]);
+    const { container } = render(<ChatApp api={f.api} typewriterTickMs={10} />);
+    await act(async () => {});
+    expect(container.querySelectorAll('.time-sep')).toHaveLength(2);
   });
 });

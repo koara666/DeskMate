@@ -1,7 +1,6 @@
 //! 前端可以调用的命令。这里只做参数校验和转发，业务逻辑放在各模块里。
 //! 新增命令后，记得在 build.rs 的命令清单和 capabilities/*.json 里登记（按窗口最小授权）。
 
-use crate::backends::ChatMessage;
 use crate::character::{self, Appearance};
 use crate::chat::{self, ChatEvent};
 use crate::desktop::{self, ChatMode, Placement};
@@ -9,7 +8,7 @@ use crate::memory::conversation;
 use crate::state::AppState;
 use serde::Serialize;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -75,7 +74,7 @@ pub fn pet_init(state: State<'_, AppState>) -> PetInit {
 
 #[tauri::command]
 pub async fn pet_click(app: AppHandle) -> CmdResult<()> {
-    app.state::<AppState>().daily.touch();
+    crate::daily::interact(&app);
     desktop::toggle_chat(&app).map_err(err)
 }
 
@@ -91,7 +90,8 @@ pub struct ChatInit {
     pub character: CharacterView,
     pub mode: ChatMode,
     pub placement: Placement,
-    pub history: Vec<ChatMessage>,
+    /// 最近的聊天记录（带时间，界面按时间分段）
+    pub history: Vec<conversation::StoredMessage>,
     /// 没有聊天记录时角色说的开场白
     pub greeting: String,
     /// 需要告诉用户的系统提示（比如数据库从备份恢复了），只显示一次
@@ -109,13 +109,7 @@ fn current_character_id(state: &AppState) -> String {
 pub fn chat_init(state: State<'_, AppState>) -> ChatInit {
     let history =
         conversation::recent_for_character(&state.db(), &current_character_id(&state), 60)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|m| ChatMessage {
-                role: m.role,
-                content: m.content,
-            })
-            .collect();
+            .unwrap_or_default();
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -149,7 +143,7 @@ pub fn chat_send(
     if text.chars().count() > MAX_INPUT_CHARS {
         return Err(format!("消息太长了（上限 {MAX_INPUT_CHARS} 字）"));
     }
-    app.state::<AppState>().daily.touch();
+    crate::daily::interact(&app);
     tauri::async_runtime::spawn(chat::run_turn(app, text, request_id, on_event));
     Ok(())
 }

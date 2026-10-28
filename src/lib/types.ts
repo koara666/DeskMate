@@ -36,11 +36,16 @@ export interface ChatMessage {
   content: string;
 }
 
+/** 聊天记录里的一条（created_at 是 Unix 秒） */
+export interface HistoryMessage extends ChatMessage {
+  created_at: number;
+}
+
 export interface ChatInit {
   character: CharacterView;
   mode: ChatMode;
   placement: Placement;
-  history: ChatMessage[];
+  history: HistoryMessage[];
   /** 没有聊天记录时角色说的开场白 */
   greeting: string;
   /** 需要告诉用户的系统提示（比如数据库从备份恢复了），只出现一次 */
