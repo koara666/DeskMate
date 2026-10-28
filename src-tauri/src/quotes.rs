@@ -138,6 +138,69 @@ mod tests {
         assert!(q.fixed.starts_with("◇ 片段0\n"), "越靠前越优先");
     }
 
+    /// 维护者用的体检（HOW_TO_ADD 1.5 第 8 步）：对真实台词库报告常驻用量，并用日常的话看关键词片段会不会乱触发。
+    /// 台词库不在仓库里，所以默认忽略；用法：
+    /// `DESKMATE_QUOTES_FILE=<quotes.md 路径> cargo test --manifest-path src-tauri/Cargo.toml real_quotes_report -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn real_quotes_report() {
+        let path = std::env::var("DESKMATE_QUOTES_FILE").expect("请设置 DESKMATE_QUOTES_FILE");
+        let q = parse(&std::fs::read_to_string(path).unwrap());
+        println!(
+            "常驻 {} 段，约 {} token（上限 {FIXED_TOKENS}），放不下 {} 段；关键词片段 {} 段",
+            q.fixed_count,
+            estimate_tokens(&q.fixed),
+            q.fixed_dropped,
+            q.keyed.len()
+        );
+        assert_eq!(q.fixed_dropped, 0, "常驻台词超出预算，后面的没有用上");
+        for e in &q.keyed {
+            let cost = estimate_tokens(&render(e));
+            assert!(
+                cost <= KEYED_LIMITS.tokens,
+                "「{}」有 {cost} token，超过每轮 {} 的预算，永远取不出来",
+                e.title,
+                KEYED_LIMITS.tokens
+            );
+        }
+        let daily = [
+            "我好累",
+            "今天吃什么",
+            "你好聪明",
+            "我失败了",
+            "我今天心情很差",
+            "你在做什么",
+            "我快下班了",
+            "我不知道为什么有点难过",
+            "我想去睡觉了，晚安",
+            "周末想去海边玩",
+            "我们去约会吧",
+            "你喜欢玩什么游戏",
+            "我最近在玩恋爱游戏",
+            "你擅长格斗游戏吗",
+            "送你个礼物",
+            "你喜欢看电影吗",
+            "我去图书馆学习了一天",
+            "我昨天去钓鱼了",
+            "帮我整理一下文件夹",
+            "这道题我解不出来",
+        ];
+        for s in daily {
+            let hit: Vec<String> = recall(&q, s)
+                .iter()
+                .map(|r| r.lines().next().unwrap_or("").to_string())
+                .collect();
+            println!(
+                "{s:<20} → {}",
+                if hit.is_empty() {
+                    "-".into()
+                } else {
+                    hit.join("、")
+                }
+            );
+        }
+    }
+
     #[test]
     fn keyed_recall_respects_limits() {
         let mut src = String::new();
