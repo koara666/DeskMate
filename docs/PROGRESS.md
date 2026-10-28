@@ -2,6 +2,11 @@
 
 > 最新条目在最上面。超过 300 行时把旧条目压缩成摘要移到 `docs/progress-archive/`。
 
+## 2026-10-28 13:25
+- 用户测试「Claude Code（用订阅额度）」报「Invalid API key · Fix external API key」。原因：用户环境变量里有失效的 `ANTHROPIC_API_KEY`，`claude -p` 优先用它（`claude auth status` 对比确认，未消耗额度）。修复：启动 claude / codex 时去掉 API Key 和父级 Claude Code 会话的变量（DECISIONS #29，有测试）；「外部 API Key」报错单独说明。
+- 版本 0.1.3（安装包 2.94 MiB），已覆盖安装到 `D:\Apps\DeskMate` 并用 explorer 启动（干净的环境变量）。测试：Rust 171、前端 41，全部通过。
+- 下一步：用户在 0.1.3 里再点「测试连接」（NEEDS_USER #6）。如果还报错，看「查看详情」里的文字。
+
 ## 2026-10-28 11:20
 - 用户要求装在 D 盘：卸掉 `%LOCALAPPDATA%\DeskMate`，改装到 `D:\Apps\DeskMate` 并启动（NSIS 安装包会记住这个位置，以后更新直接运行安装包即可）。
 - 踩坑：先试了 `D:\Program Files\DeskMate`，普通用户没有写入权限；currentUser 安装包不提权，静默模式下文件没写进去却返回 0，还写了安装记录和快捷方式（已清理）。以后代装前先测试目标目录能否写入。

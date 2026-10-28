@@ -214,3 +214,11 @@
   - **打字机刷新只重渲染变化的那条消息**：自写 15 行的 `memo`（不用 preact/compat：它会全局改写事件处理，还多 5 KB）。
 - 测过但没改：「说话」动画（CSS 无限动画）在同一台机器上两次实测分别占单核 12% 和 1%，原因没查清；它只在回复的几秒钟里运行，按「不确定时选更简单的方案」暂不改，记在 ROADMAP 里。注意：CSP 不允许内联 `<style>`，用调试端口注入样式做对比实验是无效的。
 - 放弃：主动搭话后无人理会时自动收起气泡（有用，但要处理「用户正在读」的情况，留到之后）。
+
+## #29 2026-10-28 启动 claude / codex 时去掉 API Key 和父级会话的环境变量
+- 背景：用户测试「Claude Code（用订阅额度）」报「Invalid API key · Fix external API key」。查明：用户的 Windows 用户环境变量里有一个已失效的 `ANTHROPIC_API_KEY`；Claude Code 在 `-p` 模式下只要看到它就优先使用（交互模式会先询问，所以用户平时在终端里用 claude 没问题）。用 `claude auth status`（只查状态、不消耗额度）对比：带着这个变量是 `authMethod: api_key, apiKeySource: ANTHROPIC_API_KEY`；去掉后是 `authMethod: claude.ai, subscriptionType: pro`。
+  - 另外，那次 DeskMate 是 agent 从 Claude Code 的终端里启动的，还继承了 `CLAUDECODE`、`CLAUDE_CODE_SESSION_ID`、`CLAUDE_CODE_MESSAGING_TOKEN` 等父会话变量。
+- 决定：所有启动 claude / codex 的地方（`tasks::command`，聊天后端和任务执行共用）都去掉 `tasks::SCRUBBED_ENV`：`ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_BASE_URL` 和父级 Claude Code 会话的变量。用户自己的 Claude Code 配置变量（比如 `CLAUDE_CODE_GIT_BASH_PATH`）照常传下去。「外部 API Key」的报错单独说明原因（这时 Key 只可能来自 Claude Code 自己的设置文件）。
+- 原因：「用订阅额度」就必须走订阅登录。环境里的 Key 无效时功能直接坏掉；有效时会按 API 计费真的花钱，违背安全规则「不乱花钱」。
+- 开发注意：给用户启动正式版 DeskMate 时用 `explorer.exe "<路径>"`，不要从 agent 的终端直接启动（会继承终端的环境变量）。
+- 放弃：让用户删掉这个环境变量（别的程序可能在用，而且换一台电脑问题还会出现）；`--setting-sources` 跳过用户设置（会连带丢掉用户正常的 Claude Code 配置）。

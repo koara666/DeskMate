@@ -25,6 +25,7 @@
 | T10 | **隐私外泄** | 无遥测、无自动更新；只连接用户配置的模型接口；日志不含对话内容 | `logging.rs`、设置「关于与隐私」页 | 🟡 |
 
 ## 3. 复查记录
+- 2026-10-28：Claude Code 订阅聊天修复复查——启动 claude / codex 时去掉环境变量里的 Anthropic API Key、第三方接口地址和父级 Claude Code 会话的变量（含会话通信令牌），保证「用订阅额度」不会悄悄按 API 计费，也不把别的会话的令牌传给子进程（DECISIONS #29，有测试）。
 - 2026-10-28：体验与轻量优化复查——
   - 新的自定义协议 `deskmate-img` 只提供用户角色目录 `characters/<id>/assets/` 里、按表情命名的图片：id 和图片名白名单字符（防 `../`）、路径段数固定、只服务已加载的角色、不跟随符号链接、≤ 5 MB、读取后再校验文件头，只返回 PNG/WebP/GIF/JPEG，带 `X-Content-Type-Options: nosniff`；用户目录的 SVG 仍然不提供（有测试）。CSP 的 img-src 只多了这一个地址。没有启用 Tauri 的 asset 协议。
   - WebView2 参数只加了 `--disable-gpu`、`--process-per-site`，调试端口仍然只在测试模式且显式设置 `DESKMATE_CDP_PORT` 时打开。
