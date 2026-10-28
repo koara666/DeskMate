@@ -29,6 +29,7 @@
 | T10 | **隐私外泄** | 无遥测、无自动更新；只连接用户配置的模型接口；日志不含对话内容 | `logging.rs`、设置「关于与隐私」页 | 🟡 |
 
 ## 3. 复查记录
+- 2026-10-28：v2 P5 复查——小游戏全部在前端本地计算，不联网；新命令 `game_say`（游戏 id 白名单字符、事件白名单、占位符只收分数 / 点数且限长）、`game_finish`、`game_stats`、`fortune_today`、`fortune_draw` 只授权给聊天窗口；战绩只存游戏名、结果和时间。
 - 2026-10-28：v2 P4 复查——日记只用汇总素材（活动汇总、聊天摘要、提醒内容），不读聊天原文，写进记忆前照常经过敏感信息过滤；日记在设置里可看可删（连同记忆）。心情、亲密度只存数字在本地。触摸反应和小事件全部来自只读的台词池；小事件的选项回应由程序按编号取出（`event_choose` 只接受数字编号，只授权给聊天窗口），用户的选择记进聊天记录。`pet_touch` 只接受 head / body / drag，只授权给桌宠窗口。健康边界写进了基本规则。
 - 2026-10-28：v2 P3 复查——活动感知（T14）。只调用读前台窗口信息的系统接口（`SetWinEventHook` 只收前台切换事件、`OutOfContext`，不注入别的进程）；`OpenProcess` 只用 `PROCESS_QUERY_LIMITED_INFORMATION`。新命令 `activity_overview`、`activity_save`、`activity_delete`、`care_save` 只授权给设置窗口；`activity_save` 检查规则目标只能是分类 id 或不带路径的 .exe 名。关怀全部用台词池，不调用模型。
 - 2026-10-28：v2 P2 复查——新增外部数据源（T13）。天气接口 Open-Meteo 免费无 Key、只收坐标；城市表和节假日表是编进程序的公开数据（城市坐标来自 GeoNames），不含任何用户信息；新命令 `briefing_save`、`city_search`、`briefing_now` 只授权给设置窗口；`briefing_save` 检查新闻源地址、时间格式、城市坐标范围、日期格式。「关于与隐私」页写明了会连接哪些服务。

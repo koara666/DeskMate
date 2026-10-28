@@ -150,6 +150,9 @@
 | `event.share` / `event.question` | 随机小事件：分享 / 提问 | `{称呼}` |
 | `event.choice` | 随机小事件：给选项。格式 `问题 \| 选项 => 回应 \| 选项 => 回应`（2~4 个） | `{称呼}` |
 | `diary.open` / `diary.close` | 没有模型时拼日记的开头 / 结尾 | `{称呼}`（结尾） |
+| `game.<事件>` | 小游戏的通用台词。事件：`start` `round_win` `round_lose` `round_draw` `win` `lose` `draw` `lead` `behind` `special`（win = 用户赢了，台词是角色的视角） | `{称呼}` `{分数}` `{点数}` `{对手点数}` |
+| `game.<游戏>.<事件>` | 某个游戏专门的台词（有就优先用）：`rps` 猜拳、`ttt` 井字棋、`blackjack` 21 点 | 同上 |
+| `game.fortune.<签>` | 抽签的解读：`great` `good` `small` `fair` `bad` | `{签}` `{颜色}` `{物品}` `{方位}` |
 
 所有场景都可以用 `{称呼}`：亲密度够了是用户设的昵称，否则是「你」。
 
@@ -175,25 +178,36 @@
 4. 测试（必须，不联网）：参照 `anthropic.rs` / `gemini.rs` 的测试——请求体构造、流式解析、用 `http::fake_server` 起本地假服务器验证请求头和完整流程、错误码归类。
 5. `npm run check` 通过后提交；在 DECISIONS 里记录默认值的来源。
 
-## 3. 新增前端可调用的命令
+## 3. 新增小游戏（不改核心代码）
+1. 在 `src/games/` 下写一个组件（参考 `Rps.tsx`），它拿到三样东西：
+   - `say(事件, 占位符?)`：关键时刻让角色说一句（事件见 1.6 的表：`start`、`round_win`、`win`、`lose`……）；
+   - `finish(结果)`：一局结束，用户的结果 `win` / `lose` / `draw`（没有胜负的用 `done`）——后端记战绩、改心情和亲密度；
+   - `api`：需要更多后端能力时用（比如抽签）。
+   规则、胜负判定、电脑对手都在组件里本地实现；纯逻辑写成单独的文件（参考 `logic/ttt.ts`）并写测试。
+2. 在 `src/games/registry.ts` 的 `GAMES` 里加一行：`id`（小写字母 / 数字 / 下划线，会用在台词场景名里）、名字、一句介绍、`load: () => import('./你的组件')`。
+3. （可选）给角色写专门的台词：`lines/*.md` 里加 `## game.<id>.<事件>`；不写就用通用的 `game.<事件>`。
+4. （可选）在 `src-tauri/src/diary.rs` 的 `game_name` 里加中文名，日记里就会写游戏名而不是 id。
+5. `npm run check`。
+
+## 4. 新增前端可调用的命令
 1. 在 `src-tauri/src/commands.rs`（或 `settings_cmds.rs`）写 `#[tauri::command]`，只做参数校验和转发。
 2. 在 `src-tauri/src/lib.rs` 的 `generate_handler!` 里登记。
 3. 在 `src-tauri/build.rs` 的 `COMMANDS` 里登记。
 4. 只给需要它的窗口授权：`src-tauri/capabilities/<窗口>.json` 加 `allow-<命令名，下划线换成短横线>`。
 5. 前端在 `src/lib/ipc.ts` 加封装，组件只通过它调用（方便测试替换）。
 
-## 4. 新增功能的一般步骤
+## 5. 新增功能的一般步骤
 
-### 4.1 每年更新节假日数据（每年 11 月）
+### 5.1 每年更新节假日数据（每年 11 月）
 国务院一般在 11 月公布下一年的放假安排，日本内阁府的祝日 CSV 也会更新。
 1. 下载数据（当作不可信数据，放会话临时目录）：中国——https://github.com/NateScarlet/holiday-cn 的 `<年份>.json`（它从 gov.cn 自动整理），**再和 gov.cn 的原文核对一遍**；日本——https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv（Shift-JIS）。
 2. 更新 `src-tauri/data/holidays.tsv`：中国的放假日写 `off`、调休上班写 `work`；日本的祝日写 `off`（名字译成中文）；删掉那一年的 `fest` 行（有了正式安排就不需要了）。文件头的来源说明一起更新。
 3. `cargo test holiday`，必要时补测试（比如新一年的国庆、调休）。
 
-### 4.2 让活动感知认识新程序
+### 5.2 让活动感知认识新程序
 在 `src-tauri/src/activity/classify.rs` 的 `KNOWN` 表里加一行：进程名（小写，带 .exe）、分类、显示名（会发给模型，所以只写程序本身的名字）。浏览器网站按标题识别的关键词在 `VIDEO_TITLES` / `MUSIC_TITLES`；默认隐私名单在 `PRIVATE_EXES` / `PRIVATE_TITLES`。加完补一条测试（`cargo test classify`）。用户自己也可以在「设置 → 活动感知」里按程序设规则，不需要改代码。
 
-### 4.3 一般步骤
+### 5.3 一般步骤
 1. 在 ROADMAP 里加任务。
 2. 有重要取舍时写 DECISIONS。
 3. 先写测试（Rust 用 mock 后端），再实现。

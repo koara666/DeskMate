@@ -51,6 +51,9 @@ src/
   chat/ChatApp.tsx Composer.tsx    聊天：气泡/面板、流式打字机、停止/重试/复制、错误详情、IME
   settings/*.tsx               设置：常规、模型（Key/测试连接）、用量、关于
   lib/ipc.ts                   唯一的 IPC 封装（组件通过接口调用，测试时换成假实现）
+  games/                       小游戏：registry.ts（注册表）、GameHost.tsx（选游戏、显示她的台词）、Rps / Ttt / Blackjack / Fortune、
+                               logic/（井字棋电脑对手、21 点的纯逻辑）
+  reminders/ReminderForm.tsx   提醒表单（聊天和设置共用）
   lib/types.ts typewriter.ts clipboard.ts
   lib/time.ts                  聊天记录的时间显示（30 分钟分段，和后端会话划分一致）
   lib/memo.ts                  极简 memo（不引入 preact/compat）
@@ -88,6 +91,7 @@ src-tauri/src/
                                classify.rs（进程名 / 路径 / 标题 → 分类，纯函数）、tracker.rs（会话状态机）、
                                win.rs（前台窗口与切换事件）、log.rs（活动日志汇总）
   companion.rs                 角色感：心情与亲密度（kv `bond:<角色>`）、触摸反应、随机小事件与选项、聊天里记下生日、待机图片变体
+  games.rs                     小游戏后端：关键时刻的台词（game.<游戏>.<事件> → game.<事件>）、战绩、心情和亲密度、每日抽签
   diary.rs                     桌宠日记：素材（活动汇总、聊天摘要、提醒、心情）→ 模型或模板 → diaries 表 + 记忆
   care.rs                      日常关怀：久坐、喝水、深夜、吃饭（纯函数 due + 每 30 秒检查）
   reminders/                   提醒：mod.rs（数据、触发、定时器、补提醒）、parse.rs（本地中文时间解析、重复规则）、
@@ -131,6 +135,7 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 - v1 `settings(key, value JSON)`：全部设置（不含 Key）
 - v2 `usage`：每次模型调用的 token 与估算费用（按日/月索引）
 - v4 `tasks`：任务执行记录；v5 `memories.decayed_at`：记忆降权时间
+- v9 `game_records`：小游戏战绩（游戏、角色、用户的结果、时间）
 - v8 `diaries`：日记（日期、角色、正文；同时存一条分类为 diary 的摘要记忆）
 - v7 `activity_log`：活动日志（日期、分类、清洗过的程序名、开始时间、时长；不存窗口标题）
 - v6 `reminders`：提醒（内容、触发方式 at/startup/activity、下次时间、重复规则 JSON、活动、到时台词、重要、状态）
