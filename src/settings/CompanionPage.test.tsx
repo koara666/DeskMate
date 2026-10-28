@@ -11,6 +11,18 @@ afterEach(cleanup);
 function fakeApi() {
   const saved = { companion: [] as CompanionSettings[], advanced: [] as AdvancedSettings[] };
   const api = {
+    companionStatus: async () => ({
+      character: '七海千秋',
+      level: 2,
+      points: 120,
+      next: 250,
+      title: '游戏搭档',
+      mood: 30,
+      mood_word: '不错',
+      nickname: '小林',
+      call: '小林',
+    }),
+    saveNickname: async (n: string) => n,
     saveCompanion: async (c: CompanionSettings) => {
       saved.companion.push(c);
     },
@@ -39,6 +51,9 @@ describe('陪伴设置', () => {
     });
     expect(f.saved.companion.at(-1)?.quiet_enabled).toBe(true);
     expect(screen.getByLabelText('安静时段开始')).toBeTruthy();
+    // 你和她：关系和称呼
+    expect(await screen.findByText('游戏搭档（亲密度 2/5）')).toBeTruthy();
+    expect((screen.getByLabelText('称呼') as HTMLInputElement).value).toBe('小林');
   });
 });
 
@@ -65,6 +80,18 @@ describe('每日播报设置', () => {
   it('查找城市后选中保存；添加播报时间和纪念日', async () => {
     const saved: unknown[] = [];
     const api = {
+      companionStatus: async () => ({
+        character: '七海千秋',
+        level: 2,
+        points: 120,
+        next: 250,
+        title: '游戏搭档',
+        mood: 30,
+        mood_word: '不错',
+        nickname: '小林',
+        call: '小林',
+      }),
+      saveNickname: async (n: string) => n,
       saveCompanion: async () => {},
       saveDaily: async () => {},
       saveBriefing: async (b: unknown) => {

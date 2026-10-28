@@ -43,6 +43,8 @@ pub struct AppState {
     pub activity: crate::activity::ActivityState,
     /// 日常关怀的计时
     pub care: crate::care::CareRuntime,
+    /// 触摸反应、等用户选择的小事件
+    pub companion: crate::companion::TouchState,
 }
 
 impl AppState {
@@ -76,6 +78,7 @@ impl AppState {
             briefing: Default::default(),
             activity: Default::default(),
             care: Default::default(),
+            companion: Default::default(),
         }
     }
 
@@ -143,11 +146,17 @@ impl AppState {
             .current_character()
             .map(|c| c.pool.clone())
             .unwrap_or_default();
+        let (affinity, mood) = crate::companion::current(self);
+        // {称呼} 总能用：亲密度够了用昵称，否则「你」
+        let mut all: Vec<(&str, String)> = vars.to_vec();
+        if !all.iter().any(|(k, _)| *k == "称呼") {
+            all.push(("称呼", crate::companion::call_name(self)));
+        }
         let ctx = LineCtx {
-            affinity: 0,
-            mood: 0,
+            affinity,
+            mood,
             hour: chrono::Local::now().hour(),
-            vars,
+            vars: &all,
         };
         lines::pick(
             &own,

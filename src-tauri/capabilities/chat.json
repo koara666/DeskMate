@@ -18,6 +18,7 @@
     "allow-ability-read",
     "allow-proactive-feedback",
     "allow-reminder-save",
+    "allow-event-choose",
     "allow-task-defaults",
     "allow-task-start",
     "allow-task-approve",

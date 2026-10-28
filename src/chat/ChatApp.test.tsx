@@ -67,6 +67,7 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMess
     feedback: async (engaged) => {
       calls.feedback.push(engaged);
     },
+    choose: async (_id, index) => (index === 0 ? '那我陪着你。' : '休息一下也好。'),
     saveReminder: async (r) => {
       calls.reminders.push(r);
       return { reminder: { ...r, id: 1, when: '30 分钟后' }, line: '记下了，到时候叫你。' };
@@ -414,5 +415,19 @@ describe('ChatApp 提醒', () => {
     expect(f.calls.reminders.at(-1)?.content).toBe('吃药');
     // 手动填的台词由后端生成
     expect(f.calls.reminders.at(-1)?.line).toBe('');
+  });
+});
+
+describe('ChatApp 小事件', () => {
+  it('给出选项，点了以后显示我的选择和她的回应', async () => {
+    const f = await mount();
+    f.say({ id: 7, kind: 'random', text: '待会儿想做什么？', popped: true, choices: ['继续努力', '休息一下'] });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '休息一下' }));
+    });
+    await act(async () => {});
+    expect(screen.queryByRole('button', { name: '继续努力' })).toBeNull();
+    expect(assistantText()).toContain('休息一下也好');
+    expect(f.calls.feedback).toEqual([true]);
   });
 });

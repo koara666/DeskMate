@@ -73,3 +73,24 @@ describe('提醒页', () => {
     expect(f.calls.deleted).toEqual([1]);
   });
 });
+
+import { DiaryPage } from './DiaryPage';
+
+describe('日记页', () => {
+  it('列出日记，可以删除', async () => {
+    let list = [{ id: 1, day: '2026-10-27', character_id: 'nanami-chiaki', content: '今天你玩了 2 小时的 Hades。', created_at: 0 }];
+    const api = {
+      diaryList: async () => list,
+      diaryDelete: async (id: number) => {
+        list = list.filter((d) => d.id !== id);
+        return true;
+      },
+    };
+    render(<DiaryPage api={api} />);
+    await flush();
+    expect(screen.getByText('今天你玩了 2 小时的 Hades。')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+    await flush();
+    expect(screen.getByText(/还没有日记/)).toBeTruthy();
+  });
+});

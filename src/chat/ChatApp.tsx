@@ -42,6 +42,8 @@ export interface UiMessage {
   reminder?: ReminderDraft;
   /** 没听懂的提醒：给「手动设置」 */
   reminderForm?: boolean;
+  /** 小事件的选项（id 是主动消息的编号） */
+  choices?: { id: number; options: string[] };
 }
 
 let seq = 0;
@@ -111,7 +113,17 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
       api.onCharacterChanged(() => load().catch(() => {})),
       api.onProactive((m) => {
         stickToBottom.current = true;
-        setMessages((ms) => [...ms, { id: nextId(), role: 'assistant', text: m.text, status: 'done', at: nowSecs() }]);
+        setMessages((ms) => [
+          ...ms,
+          {
+            id: nextId(),
+            role: 'assistant',
+            text: m.text,
+            status: 'done',
+            at: nowSecs(),
+            choices: m.choices?.length ? { id: m.id, options: m.choices } : undefined,
+          },
+        ]);
         armProactive(m);
       }),
     ];
@@ -290,6 +302,26 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   };
   const onReminder = useCallback((r: Reminder) => reminderRef.current(r), []);
 
+  // 小事件：选了一项，角色回应
+  const chooseRef = useRef<(msgId: number, id: number, index: number, option: string) => Promise<void>>(async () => {});
+  chooseRef.current = async (msgId, id, index, option) => {
+    engage();
+    setMessages((ms) => ms.map((m) => (m.id === msgId ? { ...m, choices: undefined } : m)));
+    const add = (role: Role, text: string) =>
+      setMessages((ms) => [...ms, { id: nextId(), role, text, status: 'done', at: nowSecs() }]);
+    add('user', option);
+    stickToBottom.current = true;
+    try {
+      add('assistant', await api.choose(id, index));
+    } catch (e) {
+      add('assistant', String(e));
+    }
+  };
+  const onChoose = useCallback(
+    (msgId: number, id: number, index: number, option: string) => chooseRef.current(msgId, id, index, option),
+    [],
+  );
+
   const setMode = (m: ChatMode) => {
     setModeState(m);
     api.setMode(m).catch(() => {});
@@ -382,6 +414,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
                 onRegenerate={m === lastMsg ? regenerate : undefined}
                 onAction={onAction}
                 onReminder={onReminder}
+                onChoose={onChoose}
               />
             </Fragment>
           ))}
@@ -396,6 +429,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
               onRegenerate={regenerate}
               onAction={onAction}
               onReminder={onReminder}
+              onChoose={onChoose}
             />
           ) : (
             <div class="msg msg-assistant">
@@ -428,9 +462,19 @@ interface MessageProps {
   onAction?: (a: ActionView) => Promise<string>;
   /** 保存提醒 */
   onReminder?: (r: Reminder) => Promise<void>;
+  /** 小事件选了一项 */
+  onChoose?: (msgId: number, id: number, index: number, option: string) => Promise<void>;
 }
 
-const Message = memo(function Message({ msg, isLast, generating, onRegenerate, onAction, onReminder }: MessageProps) {
+const Message = memo(function Message({
+  msg,
+  isLast,
+  generating,
+  onRegenerate,
+  onAction,
+  onReminder,
+  onChoose,
+}: MessageProps) {
   const [copied, setCopied] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const thinking = msg.status === 'streaming' && msg.text === '';
@@ -454,6 +498,15 @@ const Message = memo(function Message({ msg, isLast, generating, onRegenerate, o
         msg.text && <div class="text">{msg.text}</div>
       )}
       {msg.status === 'stopped' && <div class="note">（已停止）</div>}
+      {msg.choices && onChoose && (
+        <div class="choices">
+          {msg.choices.options.map((o, i) => (
+            <button type="button" key={o} class="btn btn-small btn-plain" onClick={() => onChoose(msg.id, msg.choices!.id, i, o)}>
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
       {(msg.reminder || msg.reminderForm) && onReminder && (
         <ReminderCard draft={msg.reminder} onSave={onReminder} />
       )}

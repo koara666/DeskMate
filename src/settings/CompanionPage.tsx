@@ -5,6 +5,7 @@ import type { CompanionSettings, DailySettings, Frequency, SettingsView } from '
 import { StatusLine, useStatus } from './SettingsApp';
 import { BriefingSection } from './BriefingSection';
 import { CareSection } from './CareSection';
+import { BondSection } from './BondSection';
 
 interface Props {
   api: SettingsApi;
@@ -43,6 +44,8 @@ export function CompanionPage({ api, view }: Props) {
         角色会在合适的时候主动说话：提醒、关心你、每日播报、对你在做的事说上一句。这里统一控制「多久说一次、什么时候别说话」。
         勿扰模式、全屏（玩游戏、看视频）时她不会主动说话，你设的提醒除外。
       </p>
+
+      <BondSection api={api} />
 
       <div class="card">
         <label class="row">
@@ -111,6 +114,13 @@ export function CompanionPage({ api, view }: Props) {
             </label>
           </div>
         )}
+        <label class="row">
+          <input type="checkbox" checked={c.events} onChange={(e) => save({ ...c, events: checked(e) })} />
+          <span>
+            随机小事件
+            <small>偶尔分享她在想什么、问你个问题、给你几个选项选（频率跟着上面走）</small>
+          </span>
+        </label>
         <label class="row">
           <input type="checkbox" checked={c.system_notify} onChange={(e) => save({ ...c, system_notify: checked(e) })} />
           <span>

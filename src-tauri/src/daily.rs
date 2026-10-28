@@ -113,6 +113,8 @@ pub fn interact(app: &AppHandle) {
     let st = app.state::<AppState>();
     st.daily.touch();
     st.proactive.engaged();
+    // 每天第一次来：亲密度 +3（每天只算一次）
+    crate::companion::interact(app, crate::companion::Interaction::FirstToday);
     if st.daily.sleeping.swap(false, Ordering::Relaxed) {
         chat::emit_pet_state(app, PetState::Idle);
     }
@@ -274,6 +276,8 @@ pub fn spawn(app: AppHandle) {
                 crate::briefing::check(&app);
                 // 日常关怀：久坐、喝水、深夜、吃饭
                 crate::care::check(&app);
+                // 随机小事件
+                crate::companion::check_event(&app);
             }
         }
     });
@@ -477,6 +481,7 @@ async fn greeting_text(st: &AppState) -> String {
         user_text: "（很久没聊天了）",
         now: &now_text,
         delegation: false,
+        relation: "",
     };
     let budget = crate::prompt::PromptBudget {
         max_output_tokens: 120,

@@ -467,3 +467,11 @@ body,
 .muted {
   color: var(--text-weak);
 }
+
+/* 小事件的选项 */
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}

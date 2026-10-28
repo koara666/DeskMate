@@ -46,6 +46,8 @@ pub struct BriefingSettings {
     pub news: bool,
     pub reminders: bool,
     pub special: bool,
+    /// 昨天日记里留下的话题（只在用模型说时提）
+    pub diary: bool,
     /// 聊天里问天气时自动查
     pub weather_in_chat: bool,
     /// 用户所在城市（只存在本地）
@@ -66,6 +68,7 @@ impl Default for BriefingSettings {
             news: false,
             reminders: true,
             special: true,
+            diary: true,
             weather_in_chat: true,
             city: None,
             region: Region::Auto,
@@ -171,6 +174,8 @@ pub enum Block {
     News(Vec<String>),
     /// 生日、纪念日、节日
     Special(Vec<String>),
+    /// 昨天的日记（只给模型参考）
+    Diary(String),
 }
 
 /// 收集好的全部资料
@@ -301,6 +306,26 @@ pub async fn weather_for(st: &AppState, c: &City) -> Option<weather::Weather> {
     Some(w)
 }
 
+/// 每天第一次查到用户所在城市的天气：心情受一点影响（下雨有点闷，晴天开心一点），桌宠换图
+pub fn weather_mood(app: &AppHandle, w: &weather::Weather) {
+    use crate::companion::{Interaction, interact};
+    let st = app.state::<AppState>();
+    let day = briefing_day(now_local()).to_string();
+    if crate::settings::kv_get(&st.db(), "weather_mood_day").as_deref() == Some(day.as_str()) {
+        return;
+    }
+    let _ = crate::settings::kv_set(&st.db(), "weather_mood_day", &day);
+    if let Some(d) = w.days.first() {
+        if weather::is_rain(d.code) || weather::is_snow(d.code) {
+            interact(app, Interaction::Rainy);
+        } else if d.code <= 1 {
+            interact(app, Interaction::Sunny);
+        }
+    }
+    use tauri::Emitter;
+    let _ = app.emit_to("pet", "pet-variant", ());
+}
+
 /// 收集资料（天气、新闻要联网；失败的块直接不要）
 pub async fn gather(st: &AppState, occasion: Occasion, now: NaiveDateTime) -> Facts {
     let s = st.settings().briefing;
@@ -401,6 +426,17 @@ pub async fn gather(st: &AppState, occasion: Occasion, now: NaiveDateTime) -> Fa
             blocks.push(Block::Special(v));
         }
     }
+    if s.diary
+        && !bedtime
+        && let Some(c) = st.current_character()
+        && let Some(d) = crate::diary::get(
+            &st.db(),
+            &(day - Duration::days(1)).to_string(),
+            &c.manifest.id,
+        )
+    {
+        blocks.push(Block::Diary(d.content.chars().take(200).collect()));
+    }
     Facts {
         occasion,
         now,
@@ -459,6 +495,9 @@ pub fn facts_for_prompt(f: &Facts) -> String {
                 titles.join(" / ")
             ),
             Block::Special(v) => format!("特殊日子：{}", v.join("；")),
+            Block::Diary(t) => format!(
+                "你昨天的日记（可以顺着里面的事提一句，不要整段念）：{t}"
+            ),
         });
     }
     v.join("\n")
@@ -560,6 +599,8 @@ pub fn compose_template(st: &AppState, f: &Facts) -> String {
                 })
                 .collect::<Vec<_>>()
                 .join(""),
+            // 模板模式不提日记（整段念出来很怪）
+            Block::Diary(_) => String::new(),
         };
         if !text.trim().is_empty() {
             out.push(text);
@@ -646,6 +687,9 @@ pub async fn run(app: &AppHandle, occasion: Occasion, slot: &str, force: bool) {
     let st = app.state::<AppState>();
     let now = now_local();
     let facts = gather(&st, occasion, now).await;
+    if let Some(Block::Weather(w)) = facts.blocks.iter().find(|b| matches!(b, Block::Weather(_))) {
+        weather_mood(app, w);
+    }
     let text = match compose_model(&st, &facts).await {
         Some(t) => t,
         None => compose_template(&st, &facts),

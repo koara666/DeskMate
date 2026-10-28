@@ -65,6 +65,12 @@ const COMMANDS: &[&str] = &[
     "activity_save",
     "activity_delete",
     "care_save",
+    "pet_touch",
+    "event_choose",
+    "diary_list",
+    "diary_delete",
+    "companion_status",
+    "nickname_save",
 ];
 
 fn main() {

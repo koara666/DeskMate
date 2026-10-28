@@ -23,6 +23,17 @@ use crate::quotes::{self, Quotes};
 /// 桌宠的表情状态
 pub const STATES: [&str; 6] = ["idle", "talking", "thinking", "happy", "sad", "sleep"];
 
+/// 待机图片的可选变体（随心情、天气、季节换，零成本；用户没放对应图片就用 idle）
+pub const IDLE_VARIANTS: [&str; 7] = [
+    "idle_good",
+    "idle_low",
+    "idle_rain",
+    "idle_snow",
+    "idle_summer",
+    "idle_winter",
+    "idle_night",
+];
+
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_PERSONA_BYTES: u64 = 64 * 1024;
 const MAX_CANON_BYTES: u64 = 64 * 1024;
@@ -74,6 +85,32 @@ pub struct Manifest {
     /// 角色自己的生日（"MM-DD"，可选）：那天每日播报里会提到
     #[serde(default)]
     pub birthday: String,
+    /// 亲密度 0~5 级时，用户对她来说是什么人（可选，不写用通用的）
+    #[serde(default)]
+    pub affinity_titles: Vec<String>,
+    /// 亲密度到几级开始用用户设的昵称称呼他（默认 2）
+    #[serde(default = "default_call_from")]
+    pub call_from_level: u8,
+    /// 写日记的风格（可选，一两句话）
+    #[serde(default)]
+    pub diary_style: String,
+    /// 玩小游戏时的性格
+    #[serde(default)]
+    pub game_style: GameStyle,
+}
+
+fn default_call_from() -> u8 {
+    2
+}
+
+/// 小游戏里的性格（P5 用）
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GameStyle {
+    /// 好胜：赢了更开心、输了更不服气
+    pub competitive: bool,
+    /// 输了以后的反应说明（给模型参考，比如「认真分析哪里没算好」）
+    pub on_lose: String,
 }
 
 fn default_order() -> i32 {
@@ -457,6 +494,12 @@ pub fn appearance(c: &Character) -> Appearance {
         // 同一张图用同一个地址，WebView 只读取、解码一次
         if let Some(url) = user_image_url(c, name).or_else(|| idle_user.clone()) {
             images.insert(state.to_string(), url);
+        }
+    }
+    // 变体只在用户真的放了那张图时才有（缺图回退默认）
+    for v in IDLE_VARIANTS {
+        if let Some(url) = user_image_url(c, v) {
+            images.insert(v.to_string(), url);
         }
     }
     if images.is_empty() {

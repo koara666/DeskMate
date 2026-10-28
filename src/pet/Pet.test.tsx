@@ -6,7 +6,12 @@ import type { PetState } from '../lib/types';
 
 function fakeApi() {
   let stateCb: ((s: PetState) => void) | null = null;
-  const api: PetApi & { click: ReturnType<typeof vi.fn>; menu: ReturnType<typeof vi.fn>; startDrag: ReturnType<typeof vi.fn> } = {
+  const api: PetApi & {
+    click: ReturnType<typeof vi.fn>;
+    touch: ReturnType<typeof vi.fn>;
+    menu: ReturnType<typeof vi.fn>;
+    startDrag: ReturnType<typeof vi.fn>;
+  } = {
     init: async () => ({
       character: { id: 't', name: '测试酱', color: '' },
       appearance: { images: { idle: 'data:image/svg+xml;base64,AA==' }, placeholder: true },
@@ -14,6 +19,7 @@ function fakeApi() {
       dnd: false,
     }),
     click: vi.fn(async () => {}),
+    touch: vi.fn(async () => {}),
     menu: vi.fn(async () => {}),
     startDrag: vi.fn(async () => {}),
     onState: async (cb) => {
@@ -76,5 +82,20 @@ describe('Pet 桌宠', () => {
     const { setState } = await mount();
     setState('thinking');
     expect(screen.getByLabelText('思考中')).toBeTruthy();
+  });
+
+  it('点上面一截是摸头，不打开聊天；拖动时说一句', async () => {
+    const { api, el } = await mount();
+    el.getBoundingClientRect = () => ({ top: 0, left: 0, width: 160, height: 180, right: 160, bottom: 180, x: 0, y: 0, toJSON: () => ({}) });
+    fireEvent.pointerDown(el, { button: 0, screenX: 100, screenY: 100, clientY: 20 });
+    fireEvent.pointerUp(el, { button: 0, screenX: 100, screenY: 100, clientY: 20 });
+    expect(api.touch).toHaveBeenCalledWith('head');
+    expect(api.click).not.toHaveBeenCalled();
+    fireEvent.pointerDown(el, { button: 0, screenX: 100, screenY: 100, clientY: 120 });
+    fireEvent.pointerUp(el, { button: 0, screenX: 100, screenY: 100, clientY: 120 });
+    expect(api.click).toHaveBeenCalledTimes(1);
+    fireEvent.pointerDown(el, { button: 0, screenX: 100, screenY: 100 });
+    fireEvent.pointerMove(el, { buttons: 1, screenX: 130, screenY: 100 });
+    expect(api.touch).toHaveBeenCalledWith('drag');
   });
 });

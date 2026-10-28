@@ -52,6 +52,8 @@ pub async fn run_once(app: &AppHandle) {
         log::info!("整理了 {n} 次会话的记忆");
     }
     maybe_maintain(&state).await;
+    // 补写昨天的日记（每天一次，没什么可写的日子不写）
+    crate::diary::maybe_write(&state).await;
 }
 
 const MAINT_KEY: &str = "maintenance_day";

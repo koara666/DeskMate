@@ -6,6 +6,8 @@ import type { PetApi } from '../lib/ipc';
 import type { PetInit, PetState } from '../lib/types';
 
 const DRAG_THRESHOLD = 4;
+/** 点在形象上面这一截算摸头 */
+const HEAD_RATIO = 0.3;
 const REVERT_MS: Partial<Record<PetState, number>> = { happy: 2500, sad: 4000 };
 
 type Pose = '' | 'breathe1' | 'breathe2' | 'blink';
@@ -78,12 +80,17 @@ export function Pet({ api, random = Math.random }: Props) {
     if (Math.hypot(e.screenX - p.x, e.screenY - p.y) > DRAG_THRESHOLD) {
       p.dragging = true;
       api.startDrag().catch(() => {});
+      api.touch('drag').catch(() => {});
     }
   };
   const onPointerUp = (e: PointerEvent) => {
     const p = press.current;
     press.current = null;
-    if (e.button === 0 && p && !p.dragging) api.click().catch(() => {});
+    if (e.button !== 0 || !p || p.dragging) return;
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const onHead = r.height > 0 && (e.clientY - r.top) / r.height < HEAD_RATIO;
+    if (onHead) api.touch('head').catch(() => {});
+    else api.click().catch(() => {});
   };
   const onContextMenu = (e: MouseEvent) => {
     e.preventDefault();
@@ -91,18 +98,21 @@ export function Pet({ api, random = Math.random }: Props) {
   };
 
   const images = init?.appearance?.images ?? {};
-  const src = images[state] ?? images.idle;
+  // 待机时：心情 / 天气 / 夜里 / 季节的图片（用户放了才有），没有就用 idle
+  const idleVariant = (init?.variants ?? []).find((v) => images[v]);
+  const src = state === 'idle' && idleVariant ? images[idleVariant] : (images[state] ?? images.idle);
+  const mood = init?.mood ?? 0;
   const placeholder = init?.appearance?.placeholder ?? true;
   const name = init?.character.name ?? '';
 
   return (
     <div
-      class={`pet state-${state} ${placeholder ? 'placeholder' : ''} ${pose ? `pose-${pose}` : ''}`}
+      class={`pet state-${state} ${placeholder ? 'placeholder' : ''} ${pose ? `pose-${pose}` : ''} ${mood >= 30 ? 'mood-good' : mood <= -30 ? 'mood-low' : ''}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onContextMenu={onContextMenu}
-      title={name ? `${name}\n点我聊天 · 右键更多选项` : undefined}
+      title={name ? `${name}\n点我聊天 · 摸摸头 · 右键更多选项` : undefined}
       data-testid="pet"
     >
       {state === 'thinking' && (

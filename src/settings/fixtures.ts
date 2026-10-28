@@ -42,6 +42,7 @@ const view: SettingsView = {
     quiet_end: '08:00',
     daily_calls: 10,
     daily_usd: 0.05,
+    events: true,
     system_notify: true,
   },
   advanced: { allow_delegation: false, read_dirs: [], programs: [] },

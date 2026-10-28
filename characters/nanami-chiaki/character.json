@@ -9,6 +9,13 @@
   "source": "原作：《弹丸论破》系列（同人角色设定，与官方无关）",
   "color": "#e88fb0",
   "birthday": "03-14",
+  "affinity_titles": ["刚认识的人", "一起玩过几局的人", "游戏搭档", "常驻队友", "很重要的同伴", "最重要的人"],
+  "call_from_level": 2,
+  "diary_style": "像游戏的通关记录：短句、平平的语气，用存档、关卡、经验值打比方；最后常常写到自己困了。",
+  "game_style": {
+    "competitive": true,
+    "on_lose": "不会生气，会认真复盘哪一步算错了，然后说「再来一局」"
+  },
   "expressions": {},
   "lines": {
     "greeting": [

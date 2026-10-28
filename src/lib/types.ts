@@ -27,6 +27,10 @@ export interface Appearance {
 export interface PetInit {
   character: CharacterView;
   appearance: Appearance | null;
+  /** 待机图片变体的偏好（心情、天气、夜里、季节），用第一个有图的 */
+  variants?: string[];
+  /** 心情（-100~100） */
+  mood?: number;
   idle_animation: boolean;
   dnd: boolean;
 }
@@ -72,6 +76,28 @@ export interface ProactiveMessage {
   text: string;
   /** 弹出了气泡（false = 全屏时改发了系统通知） */
   popped: boolean;
+  /** 小事件的选项 */
+  choices?: string[];
+}
+
+export interface CompanionStatus {
+  character: string;
+  level: number;
+  points: number;
+  next: number | null;
+  title: string;
+  mood: number;
+  mood_word: string;
+  nickname: string;
+  call: string;
+}
+
+export interface Diary {
+  id: number;
+  day: string;
+  character_id: string;
+  content: string;
+  created_at: number;
 }
 
 export interface ErrorInfo {
@@ -255,6 +281,7 @@ export interface CompanionSettings {
   quiet_end: string;
   daily_calls: number;
   daily_usd: number;
+  events: boolean;
   system_notify: boolean;
 }
 

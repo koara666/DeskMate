@@ -385,7 +385,9 @@ pub fn prepare_turn(
                 t.profile = r.profile.into_iter().map(|m| m.content).collect();
                 for (m, _) in r.related {
                     used.push(m.id);
-                    let label = if m.kind == memory::KIND_SUMMARY {
+                    let label = if m.category == "diary" {
+                        format!("你自己 {} 写的日记", m.day)
+                    } else if m.kind == memory::KIND_SUMMARY {
                         format!("{} 的聊天摘要", m.day)
                     } else {
                         format!(
@@ -439,6 +441,14 @@ pub async fn run_turn_with_notes(
     let state = app.state::<AppState>();
     let cancel = state.chat.begin(&request_id);
     let mut notes = notes;
+    // 用户说了生日 / 纪念日：记下来，告诉角色
+    if let Some(n) = crate::companion::remember_special_date(&app, &user_text) {
+        notes.push(n);
+    }
+    if let Some(n) = crate::companion::mood_line(&state) {
+        notes.push(n);
+    }
+    crate::companion::interact(&app, crate::companion::Interaction::Chat);
     // 问天气：查好放进背景资料（问的是别的城市就查那个城市；失败就告诉角色没查到）
     if let Some(n) = crate::briefing::weather_note(&state, &user_text).await {
         emit_pet_state(&app, PetState::Thinking);
@@ -484,6 +494,7 @@ pub async fn run_turn_with_notes(
             .as_ref()
             .map(|c| quotes::recall(&c.quotes, &user_text))
             .unwrap_or_default();
+        let relation = crate::companion::relation_line(&state);
         let now_text = match crate::activity::context_line(&state) {
             Some(a) => format!("{}；{a}", now_text()),
             None => now_text(),
@@ -503,6 +514,7 @@ pub async fn run_turn_with_notes(
             user_text: &user_text,
             now: &now_text,
             delegation: advanced.allow_delegation,
+            relation: &relation,
         };
         prompt::build(&parts, PromptBudget::default())
     };

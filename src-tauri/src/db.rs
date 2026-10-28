@@ -131,6 +131,17 @@ pub const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX activity_day ON activity_log(day);
     "#,
+    // v8：桌宠日记（v2 P4）——每个角色每天一篇；同时作为记忆（摘要类、分类 diary）参与检索
+    r#"
+    CREATE TABLE diaries (
+        id           INTEGER PRIMARY KEY,
+        day          TEXT NOT NULL,
+        character_id TEXT NOT NULL,
+        content      TEXT NOT NULL,
+        created_at   INTEGER NOT NULL,
+        UNIQUE (day, character_id)
+    );
+    "#,
 ];
 
 pub fn latest_version() -> i64 {

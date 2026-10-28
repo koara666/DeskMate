@@ -9,6 +9,7 @@
     "core:window:allow-start-dragging",
     "allow-pet-init",
     "allow-pet-click",
-    "allow-pet-menu"
+    "allow-pet-menu",
+    "allow-pet-touch"
   ]
 }

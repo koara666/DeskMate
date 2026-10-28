@@ -172,7 +172,10 @@ pub fn insert(conn: &Connection, m: &NewMemory, now: i64) -> Result<i64, MemoryE
     if !valid_scope(&m.scope) {
         return Err(MemoryError::Invalid("scope".into()));
     }
-    let category = if CATEGORIES.contains(&m.category.as_str()) {
+    // 「日记」只用于摘要类（角色自己写的日记，见 diary.rs）
+    let category = if CATEGORIES.contains(&m.category.as_str())
+        || (m.kind == KIND_SUMMARY && m.category == "diary")
+    {
         m.category.as_str()
     } else {
         "other"

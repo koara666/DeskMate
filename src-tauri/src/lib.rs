@@ -10,9 +10,11 @@ pub mod character;
 pub mod character_cmds;
 pub mod chat;
 pub mod commands;
+pub mod companion;
 pub mod daily;
 pub mod db;
 pub mod desktop;
+pub mod diary;
 pub mod filter;
 pub mod geometry;
 pub mod lines;
@@ -202,6 +204,8 @@ pub fn run() {
             commands::ability_read,
             commands::proactive_feedback,
             commands::reminder_save,
+            commands::pet_touch,
+            commands::event_choose,
             settings_cmds::reminder_list,
             settings_cmds::reminder_delete,
             settings_cmds::reminder_set_status,
@@ -214,6 +218,10 @@ pub fn run() {
             settings_cmds::activity_save,
             settings_cmds::activity_delete,
             settings_cmds::care_save,
+            settings_cmds::diary_list,
+            settings_cmds::diary_delete,
+            settings_cmds::companion_status,
+            settings_cmds::nickname_save,
             settings_cmds::settings_get,
             settings_cmds::settings_save_general,
             settings_cmds::backend_save,

@@ -61,6 +61,8 @@ pub struct CompanionSettings {
     pub daily_calls: u32,
     /// 主动行为每天最多花多少钱（美元）
     pub daily_usd: f64,
+    /// 随机小事件（分享、提问、给选项）
+    pub events: bool,
     /// 全屏时到了的提醒、重要提醒：同时发系统通知
     pub system_notify: bool,
 }
@@ -76,6 +78,7 @@ impl Default for CompanionSettings {
             quiet_end: "08:00".into(),
             daily_calls: 10,
             daily_usd: 0.05,
+            events: true,
             system_notify: true,
         }
     }
@@ -270,6 +273,10 @@ pub struct Item {
     pub mood: PetState,
     /// 同一来源的去重键（比如提醒 id）：队列里已有同键的就不再加
     pub key: String,
+    /// 小事件：给用户的选项和对应的回应
+    pub choices: Option<crate::companion::Choice>,
+    /// 只是一句小反应（摸头等），不记进聊天记录
+    pub ephemeral: bool,
 }
 
 impl Item {
@@ -281,6 +288,8 @@ impl Item {
             store: true,
             mood: PetState::Happy,
             key: String::new(),
+            choices: None,
+            ephemeral: false,
         }
     }
 }
@@ -293,6 +302,9 @@ pub struct ProactiveMessage {
     pub text: String,
     /// 弹出了气泡（false = 全屏时改发了系统通知，只是记进聊天窗口）
     pub popped: bool,
+    /// 小事件的选项（点了调用 `event_choose`）
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<String>,
 }
 
 #[derive(Default)]
@@ -499,6 +511,7 @@ pub fn say_now(app: &AppHandle, item: Item) {
 fn deliver(app: &AppHandle, item: Item, decision: Decision, id: u64) {
     let st = app.state::<AppState>();
     if item.store
+        && !item.ephemeral
         && let Some(c) = st.current_character()
     {
         let now = memory::now_secs();
@@ -515,7 +528,21 @@ fn deliver(app: &AppHandle, item: Item, decision: Decision, id: u64) {
         kind: item.kind,
         text: item.text.clone(),
         popped: decision == Decision::Speak,
+        choices: item
+            .choices
+            .as_ref()
+            .map(|c| c.options.clone())
+            .unwrap_or_default(),
     };
+    if let Some(c) = &item.choices {
+        let mut g = st
+            .companion
+            .choices
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        g.retain(|k, _| *k + 20 > id);
+        g.insert(id, c.clone());
+    }
     let _ = app.emit_to("chat", "chat-proactive", msg);
     if decision == Decision::Notify {
         // 全屏时：系统通知（P1 接入）；聊天记录里已经有了，退出全屏后打开聊天能看到

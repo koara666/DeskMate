@@ -59,6 +59,16 @@ pub const SCENES: &[(&str, &[&str])] = &[
     ("care.water", &[]),
     ("care.late_night", &[]),
     ("care.meal", &["饭"]),
+    ("touch.head", &["称呼"]),
+    ("touch.head_many", &["称呼"]),
+    ("touch.body", &["称呼"]),
+    ("touch.drag", &["称呼"]),
+    ("affinity.level_up", &["称呼"]),
+    ("event.share", &["称呼"]),
+    ("event.question", &["称呼"]),
+    ("event.choice", &["称呼"]),
+    ("diary.open", &[]),
+    ("diary.close", &["称呼"]),
 ];
 
 const MAX_FILES: usize = 32;

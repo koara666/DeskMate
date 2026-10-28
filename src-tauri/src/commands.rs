@@ -58,6 +58,10 @@ fn character_view(state: &AppState) -> CharacterView {
 pub struct PetInit {
     pub character: CharacterView,
     pub appearance: Option<Appearance>,
+    /// 待机图片变体的偏好（心情、天气、夜里、季节），桌宠用第一个有图的
+    pub variants: Vec<&'static str>,
+    /// 心情（-100~100），占位形象用它稍微变一下样子
+    pub mood: i32,
     pub idle_animation: bool,
     pub dnd: bool,
 }
@@ -68,6 +72,8 @@ pub fn pet_init(state: State<'_, AppState>) -> PetInit {
     PetInit {
         character: character_view(&state),
         appearance: state.current_character().map(|c| character::appearance(&c)),
+        variants: crate::companion::current_variants(&state),
+        mood: crate::companion::current(&state).1,
         idle_animation: s.idle_animation,
         dnd: s.dnd,
     }
@@ -76,7 +82,21 @@ pub fn pet_init(state: State<'_, AppState>) -> PetInit {
 #[tauri::command]
 pub async fn pet_click(app: AppHandle) -> CmdResult<()> {
     crate::daily::interact(&app);
-    desktop::toggle_chat(&app).map_err(err)
+    let opening = !desktop::chat(&app)
+        .and_then(|c| c.is_visible().ok())
+        .unwrap_or(false);
+    desktop::toggle_chat(&app).map_err(err)?;
+    // 点身体打开聊天时，偶尔说一句小反应（不记进聊天记录）
+    if opening && let Some(text) = crate::companion::touch(&app, "body") {
+        let mut item = crate::proactive::Item::new(
+            crate::proactive::Kind::Random,
+            text,
+            crate::memory::now_secs() + 60,
+        );
+        item.ephemeral = true;
+        crate::proactive::say_now(&app, item);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -288,6 +308,33 @@ pub fn reminder_save(
         reminder: view,
         line,
     })
+}
+
+/// 摸头 / 戳身体 / 拖动：有反应的话在气泡里说一句（不记进聊天记录）
+#[tauri::command]
+pub async fn pet_touch(app: AppHandle, part: String) -> CmdResult<()> {
+    if !matches!(part.as_str(), "head" | "body" | "drag") {
+        return Err("不认识的部位".into());
+    }
+    crate::daily::interact(&app);
+    let Some(text) = crate::companion::touch(&app, &part) else {
+        return Ok(());
+    };
+    let mut item = crate::proactive::Item::new(
+        crate::proactive::Kind::Random,
+        text,
+        crate::memory::now_secs() + 60,
+    );
+    item.ephemeral = true;
+    crate::proactive::say_now(&app, item);
+    Ok(())
+}
+
+/// 小事件里点了一个选项：返回角色的回应
+#[tauri::command]
+pub fn event_choose(app: AppHandle, id: u64, index: usize) -> CmdResult<String> {
+    crate::daily::interact(&app);
+    crate::companion::choose(&app, id, index)
 }
 
 /// 前端上报主动发言的结果：用户理会了（engaged）或气泡无人理会自动收起了

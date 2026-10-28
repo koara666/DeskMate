@@ -122,3 +122,11 @@ body,
   background: #8b6fd6;
   box-shadow: 0 0 0 2px #fff;
 }
+
+/* 心情：占位形象稍微变一下（用户图片有专门的变体图） */
+.placeholder.mood-good.state-idle .pet-img {
+  filter: saturate(1.15) brightness(1.04);
+}
+.placeholder.mood-low.state-idle .pet-img {
+  filter: saturate(0.8);
+}

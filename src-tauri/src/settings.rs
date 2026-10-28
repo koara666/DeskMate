@@ -84,6 +84,8 @@ pub struct Settings {
     pub gpu_acceleration: bool,
     /// 已经看过第一次使用的引导
     pub onboarded: bool,
+    /// 希望角色怎么称呼自己（亲密度够了才会用）
+    pub nickname: String,
     /// 上次位置；None 表示使用默认角落
     pub pet_position: Option<SavedPosition>,
     /// 默认停靠角落
@@ -126,6 +128,7 @@ impl Default for Settings {
             dnd: false,
             gpu_acceleration: false,
             onboarded: false,
+            nickname: String::new(),
             pet_position: None,
             corner: Corner::BottomRight,
             backends: backends::default_configs(),
@@ -151,6 +154,7 @@ impl Settings {
             self.pet_scale = 1.0;
         }
         self.pet_scale = self.pet_scale.clamp(0.6, 2.0);
+        self.nickname = self.nickname.trim().chars().take(20).collect();
         self.budget = self.budget.sanitize();
         self.tasks = std::mem::take(&mut self.tasks).sanitize();
         self.daily = std::mem::take(&mut self.daily).sanitize();

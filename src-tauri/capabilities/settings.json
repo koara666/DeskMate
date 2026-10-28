@@ -50,6 +50,10 @@
     "allow-activity-overview",
     "allow-activity-save",
     "allow-activity-delete",
-    "allow-care-save"
+    "allow-care-save",
+    "allow-diary-list",
+    "allow-diary-delete",
+    "allow-companion-status",
+    "allow-nickname-save"
   ]
 }

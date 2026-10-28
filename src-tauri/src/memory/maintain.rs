@@ -116,7 +116,8 @@ pub fn summary_groups(conn: &Connection, now: i64) -> Result<Vec<SummaryGroup>, 
     let mut groups: Vec<SummaryGroup> = Vec::new();
     for m in all
         .into_iter()
-        .filter(|m| m.created_at < cutoff && m.day.len() >= 7)
+        // 角色的日记不压缩（它是另一种记忆）
+        .filter(|m| m.created_at < cutoff && m.day.len() >= 7 && m.category != "diary")
     {
         let month = m.day[..7].to_string();
         match groups

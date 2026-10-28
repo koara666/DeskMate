@@ -478,3 +478,9 @@ input[type='search'] {
   border-bottom: 1px solid var(--border);
   margin-bottom: 6px;
 }
+
+.diary-text {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  margin: 4px 0 0;
+}

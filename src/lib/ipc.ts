@@ -3,6 +3,8 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
+  CompanionStatus,
+  Diary,
   ActivityOverview,
   ActivitySettings,
   CareSettings,
@@ -62,6 +64,8 @@ export interface ChatApi {
   feedback(engaged: boolean): Promise<void>;
   /** 确认（或手动填写）提醒 */
   saveReminder(reminder: Reminder): Promise<SavedReminder>;
+  /** 小事件里选了一项：返回角色的回应 */
+  choose(id: number, index: number): Promise<string>;
 }
 
 function channel(onEvent: (e: ChatEvent) => void): Channel<ChatEvent> {
@@ -89,11 +93,14 @@ export const chatApi: ChatApi = {
   read: (path, requestId, onEvent) => invoke('ability_read', { path, requestId, onEvent: channel(onEvent) }),
   feedback: (engaged) => invoke('proactive_feedback', { engaged }),
   saveReminder: (reminder) => invoke<SavedReminder>('reminder_save', { reminder }),
+  choose: (id, index) => invoke<string>('event_choose', { id, index }),
 };
 
 export interface PetApi {
   init(): Promise<PetInit>;
   click(): Promise<void>;
+  /** 摸头 / 拖动的反应 */
+  touch(part: 'head' | 'drag'): Promise<void>;
   menu(): Promise<void>;
   startDrag(): Promise<void>;
   onState(cb: (s: PetState) => void): Promise<UnlistenFn>;
@@ -103,11 +110,16 @@ export interface PetApi {
 export const petApi: PetApi = {
   init: () => invoke<PetInit>('pet_init'),
   click: () => invoke('pet_click'),
+  touch: (part) => invoke('pet_touch', { part }),
   menu: () => invoke('pet_menu'),
   startDrag: () => getCurrentWindow().startDragging(),
   onState: (cb) => listen<PetState>('pet-state', (e) => cb(e.payload)),
   onChanged: (cb) =>
-    Promise.all([listen('settings-changed', () => cb()), listen('character-changed', () => cb())]),
+    Promise.all([
+      listen('settings-changed', () => cb()),
+      listen('character-changed', () => cb()),
+      listen('pet-variant', () => cb()),
+    ]),
 };
 
 /** 生成请求编号（只含字母数字和 -，Rust 端会校验） */
@@ -135,6 +147,10 @@ export const settingsApi = {
   citySearch: (query: string) => invoke<City[]>('city_search', { query }),
   briefingNow: () => invoke('briefing_now'),
   activityOverview: () => invoke<ActivityOverview>('activity_overview'),
+  companionStatus: () => invoke<CompanionStatus>('companion_status'),
+  saveNickname: (nickname: string) => invoke<string>('nickname_save', { nickname }),
+  diaryList: () => invoke<Diary[]>('diary_list'),
+  diaryDelete: (id: number) => invoke<boolean>('diary_delete', { id }),
   saveActivity: (activity: ActivitySettings) => invoke<ActivitySettings>('activity_save', { activity }),
   deleteActivity: (day: string) => invoke<number>('activity_delete', { day }),
   saveCare: (care: CareSettings) => invoke<CareSettings>('care_save', { care }),

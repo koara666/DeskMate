@@ -514,6 +514,74 @@ pub fn care_save(
     Ok(saved)
 }
 
+/// 当前角色的日记（最近 60 篇）
+#[tauri::command]
+pub fn diary_list(state: State<'_, AppState>) -> Vec<crate::diary::Diary> {
+    let id = state
+        .current_character()
+        .map(|c| c.manifest.id)
+        .unwrap_or_default();
+    crate::diary::list(&state.db(), &id, 60)
+}
+
+#[tauri::command]
+pub fn diary_delete(state: State<'_, AppState>, id: i64) -> CmdResult<bool> {
+    crate::diary::delete(&state.db(), id).map_err(|e| e.to_string())
+}
+
+/// 和当前角色的关系：亲密度等级、积分、离下一级还差多少、心情
+#[derive(Serialize)]
+pub struct CompanionStatus {
+    pub character: String,
+    pub level: u8,
+    pub points: i64,
+    pub next: Option<i64>,
+    pub title: String,
+    pub mood: i32,
+    pub mood_word: String,
+    pub nickname: String,
+    pub call: String,
+}
+
+#[tauri::command]
+pub fn companion_status(state: State<'_, AppState>) -> CompanionStatus {
+    use crate::companion;
+    let c = state.current_character();
+    let id = c
+        .as_ref()
+        .map(|c| c.manifest.id.clone())
+        .unwrap_or_default();
+    let b = companion::load(&state.db(), &id);
+    let now = crate::memory::now_secs();
+    let level = b.level();
+    let title = c
+        .as_ref()
+        .and_then(|c| c.manifest.affinity_titles.get(level as usize).cloned())
+        .unwrap_or_else(|| companion::DEFAULT_TITLES[level as usize].to_string());
+    CompanionStatus {
+        character: c.map(|c| c.manifest.name).unwrap_or_default(),
+        level,
+        points: b.points,
+        next: companion::LEVELS.get(level as usize + 1).copied(),
+        title,
+        mood: b.mood_now(now),
+        mood_word: companion::mood_word(b.mood_now(now)).into(),
+        nickname: state.settings().nickname,
+        call: companion::call_name(&state),
+    }
+}
+
+#[tauri::command]
+pub fn nickname_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    nickname: String,
+) -> CmdResult<String> {
+    let saved = state.update_settings(|s| s.nickname = nickname).nickname;
+    desktop::broadcast_settings_changed(&app);
+    Ok(saved)
+}
+
 #[tauri::command]
 pub fn reminder_list(state: State<'_, AppState>) -> CmdResult<Vec<crate::reminders::ReminderView>> {
     let now = crate::reminders::now_local();
