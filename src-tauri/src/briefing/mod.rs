@@ -701,6 +701,10 @@ pub fn scheduled_due(
 
 /// 日常循环每 30 秒调用一次
 pub fn check(app: &AppHandle) {
+    // 测试实例默认不自动播报（免得干扰自动测试和性能实测）；DESKMATE_TEST_BRIEFING=1 时照常
+    if crate::paths::test_mode() && std::env::var_os("DESKMATE_TEST_BRIEFING").is_none() {
+        return;
+    }
     let st = app.state::<AppState>();
     let s = st.settings().briefing;
     let now = now_local();

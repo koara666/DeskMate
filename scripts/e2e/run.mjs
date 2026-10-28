@@ -477,6 +477,15 @@ async function main() {
       await settings.waitText('收衣服');
       await settings.shot('settings-提醒-有内容.png');
     });
+    await test('每日播报：设置里点「现在播报一次」，气泡里出现播报（没有模型时用台词池）', async () => {
+      await settings.click('陪伴');
+      await settings.waitFor(`document.querySelector('main h1')?.innerText === '陪伴'`, '陪伴页');
+      const before = await chat.eval(`document.querySelector('.panel').innerText`);
+      await settings.click('现在播报一次');
+      await chat.waitFor(`document.querySelector('.panel').innerText !== ${JSON.stringify(before)}`, '播报出现', 15000);
+      await waitVisible(pid, 'chat', true);
+      await chat.shot('chat-briefing.png');
+    });
     await test('任务卡片能打开和关闭（开了委托后，回复里的任务标记弹出卡片）', async () => {
       await chat.input('textarea[aria-label="输入消息"]', '/mock task 统计字数');
       await chat.key('textarea[aria-label="输入消息"]', { key: 'Enter' });

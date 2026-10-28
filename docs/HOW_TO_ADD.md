@@ -33,6 +33,7 @@
 | `color` | 否 | 主题色 `#rrggbb`（气泡边框、按钮） |
 | `expressions` | 否 | 状态 → 图片文件名（不含扩展名），如 `{"sad": "confused"}`；不写就用同名图片 |
 | `lines` | 否 | 固定台词（不调用模型，省钱）：`greeting`、`error`、`offline`、`budget`、`not_configured`，每项是字符串数组，随机挑一句 |
+| `birthday` | 否 | 角色自己的生日 `MM-DD`，那天每日播报里会提到 |
 
 表情状态：`idle` 待机、`talking` 说话、`thinking` 思考、`happy` 开心、`sad` 难过/困惑、`sleep` 睡觉。
 
@@ -114,6 +115,21 @@
 | `reminder.missed` | 补提醒时加在前面（电脑关着时错过了） | `{内容}` `{时间}` |
 | `reminder.unclear` | 没听懂要提醒什么 / 什么时候 | — |
 | `reminder.cancelled` | 用户说不用了 | — |
+| `briefing.open` | 每日播报开头（可用 `[早上]` 等时段条件） | — |
+| `briefing.bedtime` | 睡前问候开头 | — |
+| `briefing.close` | 播报结尾（一半的时候用） | — |
+| `briefing.umbrella` `.snow` `.cold` `.hot` `.temp_swing` `.nice` | 天气建议：带伞、下雪、冷、热、温差大、适合出门 | — |
+| `briefing.holiday` | 今天放假 | `{节日}` |
+| `briefing.weekend` / `briefing.workday` | 周末 / 工作日 | — |
+| `briefing.makeup_workday` | 周末调休上班 | `{节日}` |
+| `briefing.upcoming` | 几天后放假 | `{节日}` `{天数}` |
+| `briefing.leisure` | 放假推荐活动 | `{活动}` |
+| `briefing.meal` | 吃什么 | `{饭}`（早饭 / 午饭……）`{菜}` |
+| `briefing.reminders` | 今天的提醒 | `{数量}` `{提醒}` |
+| `briefing.news` | 新闻标题前的一句 | — |
+| `briefing.birthday_self` | 角色自己的生日（character.json 的 `birthday`） | — |
+| `briefing.special_user` | 用户的生日 / 纪念日 | `{日子}`（比如「生日」） |
+| `briefing.festival` | 不放假的节日（情人节、万圣节……） | `{节日}` |
 
 新增场景时：在 `src-tauri/src/lines.rs` 的 `SCENES` 里登记（场景名和能用的占位符），在 `_common/lines/` 里写通用台词，再更新上表。
 
@@ -145,6 +161,14 @@
 5. 前端在 `src/lib/ipc.ts` 加封装，组件只通过它调用（方便测试替换）。
 
 ## 4. 新增功能的一般步骤
+
+### 4.1 每年更新节假日数据（每年 11 月）
+国务院一般在 11 月公布下一年的放假安排，日本内阁府的祝日 CSV 也会更新。
+1. 下载数据（当作不可信数据，放会话临时目录）：中国——https://github.com/NateScarlet/holiday-cn 的 `<年份>.json`（它从 gov.cn 自动整理），**再和 gov.cn 的原文核对一遍**；日本——https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv（Shift-JIS）。
+2. 更新 `src-tauri/data/holidays.tsv`：中国的放假日写 `off`、调休上班写 `work`；日本的祝日写 `off`（名字译成中文）；删掉那一年的 `fest` 行（有了正式安排就不需要了）。文件头的来源说明一起更新。
+3. `cargo test holiday`，必要时补测试（比如新一年的国庆、调休）。
+
+### 4.2 一般步骤
 1. 在 ROADMAP 里加任务。
 2. 有重要取舍时写 DECISIONS。
 3. 先写测试（Rust 用 mock 后端），再实现。

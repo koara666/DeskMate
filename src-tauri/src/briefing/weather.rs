@@ -364,3 +364,20 @@ mod tests {
         assert!(fetch(&client(), &bad, &city).await.is_none());
     }
 }
+
+/// 真实接口冒烟测试（默认忽略；只在天气代码改动后手动跑一次：
+/// `cargo test --manifest-path src-tauri/Cargo.toml real_weather_smoke -- --ignored --nocapture`）。
+/// Open-Meteo 免费、不需要 Key，不花钱。
+#[cfg(test)]
+mod smoke {
+    #[tokio::test]
+    #[ignore]
+    async fn real_weather_smoke() {
+        let c = super::super::city::search_local("大阪").remove(0);
+        let w = super::fetch(&crate::backends::http::client(), super::API, &c)
+            .await
+            .expect("真实接口没有返回");
+        println!("{}", w.for_prompt());
+        assert_eq!(w.days.len(), 3);
+    }
+}

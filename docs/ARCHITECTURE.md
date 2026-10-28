@@ -44,6 +44,7 @@ docs/                          文档（见 AGENTS.md 文档地图）
 characters/<id>/               内置角色包（character.json、persona.md、可选 canon.md、assets/placeholder.svg）
 characters/_fallback.svg       没有任何图片时的通用占位形象
 characters/_common/lines/      通用台词（角色没写的场景用；`_` 开头的目录不是角色）
+src-tauri/data/                编进程序的小数据：cities.tsv（常用城市坐标）、holidays.tsv（节假日）
 pet.html chat.html settings.html   三个窗口的入口
 src/
   pet/Pet.tsx                  桌宠：形象、状态、点击/拖动/右键
@@ -80,6 +81,9 @@ src-tauri/src/
   proactive.rs                 主动行为调度器（优先级、冷却、勿扰/全屏/安静时段、被忽略降频、每日预算）；「陪伴」设置
   notify.rs                    系统通知（全屏时到了的提醒、重要提醒；tauri-plugin-notification，只在 Rust 端用）
   lines.rs                     预写台词池：解析角色包 lines/*.md（场景、条件、占位符）、挑一句不重复的、通用台词兜底
+  briefing/                    每日播报：mod.rs（设置、收集资料、随机组合、模型 / 模板、触发时间、聊天里问天气）、
+                               city.rs（内置城市表 + 在线地理编码）、weather.rs（Open-Meteo、建议、缓存）、
+                               holiday.rs（节假日、调休、节日）、meal.rs（吃什么）、news.rs（RSS 标题）
   reminders/                   提醒：mod.rs（数据、触发、定时器、补提醒）、parse.rs（本地中文时间解析、重复规则）、
                                model.rs（本地解析不了时调用一次模型，输出 JSON）、chat.rs（聊天里吩咐 → 复述确认）
   daily.rs                     日常体验：开机自启、全局快捷键、全屏检测、睡眠、主动搭话（低频循环）
@@ -165,6 +169,10 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
 - `reminders/`：聊天里「……提醒我……」→ `chat::run_turn` 先交给 `reminders::chat::handle`（本地解析 → 不行再调用一次模型）
   → `ChatEvent::Done.reminder`（待确认）→ 用户点「好」→ `reminder_save`（后端再检查）→ 定时器（`reminders::spawn`，
   按下一个到期时间睡眠、最多 60 秒）→ 到期交给调度器（种类 Reminder）。启动时补上关机期间错过的。
+
+- `briefing/`：`daily.rs` 每 30 秒调用 `briefing::check`（每天第一次 / 设定的时间点）→ `gather`（天气、日子、吃饭、提醒、
+  新闻、特殊日期，`arrange` 随机挑选和排序）→ 有预算时一次模型调用，否则 `compose_template` → 调度器（种类 Briefing）。
+  聊天时 `chat::run_turn_with_notes` 先调 `briefing::weather_note`：问天气就把查到的天气放进背景资料。
 
 计划中的模块（实现后移到上面）：
 - `reminders.rs`：提醒的解析、存储、定时触发、补提醒。
