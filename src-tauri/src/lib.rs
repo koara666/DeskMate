@@ -118,6 +118,30 @@ pub fn run() {
                 .build(),
         )
         .setup(setup)
+        // 用户角色图片：按地址读取（在后台线程读文件，不卡界面）
+        .register_asynchronous_uri_scheme_protocol(character::IMG_SCHEME, |ctx, req, responder| {
+            let app = ctx.app_handle().clone();
+            let path = req.uri().path().to_string();
+            tauri::async_runtime::spawn_blocking(move || {
+                let st = app.state::<AppState>();
+                let id = path.trim_start_matches('/').split('/').next().unwrap_or("");
+                let found = st.character(id);
+                let resp = match character::serve_image(found.as_ref(), &path) {
+                    Some((bytes, mime)) => tauri::http::Response::builder()
+                        .header("Content-Type", mime)
+                        .header("X-Content-Type-Options", "nosniff")
+                        // 地址里带了图片的修改时间，换图后地址就变，可以放心缓存
+                        .header("Cache-Control", "max-age=31536000, immutable")
+                        .body(bytes),
+                    None => tauri::http::Response::builder()
+                        .status(404)
+                        .body(Vec::new()),
+                };
+                if let Ok(r) = resp {
+                    responder.respond(r);
+                }
+            });
+        })
         .on_menu_event(|app, e| desktop::handle_menu(app, e.id().as_ref()))
         .on_window_event(|w, e| match (w.label(), e) {
             ("pet", WindowEvent::Moved(_)) => desktop::on_pet_moved(w.app_handle()),

@@ -252,32 +252,105 @@ fn data_url(mime: &str, bytes: &[u8]) -> String {
     )
 }
 
-/// 在用户目录 assets/ 里找 `<name>.<ext>`，校验后返回 data URL
-fn user_image(user_dir: &Path, name: &str) -> Option<String> {
+/// 用户图片走自定义协议（DECISIONS #26）：界面只拿到一个短地址，图片由 WebView 按需读取并缓存，
+/// 不再把整张图转成 base64 经进程通信发给每个窗口。
+pub const IMG_SCHEME: &str = "deskmate-img";
+
+/// 自定义协议在 WebView 里的地址前缀（Windows 上是 http://<协议>.localhost）
+pub fn image_url_base() -> &'static str {
+    if cfg!(windows) {
+        "http://deskmate-img.localhost"
+    } else {
+        "deskmate-img://localhost"
+    }
+}
+
+/// 找到的用户图片（已检查大小和文件头，但还没读整个文件）
+struct UserImage {
+    path: PathBuf,
+    /// 修改时间 + 大小：图片换了地址就变，WebView 不会用到旧缓存
+    stamp: String,
+}
+
+/// 只读文件开头几个字节（判断图片类型用）
+fn read_head(path: &Path) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut buf = Vec::with_capacity(16);
+    std::fs::File::open(path)?.take(16).read_to_end(&mut buf)?;
+    Ok(buf)
+}
+
+/// 在用户目录 assets/ 里找 `<name>.<ext>`：不跟随符号链接、限制大小、校验文件头
+fn find_user_image(user_dir: &Path, name: &str) -> Option<UserImage> {
     if !valid_id(name) {
         return None;
     }
     let assets = user_dir.join("assets");
     for ext in IMAGE_EXTS {
         let p = assets.join(format!("{name}.{ext}"));
-        if !p.exists() {
+        let Ok(meta) = std::fs::symlink_metadata(&p) else {
+            continue;
+        };
+        if !meta.is_file() {
+            log::warn!("{} 不是普通文件，已忽略", p.display());
             continue;
         }
-        match read_limited(&p, MAX_IMAGE_BYTES) {
-            Ok(bytes) => match sniff_image(&bytes) {
-                Some(mime) => return Some(data_url(mime, &bytes)),
-                None => log::warn!("{} 不是有效的图片文件，已忽略", p.display()),
-            },
-            Err(e) => log::warn!("角色图片无法使用：{e}"),
+        if meta.len() > MAX_IMAGE_BYTES {
+            log::warn!(
+                "{} 太大了（上限 {MAX_IMAGE_BYTES} 字节），已忽略",
+                p.display()
+            );
+            continue;
+        }
+        match read_head(&p) {
+            Ok(head) if sniff_image(&head).is_some() => {
+                let mtime = meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map_or(0, |d| d.as_millis());
+                return Some(UserImage {
+                    path: p,
+                    stamp: format!("{mtime}-{}", meta.len()),
+                });
+            }
+            Ok(_) => log::warn!("{} 不是有效的图片文件，已忽略", p.display()),
+            Err(e) => log::warn!("读取角色图片失败：{e}"),
         }
     }
     None
 }
 
+/// 用户图片的访问地址；没有可用的图片时返回 None
+fn user_image_url(c: &Character, name: &str) -> Option<String> {
+    let img = find_user_image(&c.user_dir, name)?;
+    Some(format!(
+        "{}/{}/{name}?v={}",
+        image_url_base(),
+        c.manifest.id,
+        img.stamp
+    ))
+}
+
+/// 自定义协议的处理：路径是 `/<角色 id>/<图片名>`，返回图片内容和类型。
+/// 读取时重新做全部校验（地址可能被篡改，文件也可能在两次读取之间被换掉）。
+pub fn serve_image(c: Option<&Character>, path: &str) -> Option<(Vec<u8>, &'static str)> {
+    let mut parts = path.trim_start_matches('/').split('/');
+    let (id, name) = (parts.next()?, parts.next()?);
+    if parts.next().is_some() || !valid_id(id) {
+        return None;
+    }
+    let c = c.filter(|c| c.manifest.id == id)?;
+    let img = find_user_image(&c.user_dir, name)?;
+    let bytes = read_limited(&img.path, MAX_IMAGE_BYTES).ok()?;
+    let mime = sniff_image(&bytes)?;
+    Some((bytes, mime))
+}
+
 /// 给前端的形象数据
 #[derive(Debug, Clone, Serialize)]
 pub struct Appearance {
-    /// 每个状态对应的图片（data URL）
+    /// 每个状态对应的图片地址（用户图片走自定义协议；内置占位 SVG 很小，直接用 data URL）
     pub images: BTreeMap<String, String>,
     /// 是否在用占位形象（占位形象由前端用 CSS 表现不同状态）
     pub placeholder: bool,
@@ -286,17 +359,15 @@ pub struct Appearance {
 /// 计算每个状态用哪张图：用户图片（按表情映射）→ 用户的 idle 图 → 占位 SVG
 pub fn appearance(c: &Character) -> Appearance {
     let mut images = BTreeMap::new();
-    let idle_user = user_image(
-        &c.user_dir,
-        c.manifest.expressions.get("idle").map_or("idle", |s| s),
-    );
+    let idle_user = user_image_url(c, c.manifest.expressions.get("idle").map_or("idle", |s| s));
     for state in STATES {
         let name = c
             .manifest
             .expressions
             .get(state)
             .map_or(state, |s| s.as_str());
-        if let Some(url) = user_image(&c.user_dir, name).or_else(|| idle_user.clone()) {
+        // 同一张图用同一个地址，WebView 只读取、解码一次
+        if let Some(url) = user_image_url(c, name).or_else(|| idle_user.clone()) {
             images.insert(state.to_string(), url);
         }
     }
@@ -333,7 +404,7 @@ pub fn user_image_states(c: &Character) -> Vec<String> {
                 .expressions
                 .get(**state)
                 .map_or(**state, |s| s.as_str());
-            user_image(&c.user_dir, name).is_some()
+            find_user_image(&c.user_dir, name).is_some()
         })
         .map(|s| s.to_string())
         .collect()
@@ -462,10 +533,29 @@ mod tests {
         fs::write(ua.join("talking.svg"), "<svg/>").unwrap(); // 用户 SVG 不读取
         let a = appearance(&all[0]);
         assert!(!a.placeholder);
-        assert!(a.images["sad"].starts_with("data:image/webp"));
-        assert!(a.images["happy"].starts_with("data:image/png")); // 回退到 idle
-        assert!(a.images["talking"].starts_with("data:image/png"));
+        let base = format!("{}/cat/", image_url_base());
+        assert!(a.images["sad"].starts_with(&format!("{base}confused?v=")));
+        assert!(a.images["idle"].starts_with(&format!("{base}idle?v=")));
+        assert_eq!(a.images["happy"], a.images["idle"]); // 文件头不对 → 回退到 idle，且是同一个地址
+        assert_eq!(a.images["talking"], a.images["idle"]); // 用户 SVG 不读取
         assert_eq!(a.images.len(), STATES.len());
+        assert_eq!(user_image_states(&all[0]), vec!["idle", "sad"]);
+
+        // 协议处理：只给对应角色的、校验通过的图片
+        let c = Some(&all[0]);
+        let (bytes, mime) = serve_image(c, "/cat/confused").unwrap();
+        assert_eq!(
+            (bytes.as_slice(), mime),
+            (&b"RIFF\0\0\0\0WEBPSAD"[..], "image/webp")
+        );
+        assert_eq!(serve_image(c, "/cat/idle").unwrap().1, "image/png");
+        assert!(serve_image(c, "/cat/happy").is_none(), "文件头不对");
+        assert!(serve_image(c, "/cat/talking").is_none(), "SVG 不提供");
+        assert!(serve_image(c, "/dog/idle").is_none(), "不是当前角色");
+        assert!(serve_image(c, "/cat/../cat/idle").is_none());
+        assert!(serve_image(c, "/cat/idle/x").is_none());
+        assert!(serve_image(c, "/cat/IDLE").is_none());
+        assert!(serve_image(None, "/cat/idle").is_none());
     }
 
     #[test]
@@ -476,7 +566,7 @@ mod tests {
         let mut big = b"\x89PNG\r\n\x1a\n".to_vec();
         big.resize(MAX_IMAGE_BYTES as usize + 10, 0);
         fs::write(ua.join("idle.png"), big).unwrap();
-        assert!(user_image(&u.path().join("cat"), "idle").is_none());
+        assert!(find_user_image(&u.path().join("cat"), "idle").is_none());
     }
 
     #[test]

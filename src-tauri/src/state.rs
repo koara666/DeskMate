@@ -104,6 +104,16 @@ impl AppState {
         *self.characters.write().unwrap_or_else(|e| e.into_inner()) = list;
     }
 
+    /// 按 id 找角色
+    pub fn character(&self, id: &str) -> Option<Character> {
+        self.characters
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .find(|c| c.manifest.id == id)
+            .cloned()
+    }
+
     /// 当前角色；设置里的 id 不存在时用第一个可用角色
     pub fn current_character(&self) -> Option<Character> {
         let id = self.settings().character_id;

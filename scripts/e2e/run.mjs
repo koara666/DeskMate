@@ -297,6 +297,14 @@ async function main() {
       await settings.waitText('已保存');
       await settings.eval(`[...document.querySelectorAll('label.row')].find(l => l.innerText.includes('总在最前')).querySelector('input').click()`);
     });
+    await test('常规：「显卡加速」默认关，切换后提示重启生效', async () => {
+      const box = `[...document.querySelectorAll('label.row')].find(l => l.innerText.includes('显卡加速')).querySelector('input')`;
+      if (await settings.eval(`${box}.checked`)) throw new Error('默认应该关闭');
+      await settings.eval(`${box}.click()`);
+      await settings.waitText('退出 DeskMate 再打开后生效');
+      await settings.eval(`${box}.click()`);
+      await settings.waitNoText('退出 DeskMate 再打开后生效');
+    });
     await test('常规：非法快捷键会提示，合法快捷键能保存', async () => {
       await settings.input('input[aria-label="快捷键"]', 'D');
       await settings.click('应用');
@@ -316,6 +324,25 @@ async function main() {
       await settings.eval(`(() => { const ta = [...document.querySelectorAll('label')].find(l => l.innerText.startsWith('奶龙 的禁词')).querySelector('textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, '笨蛋'); ta.dispatchEvent(new Event('input', { bubbles: true })); })()`);
       await settings.click('保存');
       await settings.waitText('已保存');
+    });
+    await test('角色：放进自己的图片后，桌宠按地址读取并显示（不再整张图转文本传给界面）', async () => {
+      const assets = join(DATA, 'characters', 'nailong', 'assets');
+      mkdirSync(assets, { recursive: true });
+      // 1×1 像素的 PNG
+      const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      writeFileSync(join(assets, 'idle.png'), Buffer.from(png, 'base64'));
+      await settings.click('重新加载');
+      await settings.waitText('已重新加载');
+      await pet.waitFor(
+        `(() => { const i = document.querySelector('.pet-img'); return !!i && i.src.startsWith('http://deskmate-img.localhost/nailong/idle?v=') && i.complete && i.naturalWidth === 1; })()`,
+        '桌宠显示用户图片',
+      );
+      if (await pet.eval(`document.querySelector('.pet').classList.contains('placeholder')`)) throw new Error('仍是占位形象');
+      const preview = await settings.eval(`[...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('奶龙')).querySelector('img').src`);
+      if (!preview.startsWith('http://deskmate-img.localhost/nailong/idle?v=')) throw new Error(`角色页预览地址不对：${preview.slice(0, 60)}`);
+      rmSync(assets, { recursive: true, force: true });
+      await settings.click('重新加载');
+      await pet.waitFor(`document.querySelector('.pet-img')?.src.startsWith('data:image/svg+xml')`, '删掉图片后回到占位形象');
     });
 
     await settings.click('记忆');
