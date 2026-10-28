@@ -119,6 +119,18 @@ pub const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX reminders_due ON reminders(status, trigger, at);
     "#,
+    // v7：活动日志（v2 P3）——只存汇总：日期、分类、清洗过的程序名、开始时间、时长；不存窗口标题
+    r#"
+    CREATE TABLE activity_log (
+        id       INTEGER PRIMARY KEY,
+        day      TEXT NOT NULL,
+        category TEXT NOT NULL,
+        label    TEXT NOT NULL DEFAULT '',
+        start    INTEGER NOT NULL,
+        secs     INTEGER NOT NULL
+    );
+    CREATE INDEX activity_day ON activity_log(day);
+    "#,
 ];
 
 pub fn latest_version() -> i64 {

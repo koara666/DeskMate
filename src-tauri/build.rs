@@ -61,6 +61,10 @@ const COMMANDS: &[&str] = &[
     "briefing_save",
     "city_search",
     "briefing_now",
+    "activity_overview",
+    "activity_save",
+    "activity_delete",
+    "care_save",
 ];
 
 fn main() {

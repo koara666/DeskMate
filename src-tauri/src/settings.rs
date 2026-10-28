@@ -108,6 +108,10 @@ pub struct Settings {
     pub advanced: crate::abilities::AdvancedSettings,
     /// 每日播报：时间点、内容模块、城市、新闻源、特殊日期
     pub briefing: crate::briefing::BriefingSettings,
+    /// 活动感知：开关、用户规则、隐私名单
+    pub activity: crate::activity::ActivitySettings,
+    /// 日常关怀：久坐、喝水、深夜、吃饭
+    pub care: crate::care::CareSettings,
 }
 
 impl Default for Settings {
@@ -134,6 +138,8 @@ impl Default for Settings {
             companion: Default::default(),
             advanced: Default::default(),
             briefing: Default::default(),
+            activity: Default::default(),
+            care: Default::default(),
         }
     }
 }
@@ -151,6 +157,8 @@ impl Settings {
         self.companion = std::mem::take(&mut self.companion).sanitize();
         self.advanced = std::mem::take(&mut self.advanced).sanitize();
         self.briefing = std::mem::take(&mut self.briefing).sanitize();
+        self.activity = std::mem::take(&mut self.activity).sanitize();
+        self.care = std::mem::take(&mut self.care).sanitize();
         self.global_prefs = std::mem::take(&mut self.global_prefs).sanitize();
         self.character_prefs = std::mem::take(&mut self.character_prefs)
             .into_iter()

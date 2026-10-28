@@ -1,9 +1,11 @@
 //! DeskMate 应用入口：装配插件、状态、窗口、托盘和命令。
 
 pub mod abilities;
+pub mod activity;
 pub mod backends;
 pub mod briefing;
 pub mod canon;
+pub mod care;
 pub mod character;
 pub mod character_cmds;
 pub mod chat;
@@ -98,6 +100,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     daily::spawn(handle.clone());
     // 提醒：补上关机期间错过的，之后按下一个到期时间触发
     reminders::spawn(handle.clone());
+    // 活动感知：前台窗口切换事件 + 每 30 秒看一眼
+    activity::spawn(handle.clone());
     {
         let d = handle.state::<AppState>().settings().daily;
         if let Err(e) = daily::apply_hotkey(&handle, d.hotkey_enabled, &d.hotkey) {
@@ -206,6 +210,10 @@ pub fn run() {
             settings_cmds::briefing_save,
             settings_cmds::city_search,
             settings_cmds::briefing_now,
+            settings_cmds::activity_overview,
+            settings_cmds::activity_save,
+            settings_cmds::activity_delete,
+            settings_cmds::care_save,
             settings_cmds::settings_get,
             settings_cmds::settings_save_general,
             settings_cmds::backend_save,

@@ -164,6 +164,8 @@ pub struct Gate {
     pub generating: bool,
     /// 用户离开电脑了（几分钟没有键盘鼠标操作）
     pub user_away: bool,
+    /// 在玩游戏 / 看视频 / 开会：关怀和播报等一等
+    pub deep_focus: bool,
     /// 本地时间：一天中的第几分钟
     pub minute_of_day: u32,
 }
@@ -212,7 +214,7 @@ pub fn decide(kind: Kind, s: &CompanionSettings, g: &Gate, p: &Pace, now: i64) -
     }
     // 关怀和播报可以等（等用户退出全屏、回到电脑前）；活动评论和小事件过了那个时机就没意义了
     let can_wait = matches!(kind, Kind::Care | Kind::Briefing);
-    if g.fullscreen || g.user_away {
+    if g.fullscreen || g.user_away || (g.deep_focus && can_wait) {
         return if can_wait {
             Decision::Wait
         } else {
@@ -396,12 +398,14 @@ pub fn current_gate(app: &AppHandle) -> Gate {
     use chrono::Timelike;
     let st = app.state::<AppState>();
     let now = chrono::Local::now();
+    let (private_foreground, deep_focus) = crate::activity::gate_flags(&st);
     Gate {
         dnd: st.settings().dnd,
         fullscreen: st.daily.is_fullscreen(),
-        private_foreground: false,
+        private_foreground,
         generating: st.chat.is_generating(),
         user_away: crate::daily::system_idle_secs() >= 300,
+        deep_focus,
         minute_of_day: now.hour() * 60 + now.minute(),
     }
 }
@@ -423,6 +427,61 @@ pub fn tick(app: &AppHandle) {
     if let Some((item, decision, id)) = st.proactive.take_due(&s, &gate, memory::now_secs(), &day) {
         deliver(app, item, decision, id);
     }
+}
+
+/// 让模型用角色口吻说一句（活动评论、小事件等偶尔用）：只在主动行为预算够时调用，用途记为 proactive。
+/// `instruction` 里只放分类、时长这类概括信息，不放窗口标题等隐私。失败或不可用返回 None（调用方用台词池）。
+pub async fn model_say(st: &AppState, instruction: &str, max_tokens: u32) -> Option<String> {
+    let s = st.settings();
+    if s.chat_backend == "mock" {
+        return None;
+    }
+    {
+        let (day, month) = usage::today();
+        if !model_allowed(&st.db(), &s.companion, &s.budget, &day, &month) {
+            return None;
+        }
+    }
+    let c = st.current_character()?;
+    let prefs = s.effective_prefs(&c.manifest.id);
+    let note = format!(
+        "【主动说一句】{instruction} 只说一两句，用你的口吻，不要提「程序」「提示」之类的词。"
+    );
+    let now_text = crate::chat::now_text();
+    let parts = crate::prompt::PromptParts {
+        character_name: &c.manifest.name,
+        persona: &c.persona,
+        user_rules: &prefs.custom_rules,
+        banned_words: &prefs.banned_words,
+        quotes_fixed: &c.quotes.fixed,
+        notes: std::slice::from_ref(&note),
+        user_text: "（……）",
+        now: &now_text,
+        ..Default::default()
+    };
+    let req = crate::prompt::build(
+        &parts,
+        crate::prompt::PromptBudget {
+            max_output_tokens: max_tokens,
+            ..Default::default()
+        },
+    );
+    let out = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        crate::chat::complete(
+            st,
+            &s.chat_backend,
+            req,
+            usage::purpose::PROACTIVE,
+            tokio_util::sync::CancellationToken::new(),
+        ),
+    )
+    .await
+    .ok()?
+    .ok()?;
+    let banned = crate::filter::BannedWords::new(&prefs.banned_words);
+    let (text, _) = crate::markers::strip(&banned.apply(&out.text));
+    (!text.trim().is_empty()).then_some(text)
 }
 
 /// 用户自己点的（比如「现在播报一次」）：不排队、不看冷却，马上说
@@ -608,6 +667,30 @@ mod tests {
                 Decision::Drop
             );
         }
+    }
+
+    #[test]
+    fn deep_focus_postpones_care_only() {
+        let g = Gate {
+            deep_focus: true,
+            ..free()
+        };
+        assert_eq!(
+            decide(Kind::Care, &s(), &g, &Pace::default(), NOW),
+            Decision::Wait
+        );
+        assert_eq!(
+            decide(Kind::Briefing, &s(), &g, &Pace::default(), NOW),
+            Decision::Wait
+        );
+        assert_eq!(
+            decide(Kind::Activity, &s(), &g, &Pace::default(), NOW),
+            Decision::Speak
+        );
+        assert_eq!(
+            decide(Kind::Reminder, &s(), &g, &Pace::default(), NOW),
+            Decision::Speak
+        );
     }
 
     #[test]

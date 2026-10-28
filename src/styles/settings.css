@@ -472,3 +472,9 @@ input[type='search'] {
   background: var(--panel-2);
   font-size: 12px;
 }
+
+.activity-day {
+  padding: 4px 0 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}

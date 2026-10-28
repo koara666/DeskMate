@@ -153,6 +153,57 @@ export interface SettingsView {
   companion: CompanionSettings;
   advanced: AdvancedSettings;
   briefing: BriefingSettings;
+  activity: ActivitySettings;
+  care: CareSettings;
+}
+
+export type ActivityCategory =
+  | 'game'
+  | 'coding'
+  | 'writing'
+  | 'video'
+  | 'music'
+  | 'browsing'
+  | 'chat'
+  | 'meeting'
+  | 'other'
+  | 'idle';
+export type ActivityAction = 'comment' | 'quiet' | 'avoid';
+
+export interface ActivityRule {
+  /** 分类 id 或进程名（xxx.exe） */
+  target: string;
+  action: ActivityAction;
+}
+
+export interface ActivitySettings {
+  enabled: boolean;
+  comments: boolean;
+  record: boolean;
+  rules: ActivityRule[];
+  private_apps: string[];
+}
+
+export interface ActivityTotal {
+  category: string;
+  label: string;
+  secs: number;
+}
+
+export interface ActivityOverview {
+  current: { category: ActivityCategory; label: string | null; since: number } | null;
+  recent: [string, ActivityCategory][];
+  days: [string, ActivityTotal[]][];
+}
+
+export interface CareSettings {
+  sit: boolean;
+  sit_minutes: number;
+  water: boolean;
+  water_minutes: number;
+  late: boolean;
+  late_time: string;
+  meal: boolean;
 }
 
 export interface City {

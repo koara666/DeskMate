@@ -272,6 +272,8 @@ pub fn spawn(app: AppHandle) {
                 check_proactive(&app).await;
                 // 每日播报：每天第一次、用户设定的时间点
                 crate::briefing::check(&app);
+                // 日常关怀：久坐、喝水、深夜、吃饭
+                crate::care::check(&app);
             }
         }
     });

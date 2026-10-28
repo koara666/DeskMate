@@ -46,6 +46,10 @@
     "allow-reminder-set-status",
     "allow-briefing-save",
     "allow-city-search",
-    "allow-briefing-now"
+    "allow-briefing-now",
+    "allow-activity-overview",
+    "allow-activity-save",
+    "allow-activity-delete",
+    "allow-care-save"
   ]
 }

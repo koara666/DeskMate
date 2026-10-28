@@ -3,6 +3,9 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
+  ActivityOverview,
+  ActivitySettings,
+  CareSettings,
   BriefingSettings,
   City,
   Reminder,
@@ -131,6 +134,10 @@ export const settingsApi = {
   saveBriefing: (briefing: BriefingSettings) => invoke<BriefingSettings>('briefing_save', { briefing }),
   citySearch: (query: string) => invoke<City[]>('city_search', { query }),
   briefingNow: () => invoke('briefing_now'),
+  activityOverview: () => invoke<ActivityOverview>('activity_overview'),
+  saveActivity: (activity: ActivitySettings) => invoke<ActivitySettings>('activity_save', { activity }),
+  deleteActivity: (day: string) => invoke<number>('activity_delete', { day }),
+  saveCare: (care: CareSettings) => invoke<CareSettings>('care_save', { care }),
   reminderList: () => invoke<ReminderView[]>('reminder_list'),
   reminderSave: (reminder: Reminder) => invoke<SavedReminder>('reminder_save', { reminder }),
   reminderDelete: (id: number) => invoke('reminder_delete', { id }),

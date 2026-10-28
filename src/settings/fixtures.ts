@@ -45,6 +45,8 @@ const view: SettingsView = {
     system_notify: true,
   },
   advanced: { allow_delegation: false, read_dirs: [], programs: [] },
+  activity: { enabled: true, comments: true, record: true, rules: [], private_apps: [] },
+  care: { sit: true, sit_minutes: 60, water: true, water_minutes: 150, late: true, late_time: '00:30', meal: true },
   briefing: {
     on_startup: true,
     times: [],

@@ -48,6 +48,17 @@ pub const SCENES: &[(&str, &[&str])] = &[
     ("briefing.birthday_self", &[]),
     ("briefing.special_user", &["日子"]),
     ("briefing.festival", &["节日"]),
+    ("activity.game_end", &["时长", "程序"]),
+    ("activity.long_game", &["时长", "程序"]),
+    ("activity.long_coding", &["时长", "程序"]),
+    ("activity.long_video", &["时长", "程序"]),
+    ("activity.long_writing", &["时长", "程序"]),
+    ("activity.late_night", &[]),
+    ("activity.writing_to_video", &[]),
+    ("care.stand_up", &[]),
+    ("care.water", &[]),
+    ("care.late_night", &[]),
+    ("care.meal", &["饭"]),
 ];
 
 const MAX_FILES: usize = 32;

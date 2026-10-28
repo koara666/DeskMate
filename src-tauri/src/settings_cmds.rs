@@ -59,6 +59,8 @@ pub struct SettingsView {
     pub companion: crate::proactive::CompanionSettings,
     pub advanced: crate::abilities::AdvancedSettings,
     pub briefing: crate::briefing::BriefingSettings,
+    pub activity: crate::activity::ActivitySettings,
+    pub care: crate::care::CareSettings,
 }
 
 fn is_builtin_id(id: &str) -> bool {
@@ -121,6 +123,8 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         companion: s.companion.clone(),
         advanced: s.advanced.clone(),
         briefing: s.briefing.clone(),
+        activity: s.activity.clone(),
+        care: s.care.clone(),
     }
 }
 
@@ -443,6 +447,71 @@ pub async fn briefing_now(app: AppHandle) -> CmdResult<()> {
     let hour = chrono::Timelike::hour(&crate::reminders::now_local());
     crate::briefing::run(&app, crate::briefing::Occasion::at(hour), "manual", true).await;
     Ok(())
+}
+
+/// 活动感知页：最近用过的程序（只在内存里）、现在在做什么、最近几天的活动汇总
+#[derive(Serialize)]
+pub struct ActivityOverview {
+    pub current: Option<crate::activity::Current>,
+    pub recent: Vec<(String, crate::activity::classify::Category)>,
+    pub days: Vec<(String, Vec<crate::activity::log::Total>)>,
+}
+
+#[tauri::command]
+pub fn activity_overview(state: State<'_, AppState>) -> ActivityOverview {
+    use crate::activity::log;
+    let db = state.db();
+    let days = log::recent_days(&db, 7)
+        .into_iter()
+        .map(|d| {
+            let t = log::day_totals(&db, &d);
+            (d, t)
+        })
+        .collect();
+    ActivityOverview {
+        current: state.activity.current().filter(|c| !c.private),
+        recent: state.activity.recent(),
+        days,
+    }
+}
+
+#[tauri::command]
+pub fn activity_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    activity: crate::activity::ActivitySettings,
+) -> CmdResult<crate::activity::ActivitySettings> {
+    let saved = state.update_settings(|s| s.activity = activity).activity;
+    desktop::broadcast_settings_changed(&app);
+    // 马上按新规则看一眼（比如刚把某个程序设成回避）
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move { crate::activity::sample(&app2) });
+    Ok(saved)
+}
+
+/// 删除活动日志：某一天，或者 day = "all" 全部
+#[tauri::command]
+pub fn activity_delete(state: State<'_, AppState>, day: String) -> CmdResult<usize> {
+    use crate::activity::log;
+    let db = state.db();
+    if day == "all" {
+        log::delete_all(&db).map_err(|e| e.to_string())
+    } else if chrono::NaiveDate::parse_from_str(&day, "%Y-%m-%d").is_ok() {
+        log::delete_day(&db, &day).map_err(|e| e.to_string())
+    } else {
+        Err("日期不对".into())
+    }
+}
+
+#[tauri::command]
+pub fn care_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    care: crate::care::CareSettings,
+) -> CmdResult<crate::care::CareSettings> {
+    let saved = state.update_settings(|s| s.care = care).care;
+    desktop::broadcast_settings_changed(&app);
+    Ok(saved)
 }
 
 #[tauri::command]

@@ -13,6 +13,12 @@ pub fn test_mode() -> bool {
     std::env::var_os("DESKMATE_DATA_DIR").is_some_and(|v| !v.is_empty())
 }
 
+/// 测试实例默认不做自动的主动行为（每日播报、活动感知、关怀），免得干扰自动测试和性能实测；
+/// 设置 `DESKMATE_TEST_PROACTIVE=1` 时照常做（用来手动检查这些功能）。
+pub fn test_quiet() -> bool {
+    test_mode() && std::env::var_os("DESKMATE_TEST_PROACTIVE").is_none()
+}
+
 /// 只在测试模式下、且显式设置了 `DESKMATE_CDP_PORT` 时，打开 WebView 调试端口（供自动化测试驱动界面）。
 /// 正式使用时永远不会打开。
 pub fn cdp_port() -> Option<u16> {

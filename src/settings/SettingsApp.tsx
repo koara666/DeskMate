@@ -11,13 +11,15 @@ import { MemoryPage } from './MemoryPage';
 import { CompanionPage } from './CompanionPage';
 import { AdvancedPage } from './AdvancedPage';
 import { RemindersPage } from './RemindersPage';
+import { ActivityPage } from './ActivityPage';
 
-type Tab = 'general' | 'companion' | 'reminders' | 'characters' | 'memory' | 'models' | 'usage' | 'advanced' | 'about';
+type Tab = 'general' | 'companion' | 'reminders' | 'activity' | 'characters' | 'memory' | 'models' | 'usage' | 'advanced' | 'about';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: '常规' },
   { id: 'companion', label: '陪伴' },
   { id: 'reminders', label: '提醒' },
+  { id: 'activity', label: '活动感知' },
   { id: 'characters', label: '角色' },
   { id: 'memory', label: '记忆' },
   { id: 'models', label: '模型' },
@@ -86,6 +88,8 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
           <CompanionPage api={api} view={view} />
         ) : tab === 'reminders' ? (
           <RemindersPage api={api} />
+        ) : tab === 'activity' ? (
+          <ActivityPage api={api} view={view} />
         ) : tab === 'characters' ? (
           <CharactersPage api={api} />
         ) : tab === 'memory' ? (

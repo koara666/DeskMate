@@ -484,7 +484,10 @@ pub async fn run_turn_with_notes(
             .as_ref()
             .map(|c| quotes::recall(&c.quotes, &user_text))
             .unwrap_or_default();
-        let now_text = now_text();
+        let now_text = match crate::activity::context_line(&state) {
+            Some(a) => format!("{}；{a}", now_text()),
+            None => now_text(),
+        };
         let parts = PromptParts {
             character_name: &name,
             persona: &persona,
