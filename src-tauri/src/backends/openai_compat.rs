@@ -67,7 +67,13 @@ impl OpenAiCompat {
                 Role::User => "user",
                 Role::Assistant => "assistant",
             };
-            messages.push(json!({"role": role, "content": m.content}));
+            match &m.image {
+                Some(img) => messages.push(json!({"role": role, "content": [
+                    {"type": "image_url", "image_url": {"url": format!("data:{};base64,{}", img.mime, img.base64)}},
+                    {"type": "text", "text": m.content},
+                ]})),
+                None => messages.push(json!({"role": role, "content": m.content})),
+            }
         }
         let mut body = json!({
             "model": self.model,

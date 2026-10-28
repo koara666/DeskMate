@@ -31,6 +31,7 @@ pub mod prompt;
 pub mod quotes;
 pub mod redact;
 pub mod reminders;
+pub mod screen;
 pub mod secrets;
 pub mod settings;
 pub mod settings_cmds;
@@ -38,6 +39,7 @@ pub mod state;
 pub mod task_cmds;
 pub mod tasks;
 pub mod usage;
+pub mod vision;
 pub mod worker;
 
 use paths::DataPaths;
@@ -111,6 +113,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         if let Err(e) = daily::apply_hotkey(&handle, d.hotkey_enabled, &d.hotkey) {
             log::warn!("{e}");
         }
+        let v = handle.state::<AppState>().settings().vision;
+        if let Err(e) = daily::apply_vision_hotkey(&handle, v.enabled, &v.hotkey) {
+            log::warn!("{e}");
+        }
     }
 
     // 桌宠出现后再在后台准备聊天窗口，不拖慢启动
@@ -152,7 +158,7 @@ pub fn run() {
         ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| daily::on_hotkey(app, event.state))
+                .with_handler(|app, shortcut, event| daily::on_hotkey(app, shortcut, event.state))
                 .build(),
         )
         .setup(setup)
@@ -236,6 +242,8 @@ pub fn run() {
             settings_cmds::diary_delete,
             settings_cmds::companion_status,
             settings_cmds::nickname_save,
+            settings_cmds::vision_save,
+            settings_cmds::vision_cost,
             settings_cmds::settings_get,
             settings_cmds::settings_save_general,
             settings_cmds::backend_save,

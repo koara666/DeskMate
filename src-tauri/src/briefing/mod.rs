@@ -968,7 +968,10 @@ mod tests {
         st.update_settings(|s| {
             s.character_id = "nanami-chiaki".into();
             s.briefing.special_dates = vec![SpecialDate {
-                date: format!("{:02}-{:02}", now_local().month(), now_local().day()),
+                date: {
+                    let d = briefing_day(now_local());
+                    format!("{:02}-{:02}", d.month(), d.day())
+                },
                 label: "我的生日".into(),
             }];
         });

@@ -229,6 +229,16 @@ export interface SettingsView {
   briefing: BriefingSettings;
   activity: ActivitySettings;
   care: CareSettings;
+  vision: VisionSettings;
+}
+
+export interface VisionSettings {
+  enabled: boolean;
+  backend: string;
+  hotkey: string;
+  games: string[];
+  game_interval_minutes: number;
+  daily_max: number;
 }
 
 export type ActivityCategory =

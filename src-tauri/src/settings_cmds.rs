@@ -61,6 +61,7 @@ pub struct SettingsView {
     pub briefing: crate::briefing::BriefingSettings,
     pub activity: crate::activity::ActivitySettings,
     pub care: crate::care::CareSettings,
+    pub vision: crate::vision::VisionSettings,
 }
 
 fn is_builtin_id(id: &str) -> bool {
@@ -125,6 +126,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         briefing: s.briefing.clone(),
         activity: s.activity.clone(),
         care: s.care.clone(),
+        vision: s.vision.clone(),
     }
 }
 
@@ -580,6 +582,35 @@ pub fn nickname_save(
     let saved = state.update_settings(|s| s.nickname = nickname).nickname;
     desktop::broadcast_settings_changed(&app);
     Ok(saved)
+}
+
+/// 「看一眼」设置：检查模型能不能看图、注册快捷键
+#[tauri::command]
+pub fn vision_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    vision: crate::vision::VisionSettings,
+) -> CmdResult<crate::vision::VisionSettings> {
+    let v = vision.sanitize();
+    if v.enabled {
+        let s = state.settings();
+        let cfg = s.backend(&v.backend).ok_or("先选一个看图用的模型")?;
+        if !crate::vision::kind_supports_images(&cfg.kind) {
+            return Err(
+                "这个模型不能看图，换成 Claude、Gemini 或支持图片的 OpenAI 兼容模型".into(),
+            );
+        }
+    }
+    crate::daily::apply_vision_hotkey(&app, v.enabled, &v.hotkey)?;
+    let saved = state.update_settings(|s| s.vision = v).vision;
+    desktop::broadcast_settings_changed(&app);
+    Ok(saved)
+}
+
+/// 「看一眼」累计的（次数，花费美元）
+#[tauri::command]
+pub fn vision_cost(state: State<'_, AppState>) -> (i64, f64) {
+    crate::usage::purpose_total(&state.db(), crate::usage::purpose::VISION)
 }
 
 #[tauri::command]

@@ -93,6 +93,7 @@ pub fn messages(conn: &Connection, conversation_id: i64) -> rusqlite::Result<Vec
         Ok(ChatMessage {
             role: parse_role(&r.get::<_, String>(0)?),
             content: r.get(1)?,
+            image: None,
         })
     })?
     .collect()

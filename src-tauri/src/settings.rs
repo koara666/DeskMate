@@ -114,6 +114,8 @@ pub struct Settings {
     pub activity: crate::activity::ActivitySettings,
     /// 日常关怀：久坐、喝水、深夜、吃饭
     pub care: crate::care::CareSettings,
+    /// 活动感知第三层：看一眼屏幕（默认关闭）
+    pub vision: crate::vision::VisionSettings,
 }
 
 impl Default for Settings {
@@ -143,6 +145,7 @@ impl Default for Settings {
             briefing: Default::default(),
             activity: Default::default(),
             care: Default::default(),
+            vision: Default::default(),
         }
     }
 }
@@ -163,6 +166,12 @@ impl Settings {
         self.briefing = std::mem::take(&mut self.briefing).sanitize();
         self.activity = std::mem::take(&mut self.activity).sanitize();
         self.care = std::mem::take(&mut self.care).sanitize();
+        self.vision = std::mem::take(&mut self.vision).sanitize();
+        if !self.vision.backend.is_empty()
+            && !self.backends.iter().any(|b| b.id == self.vision.backend)
+        {
+            self.vision.backend = String::new();
+        }
         self.global_prefs = std::mem::take(&mut self.global_prefs).sanitize();
         self.character_prefs = std::mem::take(&mut self.character_prefs)
             .into_iter()

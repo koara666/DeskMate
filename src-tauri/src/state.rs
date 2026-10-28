@@ -47,6 +47,8 @@ pub struct AppState {
     pub companion: crate::companion::TouchState,
     /// 需要模型的小游戏（成语接龙、海龟汤、二十问）的进行中的局
     pub llm_games: crate::games_llm::LlmGames,
+    /// 「看一眼」的次数和间隔
+    pub vision: crate::vision::VisionState,
 }
 
 impl AppState {
@@ -82,6 +84,7 @@ impl AppState {
             care: Default::default(),
             companion: Default::default(),
             llm_games: Default::default(),
+            vision: Default::default(),
         }
     }
 

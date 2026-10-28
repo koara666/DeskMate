@@ -79,6 +79,8 @@ const COMMANDS: &[&str] = &[
     "llm_game_start",
     "llm_game_turn",
     "llm_game_give_up",
+    "vision_save",
+    "vision_cost",
 ];
 
 fn main() {

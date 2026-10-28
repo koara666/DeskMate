@@ -54,6 +54,8 @@
     "allow-diary-list",
     "allow-diary-delete",
     "allow-companion-status",
-    "allow-nickname-save"
+    "allow-nickname-save",
+    "allow-vision-save",
+    "allow-vision-cost"
   ]
 }

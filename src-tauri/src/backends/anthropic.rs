@@ -83,7 +83,13 @@ impl Claude {
                     Role::User => "user",
                     Role::Assistant => "assistant",
                 };
-                json!({"role": role, "content": m.content})
+                match &m.image {
+                    Some(img) => json!({"role": role, "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": img.mime, "data": img.base64}},
+                        {"type": "text", "text": m.content},
+                    ]}),
+                    None => json!({"role": role, "content": m.content}),
+                }
             })
             .collect();
         let mut body = json!({

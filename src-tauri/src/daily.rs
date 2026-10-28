@@ -91,6 +91,8 @@ pub struct DailyState {
     sleeping: AtomicBool,
     /// 当前注册的快捷键
     hotkey: Mutex<Option<Shortcut>>,
+    /// 「看一眼」的快捷键（第三层打开时才注册）
+    vision_hotkey: Mutex<Option<Shortcut>>,
     /// 今天主动搭话的次数（日期，次数）
     proactive_count: Mutex<(String, u32)>,
 }
@@ -237,9 +239,55 @@ pub fn apply_hotkey(app: &AppHandle, enabled: bool, hotkey: &str) -> Result<(), 
     Ok(())
 }
 
-/// 快捷键按下：显示/隐藏聊天输入框
-pub fn on_hotkey(app: &AppHandle, state: ShortcutState) {
+/// 注册（或取消）「看一眼」的快捷键
+pub fn apply_vision_hotkey(app: &AppHandle, enabled: bool, hotkey: &str) -> Result<(), String> {
+    let st = app.state::<AppState>();
+    let gs = app.global_shortcut();
+    let mut cur = st
+        .daily
+        .vision_hotkey
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if let Some(old) = cur.take() {
+        let _ = gs.unregister(old);
+    }
+    if !enabled {
+        return Ok(());
+    }
+    let sc = parse_hotkey(hotkey)?;
+    if st
+        .daily
+        .hotkey
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        == Some(&sc)
+    {
+        return Err("「看一眼」的快捷键不能和唤出聊天的快捷键一样".into());
+    }
+    gs.register(sc).map_err(|e| {
+        format!("快捷键 {hotkey} 注册失败，可能已经被其他程序占用了，换一个试试（{e}）")
+    })?;
+    *cur = Some(sc);
+    Ok(())
+}
+
+/// 快捷键按下：「看一眼」或者显示/隐藏聊天输入框
+pub fn on_hotkey(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState) {
     if state != ShortcutState::Pressed {
+        return;
+    }
+    let is_vision = app
+        .state::<AppState>()
+        .daily
+        .vision_hotkey
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        == Some(shortcut);
+    if is_vision {
+        interact(app);
+        crate::vision::on_hotkey(app);
         return;
     }
     if let Some(p) = desktop::pet(app)

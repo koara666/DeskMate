@@ -69,7 +69,13 @@ impl Gemini {
                     Role::User => "user",
                     Role::Assistant => "model",
                 };
-                json!({"role": role, "parts": [{"text": m.content}]})
+                match &m.image {
+                    Some(img) => json!({"role": role, "parts": [
+                        {"inline_data": {"mime_type": img.mime, "data": img.base64}},
+                        {"text": m.content},
+                    ]}),
+                    None => json!({"role": role, "parts": [{"text": m.content}]}),
+                }
             })
             .collect();
         let mut gen_cfg = json!({"maxOutputTokens": req.max_tokens});

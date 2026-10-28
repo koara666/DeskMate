@@ -3,8 +3,10 @@ import { useCallback, useEffect, useState } from 'preact/hooks';
 import type { SettingsApi } from '../lib/ipc';
 import type { ActivityAction, ActivityCategory, ActivityOverview, ActivitySettings, SettingsView } from '../lib/types';
 import { StatusLine, useStatus } from './SettingsApp';
+import { VisionSection } from './VisionSection';
 
-type Api = Pick<SettingsApi, 'activityOverview' | 'saveActivity' | 'deleteActivity'>;
+type Api = Pick<SettingsApi, 'activityOverview' | 'saveActivity' | 'deleteActivity'> &
+  Partial<Pick<SettingsApi, 'saveVision' | 'visionCost'>>;
 
 export const CATEGORIES: { id: ActivityCategory; name: string; def: ActivityAction }[] = [
   { id: 'game', name: '玩游戏', def: 'comment' },
@@ -213,6 +215,18 @@ export function ActivityPage({ api, view }: { api: Api; view: SettingsView }) {
         )}
         <StatusLine status={status} />
       </div>
+
+      {api.saveVision && api.visionCost && (
+        <VisionSection
+          api={{ saveVision: api.saveVision, visionCost: api.visionCost }}
+          view={view}
+          games={Array.from(
+            new Set(
+              (ov?.days ?? []).flatMap(([, totals]) => totals.filter((t) => t.category === 'game' && t.label).map((t) => t.label)),
+            ),
+          )}
+        />
+      )}
     </section>
   );
 }

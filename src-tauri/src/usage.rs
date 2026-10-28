@@ -47,6 +47,18 @@ pub mod purpose {
     pub const TASK: &str = "task";
     /// 主动行为（播报、活动评论等）：单独计数，有自己的每日上限（DECISIONS #35）
     pub const PROACTIVE: &str = "proactive";
+    /// 「看一眼」屏幕（P7），设置里单独显示累计花费
+    pub const VISION: &str = "vision";
+}
+
+/// 某种用途累计的（调用次数，花费）
+pub fn purpose_total(conn: &Connection, purpose: &str) -> (i64, f64) {
+    conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(cost_usd), 0) FROM usage WHERE purpose = ?1",
+        [purpose],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .unwrap_or((0, 0.0))
 }
 
 pub struct Record<'a> {

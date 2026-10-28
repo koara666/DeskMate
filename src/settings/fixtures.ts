@@ -47,6 +47,7 @@ const view: SettingsView = {
   },
   advanced: { allow_delegation: false, read_dirs: [], programs: [] },
   activity: { enabled: true, comments: true, record: true, rules: [], private_apps: [] },
+  vision: { enabled: false, backend: '', hotkey: 'Alt+Shift+L', games: [], game_interval_minutes: 30, daily_max: 5 },
   care: { sit: true, sit_minutes: 60, water: true, water_minutes: 150, late: true, late_time: '00:30', meal: true },
   briefing: {
     on_startup: true,

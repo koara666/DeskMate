@@ -30,6 +30,16 @@ pub enum Role {
 pub struct ChatMessage {
     pub role: Role,
     pub content: String,
+    /// 附带的一张图片（只有「看一眼屏幕」用，P7）：只在内存里，不存进聊天记录
+    #[serde(default, skip)]
+    pub image: Option<std::sync::Arc<ImagePart>>,
+}
+
+/// 图片（base64）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImagePart {
+    pub mime: String,
+    pub base64: String,
 }
 
 impl ChatMessage {
@@ -37,12 +47,14 @@ impl ChatMessage {
         Self {
             role: Role::User,
             content: s.into(),
+            image: None,
         }
     }
     pub fn assistant(s: impl Into<String>) -> Self {
         Self {
             role: Role::Assistant,
             content: s.into(),
+            image: None,
         }
     }
 }
