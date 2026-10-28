@@ -52,6 +52,28 @@ export interface ChatInit {
   notice: string | null;
 }
 
+export type MarkerKind = 'task' | 'open' | 'read';
+
+/** 气泡里的动作按钮（角色提议打开 / 读取，用户点了才做） */
+export interface ActionView {
+  kind: MarkerKind;
+  target: string;
+  label: string;
+  /** 不能做的原因（有原因时不显示按钮） */
+  error: string | null;
+}
+
+export type ProactiveKind = 'reminder' | 'care' | 'briefing' | 'activity' | 'random';
+
+/** 角色主动说的话（经过调度器） */
+export interface ProactiveMessage {
+  id: number;
+  kind: ProactiveKind;
+  text: string;
+  /** 弹出了气泡（false = 全屏时改发了系统通知） */
+  popped: boolean;
+}
+
 export interface ErrorInfo {
   kind: string;
   message: string;
@@ -61,7 +83,7 @@ export interface ErrorInfo {
 
 export type ChatEvent =
   | { type: 'delta'; text: string }
-  | { type: 'done'; text: string; finish: FinishReason; task?: string | null }
+  | { type: 'done'; text: string; finish: FinishReason; task?: string | null; actions?: ActionView[] }
   | ({ type: 'error' } & ErrorInfo);
 
 // ---------------- 设置窗口 ----------------
@@ -118,6 +140,33 @@ export interface SettingsView {
   version: string;
   initial_tab: string | null;
   daily: DailySettings;
+  companion: CompanionSettings;
+  advanced: AdvancedSettings;
+}
+
+export type Frequency = 'rare' | 'sometimes' | 'often';
+
+export interface CompanionSettings {
+  enabled: boolean;
+  cooldown_minutes: number;
+  frequency: Frequency;
+  quiet_enabled: boolean;
+  quiet_start: string;
+  quiet_end: string;
+  daily_calls: number;
+  daily_usd: number;
+  system_notify: boolean;
+}
+
+export interface ProgramEntry {
+  name: string;
+  path: string;
+}
+
+export interface AdvancedSettings {
+  allow_delegation: boolean;
+  read_dirs: string[];
+  programs: ProgramEntry[];
 }
 
 export interface DailySettings {

@@ -45,6 +45,8 @@ pub mod purpose {
     pub const MEMORY: &str = "memory";
     pub const TEST: &str = "test";
     pub const TASK: &str = "task";
+    /// 主动行为（播报、活动评论等）：单独计数，有自己的每日上限（DECISIONS #35）
+    pub const PROACTIVE: &str = "proactive";
 }
 
 pub struct Record<'a> {
@@ -111,6 +113,16 @@ pub fn spent_month(conn: &Connection, month: &str) -> f64 {
         |r| r.get(0),
     )
     .unwrap_or(0.0)
+}
+
+/// 某一天某种用途的（调用次数，花费）
+pub fn purpose_day(conn: &Connection, day: &str, purpose: &str) -> (i64, f64) {
+    conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(cost_usd), 0) FROM usage WHERE day = ?1 AND purpose = ?2",
+        [day, purpose],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .unwrap_or((0, 0.0))
 }
 
 /// 调用前检查：已经花到上限就拒绝
@@ -211,6 +223,8 @@ mod tests {
         assert_eq!(rows[0].requests, 3);
         assert_eq!(rows[0].input_tokens, 3000);
         assert_eq!(summary(&c, "day", None)[0].requests, 4);
+        assert_eq!(purpose_day(&c, "2026-10-27", purpose::CHAT).0, 2);
+        assert_eq!(purpose_day(&c, "2026-10-27", purpose::PROACTIVE), (0, 0.0));
     }
 
     #[test]

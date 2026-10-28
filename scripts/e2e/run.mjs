@@ -233,11 +233,12 @@ async function main() {
     console.log('\n设置窗口');
     const tabs = [
       ['常规', '常规'],
+      ['陪伴', '陪伴'],
       ['角色', '角色'],
       ['记忆', '记忆'],
       ['模型', '模型'],
-      ['任务执行', '任务执行'],
       ['用量与花费', '用量与花费'],
+      ['高级', '高级'],
       ['关于与隐私', '关于与隐私'],
     ];
     for (const [label, h1] of tabs) {
@@ -374,9 +375,17 @@ async function main() {
       await settings.eval(`[...document.querySelectorAll('label.row')].find(l => l.innerText.includes('暂停记忆')).querySelector('input').click()`);
     });
 
-    await settings.click('任务执行');
+    await settings.click('高级');
+    await test('高级：委托外部 agent 默认关闭，打开后才显示任务执行设置', async () => {
+      await settings.waitFor(`document.querySelector('main h1')?.innerText === '高级'`, '高级页');
+      const on = await settings.eval(`[...document.querySelectorAll('label.row')].find(l => l.innerText.includes('允许她把事情交给')).querySelector('input').checked`);
+      if (on) throw new Error('委托外部 agent 应该默认关闭');
+      if (await settings.eval(`!!document.querySelector('input[aria-label="任务文件夹"]')`)) throw new Error('没开委托时不该显示任务设置');
+      await settings.eval(`[...document.querySelectorAll('label.row')].find(l => l.innerText.includes('允许她把事情交给')).querySelector('input').click()`);
+      await settings.waitText('已保存');
+    });
     await test('任务执行：检测 CLI 并保存任务文件夹', async () => {
-      await settings.waitFor(`document.querySelector('main h1')?.innerText === '任务执行' && document.querySelector('input[aria-label="任务文件夹"]')`, '检测完成', 30000);
+      await settings.waitFor(`!!document.querySelector('input[aria-label="任务文件夹"]')`, '检测完成', 30000);
       await settings.input('input[aria-label="任务文件夹"]', TASK_ROOT);
       await settings.click('保存');
       await settings.waitText('已保存');
@@ -439,9 +448,19 @@ async function main() {
       await chat.click('[aria-label="收起"]');
       await chat.waitFor(`!!document.querySelector('.panel.mode-compact')`, '收起');
     });
-    await test('任务卡片能打开和关闭', async () => {
-      await chat.click('[aria-label="新任务"]');
-      await chat.waitFor(`!!document.querySelector('.task-card')`, '任务卡片出现');
+    await test('气泡里的「打开」按钮：只显示，不自动打开', async () => {
+      // 不点按钮：点了会在用户电脑上真的打开浏览器
+      await chat.input('textarea[aria-label="输入消息"]', '/mock open https://example.com');
+      await chat.key('textarea[aria-label="输入消息"]', { key: 'Enter' });
+      await chat.waitFor(`[...document.querySelectorAll('.action')].some(a => a.innerText.includes('https://example.com'))`, '出现打开按钮', 10000);
+      const shown = await chat.eval(`document.querySelector('.bubble-area, .messages').innerText`);
+      if (shown.includes('[[打开')) throw new Error('标记原文不该显示出来');
+      await chat.shot('chat-action.png');
+    });
+    await test('任务卡片能打开和关闭（开了委托后，回复里的任务标记弹出卡片）', async () => {
+      await chat.input('textarea[aria-label="输入消息"]', '/mock task 统计字数');
+      await chat.key('textarea[aria-label="输入消息"]', { key: 'Enter' });
+      await chat.waitFor(`!!document.querySelector('.task-card')`, '任务卡片出现', 10000);
       await chat.waitFor(`!document.querySelector('.task-card').innerText.includes('正在检测')`, '检测完成', 30000);
       await chat.shot('task-card.png');
       await chat.click('先不做了');

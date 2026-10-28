@@ -56,6 +56,8 @@ pub struct SettingsView {
     /// 打开设置窗口时要直接显示的页面（只生效一次）
     pub initial_tab: Option<String>,
     pub daily: crate::daily::DailySettings,
+    pub companion: crate::proactive::CompanionSettings,
+    pub advanced: crate::abilities::AdvancedSettings,
 }
 
 fn is_builtin_id(id: &str) -> bool {
@@ -115,6 +117,8 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         version: env!("CARGO_PKG_VERSION").to_string(),
         initial_tab: state.desktop.take_settings_tab(),
         daily: s.daily.clone(),
+        companion: s.companion.clone(),
+        advanced: s.advanced.clone(),
     }
 }
 
@@ -358,6 +362,41 @@ pub fn open_data_dir(state: State<'_, AppState>, sub: Option<String>) -> CmdResu
 }
 
 /// 保存日常体验设置：开机自启、快捷键（检测冲突）、全屏、睡眠、主动搭话
+#[tauri::command]
+pub fn companion_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    companion: crate::proactive::CompanionSettings,
+) -> CmdResult<()> {
+    state.update_settings(|s| s.companion = companion);
+    desktop::broadcast_settings_changed(&app);
+    Ok(())
+}
+
+/// 高级设置：委托外部 agent 开关、允许读取的文件夹（逐个检查）、常用程序
+#[tauri::command]
+pub fn advanced_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    advanced: crate::abilities::AdvancedSettings,
+) -> CmdResult<crate::abilities::AdvancedSettings> {
+    let mut a = advanced.sanitize();
+    let mut dirs = Vec::new();
+    for d in &a.read_dirs {
+        dirs.push(crate::abilities::validate_read_dir(d, state.paths.root())?);
+    }
+    a.read_dirs = dirs;
+    for p in &a.programs {
+        let path = std::path::Path::new(&p.path);
+        if !path.is_absolute() || !path.is_file() {
+            return Err(format!("找不到程序「{}」：{}", p.name, p.path));
+        }
+    }
+    let saved = state.update_settings(|s| s.advanced = a).advanced;
+    desktop::broadcast_settings_changed(&app);
+    Ok(saved)
+}
+
 #[tauri::command]
 pub fn daily_save(
     app: AppHandle,

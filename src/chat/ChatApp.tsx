@@ -3,14 +3,25 @@
 import { Fragment } from 'preact';
 import { memo } from '../lib/memo';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import type { ComponentType } from 'preact';
 import type { ChatApi, TaskApi } from '../lib/ipc';
 import { newRequestId } from '../lib/ipc';
 import { Typewriter } from '../lib/typewriter';
 import { copyText } from '../lib/clipboard';
 import { GAP_SECS, formatTime, nowSecs } from '../lib/time';
-import type { CharacterView, ChatEvent, ChatMode, ErrorInfo, Placement, Role } from '../lib/types';
+import type {
+  ActionView,
+  CharacterView,
+  ChatEvent,
+  ChatMode,
+  ErrorInfo,
+  Placement,
+  ProactiveMessage,
+  Role,
+} from '../lib/types';
 import { Composer } from './Composer';
-import { TaskCard } from './TaskCard';
+// 任务卡片（委托外部 agent，高级选项）按需加载：没开委托时根本不加载这部分代码
+type TaskCardType = typeof import('./TaskCard').TaskCard;
 
 export type MsgStatus = 'streaming' | 'done' | 'stopped' | 'error';
 
@@ -22,12 +33,16 @@ export interface UiMessage {
   error?: ErrorInfo;
   /** 时间（Unix 秒） */
   at: number;
+  /** 角色提议的打开 / 读取（用户点了才做） */
+  actions?: ActionView[];
 }
 
 let seq = 0;
 const nextId = () => ++seq;
 
 const NETWORK_KINDS = new Set(['network', 'timeout']);
+/** 主动弹出的气泡无人理会多久后自动收起（毫秒）：至少 45 秒，字多就多给点时间 */
+export const proactiveHideMs = (text: string) => Math.min(120_000, 45_000 + text.length * 300);
 /** 气泡模式的最大高度（和后端 desktop::CHAT_COMPACT 一致） */
 const COMPACT_MAX_H = 250;
 
@@ -59,6 +74,11 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const fitted = useRef(0);
   const [ready, setReady] = useState(false);
   const stickToBottom = useRef(true);
+  const [TaskCard, setTaskCard] = useState<ComponentType<Parameters<TaskCardType>[0]> | null>(null);
+  /** 主动弹出的气泡：用户理会前，无人理会一段时间就自动收起（悬停在气泡上时不收） */
+  const proactive = useRef<{ timer: ReturnType<typeof setTimeout> | null; hovering: boolean } | null>(null);
+  /** 用户上次在聊天窗口里打字、发消息的时间（正在聊天时不自动收起） */
+  const lastActivity = useRef(0);
 
   const load = useCallback(async () => {
     const init = await api.init();
@@ -82,9 +102,10 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
         setNow(nowSecs());
       }),
       api.onCharacterChanged(() => load().catch(() => {})),
-      api.onProactive((text) => {
+      api.onProactive((m) => {
         stickToBottom.current = true;
-        setMessages((ms) => [...ms, { id: nextId(), role: 'assistant', text, status: 'done', at: nowSecs() }]);
+        setMessages((ms) => [...ms, { id: nextId(), role: 'assistant', text: m.text, status: 'done', at: nowSecs() }]);
+        armProactive(m);
       }),
     ];
     const onVisible = () => {
@@ -107,6 +128,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
       window.removeEventListener('offline', onOffline);
       window.removeEventListener('keydown', onKey);
       writer.current?.dispose();
+      if (proactive.current?.timer) clearTimeout(proactive.current.timer);
     };
   }, [api, load]);
 
@@ -133,6 +155,34 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     api.fit(need).catch(() => {});
   });
 
+  // ---------- 主动发言：无人理会自动收起，并告诉调度器（连续被忽略会降低频率） ----------
+  function armProactive(m: ProactiveMessage) {
+    if (!m.popped || Date.now() - lastActivity.current < 60_000) return;
+    if (proactive.current?.timer) clearTimeout(proactive.current.timer);
+    const p = { timer: null as ReturnType<typeof setTimeout> | null, hovering: false };
+    proactive.current = p;
+    const check = () => {
+      if (proactive.current !== p) return;
+      if (p.hovering) {
+        p.timer = setTimeout(check, 10_000);
+        return;
+      }
+      proactive.current = null;
+      api.hide().catch(() => {});
+      api.feedback(false).catch(() => {});
+    };
+    p.timer = setTimeout(check, proactiveHideMs(m.text));
+  }
+  /** 用户理会了（点了、打字了、发消息了） */
+  const engage = () => {
+    lastActivity.current = Date.now();
+    const p = proactive.current;
+    if (!p) return;
+    if (p.timer) clearTimeout(p.timer);
+    proactive.current = null;
+    api.feedback(true).catch(() => {});
+  };
+
   const update = (id: number, patch: Partial<UiMessage>) =>
     setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
 
@@ -154,7 +204,11 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
         w.push(e.text);
       } else if (e.type === 'done') {
         if (e.finish === 'cancelled') w.flush();
-        w.end(() => finishWith({ text: e.text || w.text(), status: e.finish === 'cancelled' ? 'stopped' : 'done' }));
+        const actions = e.actions?.length ? e.actions : undefined;
+        w.end(() =>
+          finishWith({ text: e.text || w.text(), status: e.finish === 'cancelled' ? 'stopped' : 'done', actions }),
+        );
+        // 只有允许委托外部 agent 时后端才会带上任务（DECISIONS #33）
         if (e.task && taskApi) openTask(e.task);
       } else {
         w.flush();
@@ -172,6 +226,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   };
 
   const send = (text: string) => {
+    engage();
     setMessages((ms) => [...ms, { id: nextId(), role: 'user', text, status: 'done', at: nowSecs() }]);
     startStream((rid, onEvent) => api.send(text, rid, onEvent));
   };
@@ -191,9 +246,26 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   };
 
   const openTask = (goal: string) => {
+    if (!TaskCard) {
+      import('./TaskCard')
+        .then((m) => setTaskCard(() => m.TaskCard))
+        .catch(() => {});
+    }
     setTaskGoal(goal);
     setMode('expanded');
   };
+
+  // 气泡里的「打开 / 读取」按钮（处理函数放在 ref 里，消息组件的属性保持不变，不用跟着重新渲染）
+  const actionRef = useRef<(a: ActionView) => Promise<string>>(async () => '');
+  actionRef.current = async (a: ActionView) => {
+    engage();
+    if (a.kind === 'read') {
+      startStream((rid, onEvent) => api.read(a.target, rid, onEvent));
+      return '';
+    }
+    return api.open(a.target);
+  };
+  const onAction = useCallback((a: ActionView) => actionRef.current(a), []);
 
   const setMode = (m: ChatMode) => {
     setModeState(m);
@@ -217,6 +289,14 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
       ref={panelRef}
       class={`panel mode-${mode} tail-${place.side === 'left' ? 'right' : 'left'} anchor-${place.top ? 'top' : 'bottom'}`}
       style={accent ? ({ '--accent': accent } as Record<string, string>) : undefined}
+      onPointerEnter={() => {
+        if (proactive.current) proactive.current.hovering = true;
+      }}
+      onPointerLeave={() => {
+        if (proactive.current) proactive.current.hovering = false;
+      }}
+      onPointerDown={engage}
+      onKeyDown={engage}
     >
       <header class="panel-header">
         <span class="name">{name}</span>
@@ -228,11 +308,6 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
           ) : (
             <button type="button" class="icon-btn" title="收起为气泡" aria-label="收起" onClick={() => setMode('compact')}>
               ⤡
-            </button>
-          )}
-          {taskApi && (
-            <button type="button" class="icon-btn" title="交给执行工具做一件事" aria-label="新任务" onClick={() => openTask('')}>
-              🛠
             </button>
           )}
           <button type="button" class="icon-btn" title="设置" aria-label="设置" onClick={() => api.openSettings().catch(() => {})}>
@@ -282,6 +357,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
                 isLast={m === lastAssistant && m === lastMsg}
                 generating={generating}
                 onRegenerate={m === lastMsg ? regenerate : undefined}
+                onAction={onAction}
               />
             </Fragment>
           ))}
@@ -294,6 +370,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
               isLast={bubbleMsg === lastMsg}
               generating={generating}
               onRegenerate={regenerate}
+              onAction={onAction}
             />
           ) : (
             <div class="msg msg-assistant">
@@ -303,7 +380,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
         </div>
       )}
 
-      {taskApi && taskGoal !== null && (
+      {taskApi && TaskCard && taskGoal !== null && (
         <TaskCard
           api={taskApi}
           initialGoal={taskGoal}
@@ -322,9 +399,11 @@ interface MessageProps {
   generating: boolean;
   /** 只有最后一条需要（其余消息的属性不变，打字机每次刷新时就不用重新渲染它们） */
   onRegenerate?: () => void;
+  /** 点了动作按钮（打开返回说明文字；读取返回空串） */
+  onAction?: (a: ActionView) => Promise<string>;
 }
 
-const Message = memo(function Message({ msg, isLast, generating, onRegenerate }: MessageProps) {
+const Message = memo(function Message({ msg, isLast, generating, onRegenerate, onAction }: MessageProps) {
   const [copied, setCopied] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const thinking = msg.status === 'streaming' && msg.text === '';
@@ -348,6 +427,13 @@ const Message = memo(function Message({ msg, isLast, generating, onRegenerate }:
         msg.text && <div class="text">{msg.text}</div>
       )}
       {msg.status === 'stopped' && <div class="note">（已停止）</div>}
+      {msg.actions && onAction && (
+        <div class="actions">
+          {msg.actions.map((a, i) => (
+            <ActionChip key={i} action={a} onAction={onAction} />
+          ))}
+        </div>
+      )}
       {msg.status === 'error' && msg.error && (
         <div class="error-box" role="alert">
           <div class="error-message">{msg.error.message}</div>
@@ -379,3 +465,40 @@ const Message = memo(function Message({ msg, isLast, generating, onRegenerate }:
     </div>
   );
 });
+
+/** 一个动作按钮：说明要打开 / 读取什么，用户点了才做 */
+function ActionChip({ action, onAction }: { action: ActionView; onAction: (a: ActionView) => Promise<string> }) {
+  const [state, setState] = useState<{ done: boolean; text: string } | null>(null);
+  const icon = action.kind === 'read' ? '📄' : '📂';
+  if (action.error) {
+    return (
+      <div class="action action-blocked" role="note">
+        {icon} {action.label}
+        <div class="action-note">{action.error}</div>
+      </div>
+    );
+  }
+  const run = async () => {
+    try {
+      await onAction(action);
+      setState({ done: true, text: action.kind === 'read' ? '正在读…' : '已打开' });
+    } catch (e) {
+      setState({ done: false, text: String(e) });
+    }
+  };
+  return (
+    <div class="action">
+      <span class="action-label">
+        {icon} {action.label}
+      </span>
+      {state?.done ? (
+        <span class="action-note">{state.text}</span>
+      ) : (
+        <button type="button" class="btn btn-small" onClick={run}>
+          {action.kind === 'read' ? '读取' : '打开'}
+        </button>
+      )}
+      {state && !state.done && <div class="action-note action-err">{state.text}</div>}
+    </div>
+  );
+}

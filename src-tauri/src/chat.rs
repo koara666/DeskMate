@@ -1,5 +1,6 @@
 //! 一轮对话的编排：组装提示词 → 调用后端（流式）→ 禁词过滤 → 通知前端 → 记录历史。
 
+use crate::abilities::{self, ActionView};
 use crate::backends::{
     self, BackendConfig, BackendError, ChatBackend, ChatMessage, ChatOutcome, ChatRequest,
     FinishReason, Role,
@@ -7,11 +8,11 @@ use crate::backends::{
 use crate::canon;
 use crate::character::{self, Character};
 use crate::filter::{BannedWords, StreamFilter};
+use crate::markers::{self, MarkerFilter};
 use crate::memory::{self, conversation, forget};
 use crate::prompt::{self, MemorySnippet, PromptBudget, PromptParts};
 use crate::quotes;
 use crate::state::AppState;
-use crate::task_marker::{self, MarkerFilter};
 use crate::usage;
 use serde::Serialize;
 use std::sync::Mutex;
@@ -29,8 +30,10 @@ pub enum ChatEvent {
     Done {
         text: String,
         finish: FinishReason,
-        /// 角色提议交给执行工具的任务（需要用户在卡片上确认）
+        /// 角色提议交给执行工具的任务（需要用户在卡片上确认；只有允许委托外部 agent 时才有）
         task: Option<String>,
+        /// 角色提议的打开 / 读取（气泡里的按钮，用户点了才做）
+        actions: Vec<ActionView>,
     },
     Error {
         kind: String,
@@ -235,17 +238,22 @@ pub async fn complete(
     Ok(out)
 }
 
-fn now_text() -> String {
+pub fn now_text() -> String {
     use chrono::Datelike;
     let now = chrono::Local::now();
     let wd =
         ["一", "二", "三", "四", "五", "六", "日"][now.weekday().num_days_from_monday() as usize];
-    format!(
+    let mut t = format!(
         "{} 星期{} {}",
         now.format("%Y-%m-%d"),
         wd,
         now.format("%H:%M")
-    )
+    );
+    // 笔记本电脑：顺带电量（几个字，聊到时角色能接上）
+    if let Some(b) = abilities::battery_text() {
+        t.push_str(&format!("，{b}"));
+    }
+    t
 }
 
 fn seed() -> u64 {
@@ -424,7 +432,9 @@ pub async fn run_turn_with_notes(
         .map(|c| c.manifest.id.clone())
         .unwrap_or_else(|| "default".into());
     // 禁词和自定义要求 = 全局 + 当前角色专属
-    let prefs = state.settings().effective_prefs(&character_id);
+    let settings = state.settings();
+    let prefs = settings.effective_prefs(&character_id);
+    let advanced = settings.advanced.clone();
     let now = memory::now_secs();
     let turn = prepare_turn(&state, &character_id, &user_text, now, notes);
 
@@ -471,6 +481,7 @@ pub async fn run_turn_with_notes(
             history: &turn.history,
             user_text: &user_text,
             now: &now_text,
+            delegation: advanced.allow_delegation,
         };
         prompt::build(&parts, PromptBudget::default())
     };
@@ -493,7 +504,7 @@ pub async fn run_turn_with_notes(
             let mut talking = false;
             let ch = channel.clone();
             let app2 = app.clone();
-            // 任务提议标记 [[任务：…]] 不显示给用户
+            // 动作标记 [[任务/打开/读取：…]] 不显示给用户
             let mut marker = MarkerFilter::default();
             let r = {
                 let marker = &mut marker;
@@ -532,8 +543,17 @@ pub async fn run_turn_with_notes(
 
     match result {
         Ok(mut out) => {
-            let (visible, task) = task_marker::strip(&out.text);
+            let (visible, found) = markers::strip(&out.text);
             out.text = visible;
+            let task = if advanced.allow_delegation {
+                markers::first_task(&found)
+            } else {
+                None
+            };
+            let actions: Vec<ActionView> = found
+                .iter()
+                .filter_map(|m| abilities::action_view(m, &advanced))
+                .collect();
             if !out.text.is_empty()
                 && let Some(conv) = turn.conversation_id
                 && let Err(e) = conversation::append(
@@ -564,6 +584,7 @@ pub async fn run_turn_with_notes(
                 text: out.text,
                 finish: out.finish,
                 task,
+                actions,
             });
         }
         Err(e) => {

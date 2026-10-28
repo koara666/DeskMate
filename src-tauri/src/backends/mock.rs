@@ -4,6 +4,7 @@
 //! - `/mock error key|balance|rate|network|timeout|server|bad` 模拟错误
 //! - `/mock long` 一段很长的回复（测试滚动）
 //! - `/mock slow` 很慢的回复（测试停止生成）
+//! - `/mock open <路径或网址>`、`/mock read <路径>`、`/mock task <要做的事>`：回复里带上对应的动作标记
 
 use super::*;
 use std::time::Duration;
@@ -150,6 +151,15 @@ pub fn reply_for(req: &ChatRequest) -> Result<(String, Duration), BackendError> 
                 }
                 return Ok((s, Duration::ZERO));
             }
+            (Some(tag @ ("open" | "read" | "task")), Some(_)) => {
+                let arg = cmd[tag.len()..].trim();
+                let name = match tag {
+                    "open" => "打开",
+                    "read" => "读取",
+                    _ => "任务",
+                };
+                return Ok((format!("好呀～\n[[{name}：{arg}]]"), Duration::ZERO));
+            }
             (Some("slow"), _) => {
                 return Ok((
                     "我会慢慢地说……一个字一个字地说……你可以随时点「停止」打断我。这句话会说很久很久很久很久很久。".into(),
@@ -236,6 +246,15 @@ fn outcome(text: String, input_tokens: usize, finish: FinishReason) -> ChatOutco
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mock_can_emit_action_markers() {
+        let (t, _) = reply_for(&req("/mock open https://example.com/a b")).unwrap();
+        assert!(t.ends_with("[[打开：https://example.com/a b]]"));
+        let (t, _) = reply_for(&req("/mock task 统计字数")).unwrap();
+        let (_, m) = crate::markers::strip(&t);
+        assert_eq!(crate::markers::first_task(&m).as_deref(), Some("统计字数"));
+    }
 
     fn req(text: &str) -> ChatRequest {
         ChatRequest {

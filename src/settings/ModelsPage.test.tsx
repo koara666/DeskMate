@@ -3,48 +3,11 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/preact
 import { ModelsPage } from './ModelsPage';
 import type { SettingsApi } from '../lib/ipc';
 import type { SettingsView } from '../lib/types';
+import { testView } from './fixtures';
 
 afterEach(cleanup);
 
-const view: SettingsView = {
-  general: { always_on_top: true, pet_scale: 1, idle_animation: true, dnd: false, gpu_acceleration: false },
-  backends: [
-    {
-      config: {
-        id: 'deepseek',
-        kind: 'deepseek',
-        name: 'DeepSeek',
-        base_url: 'https://api.deepseek.com',
-        model: 'deepseek-flash',
-        reasoning: 'disabled',
-        price: { input: 0.3, cached_input: 0.006, cache_write: 0.3, output: 1.2 },
-      },
-      kind_name: 'DeepSeek',
-      needs_key: true,
-      key_url: 'https://platform.deepseek.com/api_keys',
-      note: '',
-      key_mask: null,
-      removable: false,
-    },
-  ],
-  kinds: [{ kind: 'deepseek', display_name: 'DeepSeek' }],
-  chat_backend: 'deepseek',
-  background_backend: '',
-  budget: { daily_usd: 1, monthly_usd: 10 },
-  data_dir: 'C:\\data',
-  version: '0.1.0',
-  initial_tab: null,
-  daily: {
-    autostart: false,
-    hotkey_enabled: true,
-    hotkey: 'Alt+Shift+D',
-    hide_in_fullscreen: true,
-    sleep_minutes: 10,
-    proactive: false,
-    proactive_minutes: 90,
-    proactive_daily_max: 3,
-  },
-};
+const view: SettingsView = testView();
 
 function fakeApi() {
   return {

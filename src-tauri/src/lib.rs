@@ -1,5 +1,6 @@
 //! DeskMate 应用入口：装配插件、状态、窗口、托盘和命令。
 
+pub mod abilities;
 pub mod backends;
 pub mod canon;
 pub mod character;
@@ -12,9 +13,12 @@ pub mod desktop;
 pub mod filter;
 pub mod geometry;
 pub mod logging;
+pub mod markers;
 pub mod memory;
 pub mod memory_cmds;
+pub mod notify;
 pub mod paths;
+pub mod proactive;
 pub mod prompt;
 pub mod quotes;
 pub mod redact;
@@ -23,7 +27,6 @@ pub mod settings;
 pub mod settings_cmds;
 pub mod state;
 pub mod task_cmds;
-pub mod task_marker;
 pub mod tasks;
 pub mod usage;
 pub mod worker;
@@ -184,6 +187,11 @@ pub fn run() {
             commands::chat_fit,
             commands::chat_hide,
             commands::open_settings,
+            commands::ability_open,
+            commands::ability_read,
+            commands::proactive_feedback,
+            settings_cmds::companion_save,
+            settings_cmds::advanced_save,
             settings_cmds::settings_get,
             settings_cmds::settings_save_general,
             settings_cmds::backend_save,

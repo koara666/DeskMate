@@ -3,6 +3,9 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
+  AdvancedSettings,
+  CompanionSettings,
+  ProactiveMessage,
   BackendConfig,
   Budget,
   DailySettings,
@@ -41,8 +44,14 @@ export interface ChatApi {
   onPlacement(cb: (p: Placement) => void): Promise<UnlistenFn>;
   onFocusInput(cb: () => void): Promise<UnlistenFn>;
   onCharacterChanged(cb: () => void): Promise<UnlistenFn>;
-  /** 角色主动搭话 */
-  onProactive(cb: (text: string) => void): Promise<UnlistenFn>;
+  /** 角色主动说话（经过调度器） */
+  onProactive(cb: (m: ProactiveMessage) => void): Promise<UnlistenFn>;
+  /** 气泡里点了「打开」 */
+  open(target: string): Promise<string>;
+  /** 气泡里点了「读取」：读完由角色说说内容（流式） */
+  read(path: string, requestId: string, onEvent: (e: ChatEvent) => void): Promise<void>;
+  /** 主动发言的结果：用户理会了 / 无人理会自动收起 */
+  feedback(engaged: boolean): Promise<void>;
 }
 
 function channel(onEvent: (e: ChatEvent) => void): Channel<ChatEvent> {
@@ -65,7 +74,10 @@ export const chatApi: ChatApi = {
   onPlacement: (cb) => listen<Placement>('chat-placement', (e) => cb(e.payload)),
   onFocusInput: (cb) => listen('chat-focus-input', () => cb()),
   onCharacterChanged: (cb) => listen('character-changed', () => cb()),
-  onProactive: (cb) => listen<string>('chat-proactive', (e) => cb(e.payload)),
+  onProactive: (cb) => listen<ProactiveMessage>('chat-proactive', (e) => cb(e.payload)),
+  open: (target) => invoke<string>('ability_open', { target }),
+  read: (path, requestId, onEvent) => invoke('ability_read', { path, requestId, onEvent: channel(onEvent) }),
+  feedback: (engaged) => invoke('proactive_feedback', { engaged }),
 };
 
 export interface PetApi {
@@ -106,6 +118,8 @@ export const settingsApi = {
   test: (id: string) => invoke<TestResult>('backend_test', { id }),
   saveBudget: (budget: Budget) => invoke('budget_save', { budget }),
   saveDaily: (daily: DailySettings) => invoke('daily_save', { daily }),
+  saveCompanion: (companion: CompanionSettings) => invoke('companion_save', { companion }),
+  saveAdvanced: (advanced: AdvancedSettings) => invoke<AdvancedSettings>('advanced_save', { advanced }),
   usage: () => invoke<UsageView>('usage_get'),
   openDataDir: (sub?: string) => invoke('open_data_dir', { sub: sub ?? null }),
   characters: () => invoke<CharactersView>('characters_list'),

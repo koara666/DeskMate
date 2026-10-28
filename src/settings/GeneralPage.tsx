@@ -52,21 +52,7 @@ export function GeneralPage({ api, view, onChanged }: Props) {
           />
           <span>
             勿扰模式
-            <small>开启后角色不会主动打扰你</small>
-          </span>
-        </label>
-        <label class="row">
-          <input
-            type="checkbox"
-            checked={g.gpu_acceleration}
-            onChange={(e) => save({ ...g, gpu_acceleration: (e.currentTarget as HTMLInputElement).checked })}
-          />
-          <span>
-            显卡加速
-            <small>
-              默认关闭，可以少占约 80 MB 内存。只有角色或窗口显示不正常时才需要打开。
-              {g.gpu_acceleration !== view.general.gpu_acceleration && <b>（退出 DeskMate 再打开后生效）</b>}
-            </small>
+            <small>开启后角色不会主动说话（你设的提醒除外）。更细的设置在「陪伴」页</small>
           </span>
         </label>
         <div class="row">
@@ -146,36 +132,6 @@ function DailySection({ api, initial }: { api: SettingsApi; initial: DailySettin
             ))}
           </select>
         </div>
-        <label class="row">
-          <input type="checkbox" checked={d.proactive} onChange={check('proactive')} />
-          <span>
-            主动搭话
-            <small>很久没聊天时角色会主动打个招呼（勿扰、全屏时不会）。默认关闭；使用模型时会产生少量费用</small>
-          </span>
-        </label>
-        {d.proactive && (
-          <div class="row">
-            <label>
-              多久没聊天才搭话（分钟）
-              <input
-                type="number"
-                min={30}
-                value={d.proactive_minutes}
-                onChange={(e) => save({ ...d, proactive_minutes: Number((e.currentTarget as HTMLInputElement).value) || 90 })}
-              />
-            </label>
-            <label>
-              每天最多几次
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={d.proactive_daily_max}
-                onChange={(e) => save({ ...d, proactive_daily_max: Number((e.currentTarget as HTMLInputElement).value) || 3 })}
-              />
-            </label>
-          </div>
-        )}
         <StatusLine status={status} />
       </div>
     </>

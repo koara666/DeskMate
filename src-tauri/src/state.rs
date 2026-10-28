@@ -28,6 +28,8 @@ pub struct AppState {
     pub tasks: crate::task_cmds::TaskState,
     /// 日常体验：互动时间、全屏、睡眠、快捷键
     pub daily: crate::daily::DailyState,
+    /// 主动行为调度器的队列和节奏
+    pub proactive: crate::proactive::ProactiveState,
 }
 
 impl AppState {
@@ -53,6 +55,7 @@ impl AppState {
             notice: Mutex::new(None),
             tasks: Default::default(),
             daily: Default::default(),
+            proactive: Default::default(),
         }
     }
 

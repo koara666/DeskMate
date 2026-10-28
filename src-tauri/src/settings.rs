@@ -100,8 +100,12 @@ pub struct Settings {
     pub memory_paused: bool,
     /// 任务执行（Claude Code / Codex）
     pub tasks: crate::tasks::TaskSettings,
-    /// 开机自启、快捷键、全屏、睡眠、主动搭话
+    /// 开机自启、快捷键、全屏、睡眠、很久没聊天时打招呼
     pub daily: crate::daily::DailySettings,
+    /// 陪伴：主动行为的总控（冷却、频率、安静时段、每日预算）
+    pub companion: crate::proactive::CompanionSettings,
+    /// 高级：委托外部 agent、能力层（允许读取的文件夹、常用程序）
+    pub advanced: crate::abilities::AdvancedSettings,
 }
 
 impl Default for Settings {
@@ -125,6 +129,8 @@ impl Default for Settings {
             memory_paused: false,
             tasks: Default::default(),
             daily: Default::default(),
+            companion: Default::default(),
+            advanced: Default::default(),
         }
     }
 }
@@ -139,6 +145,8 @@ impl Settings {
         self.budget = self.budget.sanitize();
         self.tasks = std::mem::take(&mut self.tasks).sanitize();
         self.daily = std::mem::take(&mut self.daily).sanitize();
+        self.companion = std::mem::take(&mut self.companion).sanitize();
+        self.advanced = std::mem::take(&mut self.advanced).sanitize();
         self.global_prefs = std::mem::take(&mut self.global_prefs).sanitize();
         self.character_prefs = std::mem::take(&mut self.character_prefs)
             .into_iter()

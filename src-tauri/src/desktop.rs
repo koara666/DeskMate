@@ -412,13 +412,16 @@ pub fn set_always_on_top(app: &AppHandle, on: bool) -> tauri::Result<()> {
 }
 
 /// 设置窗口允许直接打开的页面
-pub const SETTINGS_TABS: [&str; 7] = [
+pub const SETTINGS_TABS: [&str; 9] = [
     "general",
+    "companion",
     "characters",
     "memory",
     "models",
-    "tasks",
     "usage",
+    "advanced",
+    // 旧名字：v1 的「任务执行」页，现在在「高级」里
+    "tasks",
     "about",
 ];
 

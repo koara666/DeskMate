@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/preact';
 import { ChatApp } from './ChatApp';
 import type { ChatApi } from '../lib/ipc';
-import type { ChatEvent, HistoryMessage } from '../lib/types';
+import type { ChatEvent, HistoryMessage, ProactiveMessage } from '../lib/types';
 
 function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMessage[] = []) {
   const calls = {
@@ -11,8 +11,12 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMess
     regenerate: [] as string[],
     fit: [] as number[],
     hide: 0,
+    open: [] as string[],
+    read: [] as string[],
+    feedback: [] as boolean[],
   };
   let handler: ((e: ChatEvent) => void) | null = null;
+  let proactive: ((m: ProactiveMessage) => void) | null = null;
   const off = async () => () => {};
   const api: ChatApi = {
     init: async () => ({
@@ -46,10 +50,26 @@ function fakeApi(mode: 'compact' | 'expanded' = 'expanded', history: HistoryMess
     onPlacement: off,
     onFocusInput: off,
     onCharacterChanged: off,
-    onProactive: off,
+    onProactive: async (cb) => {
+      proactive = cb;
+      return () => {};
+    },
+    open: async (target) => {
+      calls.open.push(target);
+      return '已打开';
+    },
+    read: async (path, rid, onEvent) => {
+      calls.read.push(path);
+      calls.send.push({ text: '(read)', rid });
+      handler = onEvent;
+    },
+    feedback: async (engaged) => {
+      calls.feedback.push(engaged);
+    },
   };
   const emit = (e: ChatEvent) => act(() => handler!(e));
-  return { api, calls, emit };
+  const say = (m: ProactiveMessage) => act(() => proactive!(m));
+  return { api, calls, emit, say };
 }
 
 async function mount() {
@@ -233,5 +253,98 @@ describe('ChatApp 键盘', () => {
     expect(f.calls.hide).toBe(0);
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(f.calls.hide).toBe(1);
+  });
+});
+
+describe('ChatApp 动作按钮（内置能力层）', () => {
+  it('角色提议打开：用户点了按钮才打开；不能打开的只显示原因', async () => {
+    const f = await mount();
+    await sendText('帮我打开B站');
+    f.emit({
+      type: 'done',
+      text: '好～',
+      finish: 'stop',
+      actions: [
+        { kind: 'open', target: 'https://www.bilibili.com', label: '打开网页 https://www.bilibili.com', error: null },
+        { kind: 'open', target: 'C:/x.exe', label: '打开 C:/x.exe', error: '程序不能直接打开' },
+      ],
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(f.calls.open).toHaveLength(0);
+    expect(screen.getByText('程序不能直接打开')).toBeTruthy();
+    const buttons = screen.getAllByRole('button', { name: '打开' });
+    expect(buttons).toHaveLength(1);
+    await act(async () => {
+      fireEvent.click(buttons[0]);
+    });
+    await act(async () => {});
+    expect(f.calls.open).toEqual(['https://www.bilibili.com']);
+    expect(screen.getByText('已打开')).toBeTruthy();
+  });
+
+  it('点「读取」后由角色说说文件内容（新的一轮流式回复）', async () => {
+    const f = await mount();
+    await sendText('看看这个文件');
+    f.emit({
+      type: 'done',
+      text: '好',
+      finish: 'stop',
+      actions: [{ kind: 'read', target: 'D:/笔记/a.txt', label: '读取文件 D:/笔记/a.txt', error: null }],
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '读取' }));
+    });
+    expect(f.calls.read).toEqual(['D:/笔记/a.txt']);
+    expect(screen.getByLabelText('思考中')).toBeTruthy();
+  });
+});
+
+describe('ChatApp 主动发言', () => {
+  it('无人理会一段时间后自动收起，并告诉调度器被忽略了', async () => {
+    const f = await mount();
+    f.say({ id: 1, kind: 'random', text: '在忙吗？', popped: true });
+    expect(assistantText()).toContain('在忙吗？');
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(f.calls.hide).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(f.calls.hide).toBe(1);
+    expect(f.calls.feedback).toEqual([false]);
+  });
+
+  it('鼠标停在气泡上时不收起；点一下算理会了', async () => {
+    const f = await mount();
+    f.say({ id: 2, kind: 'care', text: '休息一下吧', popped: true });
+    const panel = document.querySelector('.panel')!;
+    fireEvent.pointerEnter(panel);
+    act(() => {
+      vi.advanceTimersByTime(200_000);
+    });
+    expect(f.calls.hide).toBe(0);
+    fireEvent.pointerDown(panel);
+    expect(f.calls.feedback).toEqual([true]);
+    fireEvent.pointerLeave(panel);
+    act(() => {
+      vi.advanceTimersByTime(200_000);
+    });
+    expect(f.calls.hide).toBe(0);
+  });
+
+  it('全屏时改发系统通知的（没弹气泡）不计时', async () => {
+    const f = await mount();
+    f.say({ id: 3, kind: 'reminder', text: '收衣服', popped: false });
+    act(() => {
+      vi.advanceTimersByTime(200_000);
+    });
+    expect(f.calls.hide).toBe(0);
+    expect(f.calls.feedback).toEqual([]);
   });
 });

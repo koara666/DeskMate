@@ -73,7 +73,11 @@ src-tauri/src/
   worker.rs                    后台维护：每 5 分钟——每日备份、整理已结束会话的记忆
   tasks/                       任务执行：mod.rs（查找 CLI、运行进程、超时结束进程树、日志、备份）、
                                sandbox.rs（工作目录检查）、claude.rs / codex.rs（参数与输出解析）
-  task_cmds.rs task_marker.rs  任务流程编排与命令；聊天回复里 [[任务：…]] 标记的识别与隐藏
+  task_cmds.rs                 任务流程编排与命令（委托外部 agent，v2 起默认关闭）
+  markers.rs                   聊天回复里 [[任务/打开/读取：…]] 动作标记的识别与隐藏（流式）
+  abilities.rs                 内置能力层：打开网址/文件夹/文件/登记的程序、在允许的文件夹里读文本、电量；「高级」设置
+  proactive.rs                 主动行为调度器（优先级、冷却、勿扰/全屏/安静时段、被忽略降频、每日预算）；「陪伴」设置
+  notify.rs                    系统通知（全屏时到了的提醒）
   daily.rs                     日常体验：开机自启、全局快捷键、全屏检测、睡眠、主动搭话（低频循环）
   character_cmds.rs memory_cmds.rs  设置窗口「角色」「记忆」页的命令
   logging.rs redact.rs         轮换日志、密钥脱敏
@@ -145,10 +149,15 @@ scripts/                       check.mjs（提交前检查）、dev-app.mjs、en
                                聊天窗口气泡（不抢焦点地弹出，可带按钮）
 ```
 
-计划中的模块（实现后把「计划」改成实际文件）：
-- `proactive.rs`：调度器（纯函数判断 + 弹气泡），主动说话的唯一出口。
+已实现：
+- `proactive.rs`：调度器。`decide` 是纯函数（种类、设置、状况、节奏、时间 → 说 / 发通知 / 等 / 不说）；各功能 `submit` 带过期时间的发言，
+  `daily.rs` 的 3 秒循环调用 `tick`；说出去的话记进聊天记录，事件 `chat-proactive {id, kind, text, popped}` 发给聊天窗口。
+  聊天窗口里主动弹出的气泡无人理会会自动收起并调用 `proactive_feedback(false)`；用户理会了调用 `proactive_feedback(true)`。
+- `abilities.rs` + `markers.rs`：回复里的 `[[打开/读取：…]]` → `ChatEvent::Done.actions`（后端预检查的按钮）→ 用户点击 →
+  `ability_open` / `ability_read`（后端再检查一次）。读取后用 `run_turn_with_notes` 让角色说说内容（文件内容是不可信资料）。
+
+计划中的模块（实现后移到上面）：
 - `lines.rs`：台词池解析与挑选（条件、占位符、避免重复）。
-- `abilities.rs`：内置能力层（打开文件夹 / 文件 / 网址，指定文件夹内读文本，系统信息）。
 - `reminders.rs`：提醒的解析、存储、定时触发、补提醒。
 - `briefing/`：每日播报（天气、节假日、吃饭、RSS、特殊日期）。
 - `activity/`：前台窗口事件、分类规则、隐私名单、活动日志、关怀。

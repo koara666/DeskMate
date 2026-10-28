@@ -8,19 +8,27 @@ import { UsagePage } from './UsagePage';
 import { AboutPage } from './AboutPage';
 import { CharactersPage } from './CharactersPage';
 import { MemoryPage } from './MemoryPage';
-import { TasksPage } from './TasksPage';
+import { CompanionPage } from './CompanionPage';
+import { AdvancedPage } from './AdvancedPage';
 
-type Tab = 'general' | 'characters' | 'memory' | 'models' | 'tasks' | 'usage' | 'about';
+type Tab = 'general' | 'companion' | 'characters' | 'memory' | 'models' | 'usage' | 'advanced' | 'about';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: '常规' },
+  { id: 'companion', label: '陪伴' },
   { id: 'characters', label: '角色' },
   { id: 'memory', label: '记忆' },
   { id: 'models', label: '模型' },
-  { id: 'tasks', label: '任务执行' },
   { id: 'usage', label: '用量与花费' },
+  { id: 'advanced', label: '高级' },
   { id: 'about', label: '关于与隐私' },
 ];
+
+/** 旧的页面名（比如启动参数 --settings=tasks）→ 现在的页面 */
+function toTab(t: string | null | undefined): Tab | null {
+  if (t === 'tasks') return 'advanced';
+  return TABS.some((x) => x.id === t) ? (t as Tab) : null;
+}
 
 export function SettingsApp({ api }: { api: SettingsApi }) {
   const [tab, setTab] = useState<Tab>('models');
@@ -31,7 +39,8 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
     try {
       const v = await api.get();
       setView(v);
-      if (v.initial_tab && TABS.some((t) => t.id === v.initial_tab)) setTab(v.initial_tab as Tab);
+      const initial = toTab(v.initial_tab);
+      if (initial) setTab(initial);
       setError('');
     } catch (e) {
       setError(String(e));
@@ -41,7 +50,8 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
   useEffect(() => {
     reload();
     const off = api.onOpenTab((t) => {
-      if (TABS.some((x) => x.id === t)) setTab(t as Tab);
+      const next = toTab(t);
+      if (next) setTab(next);
     });
     return () => {
       off.then((f) => f()).catch(() => {});
@@ -70,14 +80,16 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
           <div class="muted">加载中…</div>
         ) : tab === 'general' ? (
           <GeneralPage api={api} view={view} onChanged={reload} />
+        ) : tab === 'companion' ? (
+          <CompanionPage api={api} view={view} />
         ) : tab === 'characters' ? (
           <CharactersPage api={api} />
         ) : tab === 'memory' ? (
           <MemoryPage api={api} />
         ) : tab === 'models' ? (
           <ModelsPage api={api} view={view} onChanged={reload} />
-        ) : tab === 'tasks' ? (
-          <TasksPage />
+        ) : tab === 'advanced' ? (
+          <AdvancedPage api={api} view={view} onChanged={reload} />
         ) : tab === 'usage' ? (
           <UsagePage api={api} />
         ) : (

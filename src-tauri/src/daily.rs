@@ -5,14 +5,14 @@
 
 use crate::chat::{self, PetState};
 use crate::desktop;
-use crate::memory::{self, conversation};
+use crate::memory;
 use crate::state::AppState;
 use crate::usage;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio_util::sync::CancellationToken;
 
@@ -112,6 +112,7 @@ impl DailyState {
 pub fn interact(app: &AppHandle) {
     let st = app.state::<AppState>();
     st.daily.touch();
+    st.proactive.engaged();
     if st.daily.sleeping.swap(false, Ordering::Relaxed) {
         chat::emit_pet_state(app, PetState::Idle);
     }
@@ -261,6 +262,8 @@ pub fn spawn(app: AppHandle) {
             tokio::time::sleep(Duration::from_secs(3)).await;
             tick += 1;
             check_fullscreen(&app);
+            // 主动行为：队列里有待说的话才做事（队列空时只是加一次锁）
+            crate::proactive::tick(&app);
             // 睡着时每 3 秒看一次用户回来没有（只是一次系统调用），醒得及时；平时 30 秒查一次
             if tick % 10 == 0 || app.state::<AppState>().daily.is_sleeping() {
                 check_sleep(&app);
@@ -417,19 +420,11 @@ async fn check_proactive(app: &AppHandle) {
     if text.trim().is_empty() {
         return;
     }
-    // 记进当前会话，后面聊天能接上
-    if let Some(c) = st.current_character() {
-        let db = st.db();
-        if let Ok(conv) =
-            conversation::current_or_new(&db, &c.manifest.id, now, settings.memory_paused)
-        {
-            let _ = conversation::append(&db, conv, crate::backends::Role::Assistant, &text, now);
-        }
-    }
-    log::info!("主动搭话（今天第 {} 次）", count + 1);
-    let _ = app.emit_to("chat", "chat-proactive", text);
-    chat::emit_pet_state(app, PetState::Happy);
-    pop_chat(app);
+    log::info!("很久没聊天，排队打个招呼（今天第 {} 次）", count + 1);
+    // 交给调度器：冷却、安静时段、被忽略降频都在那里统一处理
+    let mut item = crate::proactive::Item::new(crate::proactive::Kind::Random, text, now + 120);
+    item.key = "greeting".into();
+    crate::proactive::submit(app, item);
 }
 
 /// 主动搭话的内容：有可用模型时让角色说一句（很短、很便宜）；否则用角色的固定开场白
@@ -449,6 +444,13 @@ async fn greeting_text(st: &AppState) -> String {
     let s = st.settings();
     if s.chat_backend == "mock" {
         return fallback;
+    }
+    // 主动行为有自己的每日预算（次数、花费），用完就只用固定台词
+    {
+        let (day, month) = usage::today();
+        if !crate::proactive::model_allowed(&st.db(), &s.companion, &s.budget, &day, &month) {
+            return fallback;
+        }
     }
     let prefs = s.effective_prefs(&c.manifest.id);
     let turn = chat::prepare_turn(st, &c.manifest.id, "（很久没聊天了）", memory::now_secs(), vec![
@@ -470,6 +472,7 @@ async fn greeting_text(st: &AppState) -> String {
         history: &[],
         user_text: "（很久没聊天了）",
         now: &now_text,
+        delegation: false,
     };
     let budget = crate::prompt::PromptBudget {
         max_output_tokens: 120,
@@ -482,7 +485,7 @@ async fn greeting_text(st: &AppState) -> String {
             st,
             &s.chat_backend,
             req,
-            usage::purpose::CHAT,
+            usage::purpose::PROACTIVE,
             CancellationToken::new(),
         ),
     )
@@ -490,7 +493,7 @@ async fn greeting_text(st: &AppState) -> String {
     {
         Ok(Ok(out)) => {
             let banned = crate::filter::BannedWords::new(&prefs.banned_words);
-            let (text, _) = crate::task_marker::strip(&banned.apply(&out.text));
+            let (text, _) = crate::markers::strip(&banned.apply(&out.text));
             if text.trim().is_empty() {
                 fallback
             } else {

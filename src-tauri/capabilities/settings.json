@@ -37,6 +37,8 @@
     "allow-task-settings-save",
     "allow-task-list",
     "allow-task-open-log",
-    "allow-daily-save"
+    "allow-daily-save",
+    "allow-companion-save",
+    "allow-advanced-save"
   ]
 }
