@@ -1,5 +1,5 @@
 # E2E helper: list or close the top-level windows of one process (no mouse/keyboard simulation).
-# Usage: powershell -File scripts/e2e/window.ps1 -ProcessId 1234 [-Close pet|chat|settings]
+# Usage: powershell -File scripts/e2e/window.ps1 -ProcessId 1234 [-Close pet|chat|settings|menu]
 # Output (list): one line per window: <which>|<visible 0/1>
 # Keep this file ASCII-only: Windows PowerShell 5.1 misreads UTF-8 without BOM.
 param([int]$ProcessId, [string]$Close = "")
@@ -23,10 +23,12 @@ public class E2EWin {
 "@
 $chatTitle = "DeskMate " + [char]0x804A + [char]0x5929
 $settingsTitle = "DeskMate " + [char]0x8BBE + [char]0x7F6E
+$menuTitle = "DeskMate " + [char]0x83DC + [char]0x5355
 function Which($t) {
   if ($t -eq "DeskMate") { return "pet" }
   if ($t -eq $chatTitle) { return "chat" }
   if ($t -eq $settingsTitle) { return "settings" }
+  if ($t -eq $menuTitle) { return "menu" }
   return ""
 }
 foreach ($kv in [E2EWin]::List([uint32]$ProcessId)) {

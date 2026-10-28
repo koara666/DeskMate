@@ -238,6 +238,7 @@ async function main() {
       ['陪伴', '陪伴'],
       ['提醒', '提醒'],
       ['活动感知', '活动感知'],
+      ['声音', '声音'],
       ['角色', '角色'],
       ['日记', '日记'],
       ['记忆', '记忆'],
@@ -512,6 +513,27 @@ async function main() {
       await chat.click('先不做了');
       await chat.waitFor(`!document.querySelector('.task-card')`, '任务卡片关闭');
     });
+    await test('聊天里说「来一局井字棋」：她回一句，直接打开井字棋', async () => {
+      await chat.input('textarea[aria-label="输入消息"]', '来一局井字棋');
+      await chat.key('textarea[aria-label="输入消息"]', { key: 'Enter' });
+      await chat.waitFor(`!!document.querySelector('.ttt-board')`, '井字棋打开', 10000);
+      await chat.shot('chat-intent-ttt.png');
+      await chat.click('回到聊天');
+      await chat.waitFor(`!!document.querySelector('textarea[aria-label="输入消息"]')`, '回到聊天');
+    });
+    await test('方块对战：打开、选模式、开始，两块棋盘在动、没有报错，再关掉', async () => {
+      await chat.input('textarea[aria-label="输入消息"]', '玩方块对战');
+      await chat.key('textarea[aria-label="输入消息"]', { key: 'Enter' });
+      await chat.waitFor(`document.body.innerText.includes('PRESS START')`, '方块对战菜单', 10000);
+      await chat.click('PRESS START');
+      await chat.waitFor(`!!document.querySelector('canvas[aria-label="你的棋盘"]')`, '棋盘出现', 5000);
+      await sleep(4500);
+      const t = await chat.eval(`document.querySelector('.blocks-time').innerText`);
+      await chat.shot('chat-game-blocks.png');
+      if (!/^\d:\d\d$/.test(t)) throw new Error(`计时显示不对：${t}`);
+      await chat.click('回到聊天');
+      await chat.waitFor(`!!document.querySelector('textarea[aria-label="输入消息"]')`, '回到聊天');
+    });
     await test('点 ✕ 关闭聊天窗口', async () => {
       await chat.click('[aria-label="关闭"]');
       await waitVisible(pid, 'chat', false);
@@ -528,6 +550,65 @@ async function main() {
       await waitVisible(pid, 'chat', true);
       await pet.eval(clickPet);
       await waitVisible(pid, 'chat', false);
+    });
+
+    console.log('\n鼠标交互与气泡菜单');
+    const petAt = (button, y) =>
+      pet.eval(`(() => { const el = document.querySelector('[data-testid=pet]'); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: ${button}, screenX: 10, screenY: 10, clientX: 80, clientY: ${y} })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: ${button}, screenX: 10, screenY: 10, clientX: 80, clientY: ${y} })); })()`);
+    await test('点头顶是摸头：只弹「她说的话」气泡（没有输入框），点一下变成聊天框', async () => {
+      await waitVisible(pid, 'chat', false);
+      await petAt(0, 15);
+      await chat.waitFor(`!!document.querySelector('.panel.speech')`, '她说的话气泡', 6000);
+      if (await chat.eval(`!!document.querySelector('textarea[aria-label="输入消息"]')`)) throw new Error('摸头不该弹出输入框');
+      await chat.shot('chat-speech.png');
+      await chat.click('[data-testid=speech]');
+      await chat.waitFor(`!!document.querySelector('textarea[aria-label="输入消息"]')`, '变成聊天框');
+      await chat.click('[aria-label="关闭"]');
+      await waitVisible(pid, 'chat', false);
+    });
+    await test('右键：头顶浮出气泡菜单，点「一起玩」打开游戏列表', async () => {
+      await petAt(2, 150);
+      const tm = await waitTarget('menu.html', 8000);
+      if (!tm) throw new Error('气泡菜单页面没有出现');
+      const menu = await Page.open('menu', tm.webSocketDebuggerUrl);
+      try {
+        await menu.waitFor(`document.querySelectorAll('.bubble').length >= 7`, '气泡', 5000);
+        await waitVisible(pid, 'menu', true);
+        await menu.shot('menu.png');
+        await menu.click('[data-id=games]');
+        await waitVisible(pid, 'menu', false);
+        await chat.waitFor(`!!document.querySelector('.game-list')`, '游戏列表', 8000);
+        await chat.click('回到聊天');
+        await chat.click('[aria-label="关闭"]');
+        if (menu.errors.length) throw new Error(`菜单页面报错：${menu.errors.join(' | ')}`);
+      } finally {
+        menu.close();
+      }
+    });
+    await test('声音：选 Windows 自带的语音后出现试听；桌宠页面能拿到系统声音列表（不出声）', async () => {
+      await settings.click('声音');
+      await settings.waitFor(`document.querySelector('main h1')?.innerText === '声音'`, '声音页');
+      await settings.eval(`[...document.querySelectorAll('label.engine-choice')].find(l => l.innerText.includes('Windows')).querySelector('input').click()`);
+      await settings.waitText('试听一句');
+      await settings.shot('settings-声音.png');
+      const n = await pet.eval(`typeof speechSynthesis === 'undefined' ? -1 : speechSynthesis.getVoices().length`);
+      console.log(`    （桌宠页面的系统声音：${n} 个）`);
+      if (n < 0) throw new Error('WebView2 里没有 speechSynthesis');
+    });
+    await test('换成七海千秋：桌宠和聊天窗口换上掌机风皮肤', async () => {
+      await settings.click('角色');
+      await settings.waitFor(`document.body.innerText.includes('七海千秋')`, '角色列表');
+      await settings.eval(`(() => { const c = [...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('七海千秋')); const b = c && [...c.querySelectorAll('button')].find(b => b.innerText.trim() === '切换'); if (b) b.click(); })()`);
+      await pet.waitFor(`document.documentElement.dataset.skin === 'arcade'`, '桌宠皮肤', 6000);
+      await chat.waitFor(`document.documentElement.dataset.skin === 'arcade'`, '聊天皮肤', 6000);
+      await petAt(0, 15);
+      await chat.waitFor(`!!document.querySelector('.panel.speech')`, '她说的话气泡', 6000);
+      await sleep(300);
+      await chat.shot('chat-speech-arcade.png');
+      await chat.click('[data-testid=speech]');
+      await chat.waitFor(`!!document.querySelector('textarea[aria-label="输入消息"]')`, '变成聊天框');
+      await chat.shot('chat-arcade.png');
+      await chat.click('[aria-label="关闭"]');
     });
 
     console.log('\n窗口关闭');
