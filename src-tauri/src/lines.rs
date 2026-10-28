@@ -103,6 +103,7 @@ pub const SCENES: &[(&str, &[&str])] = &[
     ("menu.secret", &["称呼"]),
     ("menu.voice_on", &["称呼"]),
     ("menu.voice_off", &["称呼"]),
+    ("voice.test", &["称呼"]),
 ];
 
 /// 小游戏的场景：`game.<事件>`（通用）或 `game.<游戏>.<事件>`；抽签的解读是 `game.fortune.<签的等级>`

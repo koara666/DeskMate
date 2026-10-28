@@ -9,7 +9,7 @@ use crate::state::AppState;
 use crate::usage::{self, Budget};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio_util::sync::CancellationToken;
 
 type CmdResult<T> = Result<T, String>;
@@ -63,6 +63,9 @@ pub struct SettingsView {
     pub care: crate::care::CareSettings,
     pub vision: crate::vision::VisionSettings,
     pub update: crate::update::UpdateSettings,
+    pub voice: crate::voice::VoiceSettings,
+    /// 语音服务 Key 的末尾 4 位（没填是 None）：（Fish Audio，OpenAI 兼容）
+    pub voice_keys: (Option<String>, Option<String>),
 }
 
 fn is_builtin_id(id: &str) -> bool {
@@ -129,6 +132,11 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         care: s.care.clone(),
         vision: s.vision.clone(),
         update: s.update.clone(),
+        voice: s.voice.clone(),
+        voice_keys: (
+            voice_key_hint(&state, crate::voice::FISH_KEY_ID),
+            voice_key_hint(&state, crate::voice::OPENAI_KEY_ID),
+        ),
     }
 }
 
@@ -647,6 +655,67 @@ pub fn update_save(
         .update;
     desktop::broadcast_settings_changed(&app);
     Ok(saved)
+}
+
+fn voice_key_hint(state: &AppState, id: &str) -> Option<String> {
+    state
+        .secrets
+        .get(id)
+        .ok()
+        .flatten()
+        .filter(|k| !k.is_empty())
+        .map(|k| mask_key(&k))
+}
+
+/// 声音设置
+#[tauri::command]
+pub fn voice_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    voice: crate::voice::VoiceSettings,
+) -> CmdResult<crate::voice::VoiceSettings> {
+    let saved = state.update_settings(|s| s.voice = voice.sanitize()).voice;
+    if !saved.enabled {
+        let _ = app.emit_to("pet", "voice-stop", ());
+    }
+    desktop::broadcast_settings_changed(&app);
+    Ok(saved)
+}
+
+/// 语音服务的 Key（只存系统凭据管理器，返回末尾 4 位）
+#[tauri::command]
+pub fn voice_set_key(state: State<'_, AppState>, which: String, key: String) -> CmdResult<String> {
+    let id = match which.as_str() {
+        "fish" => crate::voice::FISH_KEY_ID,
+        "openai" => crate::voice::OPENAI_KEY_ID,
+        _ => return Err("不认识的语音服务".into()),
+    };
+    let key = normalize_key(&key)?;
+    state.secrets.set(id, &key)?;
+    log::info!("已保存语音服务 {which} 的 Key");
+    Ok(mask_key(&key))
+}
+
+#[tauri::command]
+pub fn voice_clear_key(state: State<'_, AppState>, which: String) -> CmdResult<()> {
+    let id = match which.as_str() {
+        "fish" => crate::voice::FISH_KEY_ID,
+        "openai" => crate::voice::OPENAI_KEY_ID,
+        _ => return Err("不认识的语音服务".into()),
+    };
+    state.secrets.delete(id)
+}
+
+/// 试听
+#[tauri::command]
+pub async fn voice_test(app: AppHandle) -> CmdResult<()> {
+    crate::voice::test(&app).await
+}
+
+/// 清空语音缓存，返回清掉多少字节
+#[tauri::command]
+pub fn voice_clear_cache(state: State<'_, AppState>) -> u64 {
+    crate::voice::clear_cache(&state)
 }
 
 #[tauri::command]

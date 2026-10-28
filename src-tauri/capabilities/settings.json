@@ -61,6 +61,11 @@
     "allow-vision-records",
     "allow-update-check",
     "allow-update-save",
-    "allow-update-install"
+    "allow-update-install",
+    "allow-voice-save",
+    "allow-voice-set-key",
+    "allow-voice-clear-key",
+    "allow-voice-test",
+    "allow-voice-clear-cache"
   ]
 }

@@ -102,6 +102,7 @@ pub async fn handle(
         }
     }
     chat::emit_pet_state(app, PetState::Happy);
+    crate::voice::on_line(app, &say, crate::voice::Scene::Chat);
     let _ = channel.send(ChatEvent::Delta { text: say.clone() });
     let _ = channel.send(ChatEvent::Done {
         text: say,

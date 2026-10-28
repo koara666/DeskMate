@@ -264,6 +264,33 @@ export interface SettingsView {
   care: CareSettings;
   vision: VisionSettings;
   update: UpdateSettings;
+  voice: VoiceSettings;
+  /** 语音服务 Key 的末尾 4 位：[Fish Audio, OpenAI 兼容] */
+  voice_keys: [string | null, string | null];
+}
+
+export interface VoiceSettings {
+  enabled: boolean;
+  /** '' = 还没选；system / fish / sovits / openai */
+  engine: string;
+  volume: number;
+  max_chars: number;
+  speed: number;
+  scenes: { reactions: boolean; proactive: boolean; chat: boolean; games: boolean };
+  fullscreen_voice: boolean;
+  daily_chars: number;
+  system_voice: string;
+  system_pitch: number;
+  fish_url: string;
+  fish_model: string;
+  fish_engine: string;
+  sovits_url: string;
+  sovits_ref_audio: string;
+  sovits_ref_text: string;
+  sovits_ref_lang: string;
+  openai_url: string;
+  openai_model: string;
+  openai_voice: string;
 }
 
 export interface UpdateSettings {

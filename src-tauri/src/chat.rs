@@ -630,6 +630,9 @@ pub async fn run_turn_with_notes(
                     PetState::Happy
                 },
             );
+            if out.finish != FinishReason::Cancelled {
+                crate::voice::on_line(&app, &out.text, crate::voice::Scene::Chat);
+            }
             let _ = channel.send(ChatEvent::Done {
                 text: out.text,
                 finish: out.finish,

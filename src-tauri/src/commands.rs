@@ -418,8 +418,12 @@ pub async fn game_say(
             }
         );
         if let Some(t) = crate::proactive::model_say(&st, &hint, 80).await {
+            crate::voice::on_line(&app, &t, crate::voice::Scene::Game);
             return Ok(Some(t));
         }
+    }
+    if let Some(t) = &pool {
+        crate::voice::on_line(&app, t, crate::voice::Scene::Game);
     }
     Ok(pool)
 }
@@ -521,4 +525,12 @@ pub async fn update_install(app: AppHandle) -> CmdResult<()> {
 #[tauri::command]
 pub fn update_skip(state: State<'_, AppState>, version: String) {
     crate::update::skip(&state, &version);
+}
+
+// ---------------- 语音（v2.1 P14） ----------------
+
+/// 桌宠窗口取合成好的音频（只读语音缓存文件夹里的文件）
+#[tauri::command]
+pub fn voice_audio(state: State<'_, AppState>, id: String) -> CmdResult<tauri::ipc::Response> {
+    crate::voice::read_cached(&state, &id).map(tauri::ipc::Response::new)
 }

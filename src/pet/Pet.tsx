@@ -4,7 +4,8 @@
 // 待机动画用「低频定时器 + 离散姿势」：每隔 8~20 秒切换 2~4 次姿势（呼吸/眨眼），
 // 每次切换只渲染一帧，其余时间没有任何动画在跑，空闲 CPU 不上涨（见 DECISIONS #7、#12）。
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
-import type { PetApi } from '../lib/ipc';
+import type { PetApi, VoiceApi } from '../lib/ipc';
+import { startVoice } from './voice';
 import type { PetInit, PetState } from '../lib/types';
 import { applyTheme } from '../lib/theme';
 
@@ -24,10 +25,12 @@ type Pose = '' | 'breathe1' | 'breathe2' | 'blink';
 
 interface Props {
   api: PetApi;
+  /** 语音播放（不传 = 不出声，测试用） */
+  voice?: VoiceApi;
   random?: () => number;
 }
 
-export function Pet({ api, random = Math.random }: Props) {
+export function Pet({ api, voice, random = Math.random }: Props) {
   const [init, setInit] = useState<PetInit | null>(null);
   const [state, setState] = useState<PetState>('idle');
   const [pose, setPose] = useState<Pose>('');
@@ -46,6 +49,11 @@ export function Pet({ api, random = Math.random }: Props) {
   });
   /** 摸头时本地马上缩一下（不用等后端） */
   const [patted, setPatted] = useState(0);
+  /** 正在出声（嘴跟着动） */
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => (voice ? startVoice(voice, setSpeaking) : undefined), [voice]);
+  /** 出声时显示成「说话」（睡觉、思考时不变） */
+  const shown: PetState = speaking && state !== 'sleep' && state !== 'thinking' ? 'talking' : state;
 
   const load = useCallback(() => {
     api
@@ -101,8 +109,8 @@ export function Pet({ api, random = Math.random }: Props) {
 
   // 说话：两帧来回切；思考：三个点轮流亮。窗口不可见时跳过，不渲染
   useEffect(() => {
-    if (state !== 'talking' && state !== 'thinking') return;
-    const n = state === 'talking' ? 2 : 3;
+    if (shown !== 'talking' && shown !== 'thinking') return;
+    const n = shown === 'talking' ? 2 : 3;
     let i = 0;
     const t = setInterval(
       () => {
@@ -110,13 +118,13 @@ export function Pet({ api, random = Math.random }: Props) {
         i = (i + 1) % n;
         setFrame(i);
       },
-      state === 'talking' ? 220 : 320,
+      shown === 'talking' ? 220 : 320,
     );
     return () => {
       clearInterval(t);
       setFrame(0);
     };
-  }, [state]);
+  }, [shown]);
 
   const clearHold = () => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
@@ -223,14 +231,14 @@ export function Pet({ api, random = Math.random }: Props) {
   const images = init?.appearance?.images ?? {};
   // 待机时：心情 / 天气 / 夜里 / 季节的图片（用户放了才有），没有就用 idle
   const idleVariant = (init?.variants ?? []).find((v) => images[v]);
-  const src = state === 'idle' && idleVariant ? images[idleVariant] : (images[state] ?? images.idle);
+  const src = shown === 'idle' && idleVariant ? images[idleVariant] : (images[shown] ?? images.idle);
   const mood = init?.mood ?? 0;
   const placeholder = init?.appearance?.placeholder ?? true;
   const name = init?.character.name ?? '';
 
   return (
     <div
-      class={`pet state-${state} frame-${frame} ${placeholder ? 'placeholder' : ''} ${pose ? `pose-${pose}` : ''} ${mood >= 30 ? 'mood-good' : mood <= -30 ? 'mood-low' : ''}`}
+      class={`pet state-${shown} frame-${frame} ${placeholder ? 'placeholder' : ''} ${pose ? `pose-${pose}` : ''} ${mood >= 30 ? 'mood-good' : mood <= -30 ? 'mood-low' : ''}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

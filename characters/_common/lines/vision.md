@@ -24,3 +24,6 @@
 
 ## update.available
 - DeskMate 有新版本 {版本} 了，要更新吗？
+
+## voice.test
+- 你好，我是你的桌面伙伴。听得清楚吗？

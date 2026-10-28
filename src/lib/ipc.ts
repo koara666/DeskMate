@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
   MenuShow,
+  VoiceSettings,
   UpdateProgress,
   UpdateView,
   UpdateSettings,
@@ -188,6 +189,21 @@ export const petApi: PetApi = {
 
 export type TouchPart = 'head' | 'rub' | 'drag' | 'hold' | 'poke';
 
+/** 桌宠窗口里的语音播放（系统语音在这里合成；云端 / 本机服务合成的音频从后端取来播放） */
+export interface VoiceApi {
+  onSay(cb: (e: { text: string; voice: string; rate: number; pitch: number; volume: number }) => void): Promise<UnlistenFn>;
+  onPlay(cb: (e: { id: string; volume: number }) => void): Promise<UnlistenFn>;
+  onStop(cb: () => void): Promise<UnlistenFn>;
+  audio(id: string): Promise<ArrayBuffer>;
+}
+
+export const voiceApi: VoiceApi = {
+  onSay: (cb) => listen<{ text: string; voice: string; rate: number; pitch: number; volume: number }>('voice-say', (e) => cb(e.payload)),
+  onPlay: (cb) => listen<{ id: string; volume: number }>('voice-play', (e) => cb(e.payload)),
+  onStop: (cb) => listen('voice-stop', () => cb()),
+  audio: (id) => invoke<ArrayBuffer>('voice_audio', { id }),
+};
+
 /** 头顶气泡菜单（单独的透明小窗口） */
 export interface MenuApi {
   onShow(cb: (s: MenuShow) => void): Promise<UnlistenFn>;
@@ -240,6 +256,11 @@ export const settingsApi = {
   visionPreview: () => invoke<VisionPreview>('vision_preview'),
   visionRecords: () => invoke<LookRecord[]>('vision_records'),
   updateCheck: () => invoke<UpdateView | null>('update_check'),
+  voiceSave: (voice: VoiceSettings) => invoke<VoiceSettings>('voice_save', { voice }),
+  voiceSetKey: (which: 'fish' | 'openai', key: string) => invoke<string>('voice_set_key', { which, key }),
+  voiceClearKey: (which: 'fish' | 'openai') => invoke('voice_clear_key', { which }),
+  voiceTest: () => invoke('voice_test'),
+  voiceClearCache: () => invoke<number>('voice_clear_cache'),
   updateSave: (autoCheck: boolean) => invoke<UpdateSettings>('update_save', { autoCheck }),
   saveNickname: (nickname: string) => invoke<string>('nickname_save', { nickname }),
   diaryList: () => invoke<Diary[]>('diary_list'),

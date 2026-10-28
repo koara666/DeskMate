@@ -565,6 +565,16 @@ fn deliver(app: &AppHandle, item: Item, decision: Decision, id: u64) {
         g.insert(id, c.clone());
     }
     let _ = app.emit_to("chat", "chat-proactive", msg);
+    // 读出来：摸头这类小反应 / 主动说的话（全屏时只有打开了「全屏时只用声音说」才出声）
+    crate::voice::on_line(
+        app,
+        &item.text,
+        if item.kind == Kind::Random && item.ephemeral {
+            crate::voice::Scene::Reaction
+        } else {
+            crate::voice::Scene::Proactive
+        },
+    );
     if decision == Decision::Notify {
         // 全屏时：系统通知（P1 接入）；聊天记录里已经有了，退出全屏后打开聊天能看到
         crate::notify::send(app, &item.text);

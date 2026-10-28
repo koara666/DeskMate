@@ -118,6 +118,8 @@ pub struct Settings {
     pub vision: crate::vision::VisionSettings,
     /// 检查更新（默认开，只查 GitHub 上的版本号）
     pub update: crate::update::UpdateSettings,
+    /// 语音（默认关闭）
+    pub voice: crate::voice::VoiceSettings,
 }
 
 impl Default for Settings {
@@ -149,6 +151,7 @@ impl Default for Settings {
             care: Default::default(),
             vision: Default::default(),
             update: Default::default(),
+            voice: Default::default(),
         }
     }
 }
@@ -171,6 +174,7 @@ impl Settings {
         self.care = std::mem::take(&mut self.care).sanitize();
         self.vision = std::mem::take(&mut self.vision).sanitize();
         self.update = std::mem::take(&mut self.update).sanitize();
+        self.voice = std::mem::take(&mut self.voice).sanitize();
         if !self.vision.backend.is_empty()
             && !self.backends.iter().any(|b| b.id == self.vision.backend)
         {
