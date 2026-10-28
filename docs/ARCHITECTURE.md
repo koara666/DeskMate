@@ -45,7 +45,7 @@ characters/<id>/               内置角色包（character.json、persona.md、�
 characters/_fallback.svg       没有任何图片时的通用占位形象
 characters/_common/lines/      通用台词（角色没写的场景用；`_` 开头的目录不是角色）
 src-tauri/data/                编进程序的小数据：cities.tsv（常用城市坐标）、holidays.tsv（节假日）、turtle.md（原创海龟汤）、twenty.txt（二十问谜底）
-pet.html chat.html settings.html   三个窗口的入口
+pet.html chat.html settings.html menu.html   四个窗口的入口（menu = 头顶气泡菜单）
 src/
   pet/Pet.tsx                  桌宠：形象、状态、点击/拖动/右键
   chat/ChatApp.tsx Composer.tsx    聊天：气泡/面板、流式打字机、停止/重试/复制、错误详情、IME
@@ -97,6 +97,8 @@ src-tauri/src/
   vision.rs                    第三层「看一眼」：快捷键 / 玩游戏时主动看 → 隐私处理 → 视觉模型 → 不记录的小反应（默认关闭）；预览、本次运行的记录
   games_llm.rs                 需要模型的小游戏（成语接龙、海龟汤、二十问）：会话在内存里、谜底只在后端、模型输出 JSON + 本地规则检查
   games.rs                     小游戏后端：关键时刻的台词（game.<游戏>.<事件> → game.<事件>）、战绩、心情和亲密度、每日抽签
+  intents.rs                   聊天里的吩咐：本地规则认出玩游戏 / 勿扰 / 藏起来 / 看屏幕 / 设置 / 提醒列表和取消 → 直接做并回一句
+  radial.rs                    头顶气泡菜单：单独的透明窗口 menu；按住右键时读鼠标位置发给菜单页面；选项、彩蛋
   update.rs                    检查更新：启动 1 分钟后查 GitHub Releases（每天最多一次）→ 她说一句 + 更新卡片 →
                                用户点了才下载上次查到的安装包、校验大小和 SHA-256、运行安装程序后退出
   diary.rs                     桌宠日记：素材（活动汇总、聊天摘要、提醒、心情）→ 模型或模板 → diaries 表 + 记忆
