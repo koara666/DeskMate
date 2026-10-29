@@ -222,6 +222,10 @@ pub async fn fetch_latest(http: &reqwest::Client, url: &str) -> Result<Release, 
     if resp.status().as_u16() == 404 {
         return Err("GitHub 上还没有发布过正式版本。".into());
     }
+    // 公开接口每个网络每小时只能查 60 次，查多了会被暂时拒绝
+    if matches!(resp.status().as_u16(), 403 | 429) {
+        return Err("GitHub 暂时不让查了（同一个网络这一小时查得太多），过一会儿再试。".into());
+    }
     if !resp.status().is_success() {
         return Err(format!("GitHub 返回了 {}", resp.status().as_u16()));
     }
