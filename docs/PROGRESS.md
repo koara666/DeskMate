@@ -2,6 +2,12 @@
 
 > 最新条目在最上面。超过 300 行时把旧条目压缩成摘要移到 `docs/progress-archive/`。
 
+## 2026-10-29 21:15（进行中）
+- 完成：**服务器装环境「一直卡在下载」彻底解决**（DECISIONS #56 补充 5）。真正原因不是 pip：官方 `install.sh` 用 conda 从 conda-forge 装 gcc 11 / ffmpeg / cmake / make / unzip，conda 的软件包本体被跳转到国外对象存储，国内下不动（之前九次重试都栽在这）。`setup.sh` 现在：只用国内 conda 镜像装 ffmpeg（不到 1 分钟），install.sh 里的 conda 步骤全部跳过（服务器自带 gcc/cmake 等），wget 换成 curl 小脚本，`TERM=xterm`（官方脚本下载成功后的 `tput` 在后台会报错、被当成失败整个重跑，G2PW 520 MB 因此白下两遍）。装环境 6 分钟走完，自检：RTX 4090 可用、日语词典 OK、读音频 OK。
+- 进行中：服务器 `chain.sh` 无人值守——`train.sh --quick`（21:09 开始，已在 SoVITS 训练）→ 通过后自动 `train.sh` 正式训练。结果看 `~/feng/chiaki-voice-train/chiaki-voice/chain.log` 最后一行（exit 0 完成 / 2 试跑失败看 quick.log / 3 训练失败看 train.log）。
+- 下一步：chain.log 出现 `exit 0` → `scp` / `sftp reget` 拉回 `output/chiaki-model.tar.gz` → 本机解压到 `chiaki-voice/chiaki-model/` → `serve_local.py` 合成几句、Whisper 识别回来对照 → 跑端到端、实测、发布 0.3.2。
+- 已知问题：停进程时别漏了孤儿——停掉 install.sh 后，它启动的 wget 小脚本（父进程变成 1）还会继续下载；用 `ps -o pid,ppid,cmd` 看 PPID 为 1 且 cwd 在训练文件夹里的残留，按进程号停。hf-mirror 的大文件仍时快时慢，curl 小脚本会断开续传。
+
 ## 2026-10-29 20:20（进行中）
 - 背景：用户重连了 Q 盘；决定千秋的声音主要说日语（中文以后再说）；让 agent 自己在服务器上训练（用户本机 `~/.ssh/config` 已配好密钥登录）。
 - 完成：

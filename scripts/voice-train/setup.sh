@@ -53,6 +53,27 @@ if [ ! -x "$ENV_DIR/bin/python" ]; then
 fi
 conda activate "$ENV_DIR"
 
+say "FFmpeg（读音频要用）"
+# 官方 install.sh 会用 conda 从 conda-forge 装 gcc 11 / sysroot / ffmpeg / cmake / make / unzip。实测：
+# conda.anaconda.org 的索引走 CDN 很快（16 MB/s），但软件包本体会被跳转到国外的对象存储，国内几乎下不动
+# （gcc 卡了 8 分钟没下完，前面好几次「卡在下载」都是这里）。国内镜像直接托管软件包（北外 50 MB/s、清华 40 MB/s、南大 20 MB/s）。
+# 服务器上本来就有 gcc / g++ / cmake / make / unzip，只缺 ffmpeg，所以只装它，install.sh 里的 conda 步骤全部跳过（见后面）。
+CONDA_MIRRORS="https://mirrors.bfsu.edu.cn/anaconda/cloud/conda-forge https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge https://mirror.nju.edu.cn/anaconda/cloud/conda-forge https://mirrors.ustc.edu.cn/anaconda/cloud/conda-forge"
+for t in gcc g++ cmake make unzip curl; do
+    command -v "$t" >/dev/null 2>&1 || { echo "服务器上没有 $t（编译 pyopenjtalk 等要用）。请管理员装一下，或联系接手的人改 setup.sh 用 conda 装。" >&2; exit 1; }
+done
+if ! ls "$ENV_DIR"/lib/libavutil.so.* >/dev/null 2>&1; then
+    ok=0
+    for ch in $CONDA_MIRRORS; do
+        echo "  （conda 镜像：$ch）"
+        # conda 是 shell 函数，timeout 调不了，用 $CONDA_EXE
+        if timeout 900 "$CONDA_EXE" install -y -q -p "$ENV_DIR" --override-channels -c "$ch" ffmpeg; then ok=1; break; fi
+        echo "  用 $ch 没成功，换下一个镜像"
+    done
+    [ "$ok" = 1 ] || { echo "装 ffmpeg 失败（重新运行 bash setup.sh 会接着装）" >&2; exit 1; }
+fi
+echo "  ffmpeg 动态库 OK：$(ls "$ENV_DIR"/lib/libavutil.so.* | head -1)"
+
 say "下载预训练模型（只下训练要用的，约 1.4 GB）"
 case "$SOURCE" in
     HF) HF_BASE="https://huggingface.co" ;;
@@ -136,14 +157,41 @@ fi
 with_mirrors python -m pip install torchcodec==0.8.1 || exit 1
 
 say "运行 GPT-SoVITS 官方安装脚本（依赖、日语词典）"
-# 官方脚本里用 wget 下日语词典等：给它连接 / 读取各 20 秒的超时（只在这个文件夹里生效，不改服务器的配置）
-printf 'timeout = 20\ntries = 30\nwaitretry = 3\n' > "$ROOT/.cache/wgetrc"
-export WGETRC="$ROOT/.cache/wgetrc"
+# 官方脚本里用 wget 下 G2PW 模型、nltk 数据、日语词典：wget 偶尔连到不通的地址一直等、日志里还看不到。
+# 在 PATH 最前面放一个同名的小脚本，用 curl 代替（连接 15 秒超时、太慢就断开续传、失败重试）。只在这个文件夹里生效。
+SHIM="$ROOT/.cache/shim"
+mkdir -p "$SHIM"
+cat > "$SHIM/wget" <<'SH'
+#!/usr/bin/env bash
+# DeskMate：代替 wget。只支持官方 install.sh 用到的写法：wget [选项...] URL [-O 文件]
+out=""; url=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -O) out="$2"; shift 2 ;;
+        -*) shift ;;
+        *) url="$1"; shift ;;
+    esac
+done
+[ -n "$url" ] || exit 1
+[ -n "$out" ] || { out="${url##*/}"; out="${out%%[?]*}"; }
+for i in $(seq 1 15); do
+    curl -fL -sS --connect-timeout 15 --speed-limit 100000 --speed-time 60 -C - -o "$out" "$url" && exit 0
+    echo "  下载出错，5 秒后重试（第 $i 次）：$url" >&2
+    sleep 5
+done
+exit 1
+SH
+chmod +x "$SHIM/wget"
+export PATH="$SHIM:$PATH"
+# 官方 install.sh 每次下载成功后会执行 tput cuu1（光标上移擦掉进度行）；后台运行时 TERM=dumb，tput 报错，
+# 脚本就当成下载失败退出、换下一个镜像整个重跑（实测：G2PW 模型 520 MB 明明下完了，却被删掉重下）
+export TERM=xterm
 cd "$ROOT/GPT-SoVITS"
 # GPT-SoVITS 的源码是在 Windows 上取的，.sh 是 CRLF 换行，bash 不认（实测「$'\r'：未找到命令」）
 sed -i 's/\r$//' install.sh
-# 只用 conda-forge：不碰 Anaconda 官方频道（新版 conda 用官方频道要先接受服务条款，非交互运行会直接报错）
-sed -i 's/conda install --yes --quiet -c conda-forge/conda install --yes --quiet --override-channels -c conda-forge/' install.sh
+# 把它所有的 conda install 变成空操作（原因见上面「FFmpeg」一节；gcc / cmake / make / unzip 用服务器自带的，ffmpeg 已经装好）
+sed -i 's|conda install --yes --quiet [^"]*"\$@"|true "$@"|' install.sh
+grep -q 'output=$(true "$@"' install.sh || { echo "出错了：没能把 install.sh 里的 conda install 改成空操作（官方脚本可能改了写法）" >&2; exit 1; }
 with_mirrors bash install.sh --device "$CUDA_VER" --source "$SOURCE" || { echo "官方安装脚本失败（往上翻看报错；重新运行 bash setup.sh 会接着装）" >&2; exit 1; }
 
 say "检查"
