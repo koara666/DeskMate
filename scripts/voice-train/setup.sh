@@ -13,6 +13,22 @@ CUDA_VER=${CUDA_VER:-CU126}
 
 say() { printf '\n\033[1;36m==== %s\033[0m\n' "$*"; }
 
+# 国内的 PyPI 镜像：实测同一时间有的 60 MB/s、有的连不上，过半小时又反过来，所以失败了就换下一个
+PIP_MIRRORS="https://pypi.tuna.tsinghua.edu.cn/simple https://mirrors.bfsu.edu.cn/pypi/web/simple https://mirrors.cloud.tencent.com/pypi/simple https://mirrors.aliyun.com/pypi/simple https://mirrors.ustc.edu.cn/pypi/simple"
+export PIP_TIMEOUT=20 PIP_RETRIES=8
+# 用 PyPI 镜像跑一条命令，失败就换下一个镜像再跑（已经下完的包在 pip 缓存里，不会重下）
+with_mirrors() {
+    local idx
+    for round in 1 2; do
+        for idx in $PIP_MIRRORS; do
+            echo "  （PyPI 镜像：$idx）"
+            PIP_INDEX_URL="$idx" "$@" && return 0
+            echo "  用 $idx 没成功，换下一个镜像"
+        done
+    done
+    return 1
+}
+
 say "检查显卡"
 if ! command -v nvidia-smi >/dev/null 2>&1; then
     echo "没有找到 nvidia-smi：这台机器没有装 NVIDIA 显卡驱动，训练不了。" >&2
@@ -112,12 +128,12 @@ from pip._vendor.packaging.requirements import Requirement
 for name in ("torch", "torchaudio"):
     for r in md.requires(name) or []:
         req = Requirement(r)
-        if req.marker is None or req.marker.evaluate({"extra": ""}):
+        if req.name not in ("torch", "torchaudio") and (req.marker is None or req.marker.evaluate({"extra": ""})):
             print(str(req).split(";")[0].strip())
 PY
-    python -m pip install -r "$TMPDIR/torch-deps.txt" -i https://mirrors.aliyun.com/pypi/simple/
+    with_mirrors python -m pip install -r "$TMPDIR/torch-deps.txt" || { echo "装 torch 的依赖失败（重新运行 bash setup.sh 会接着装）" >&2; exit 1; }
 fi
-python -m pip install torchcodec==0.8.1
+with_mirrors python -m pip install torchcodec==0.8.1 || exit 1
 
 say "运行 GPT-SoVITS 官方安装脚本（依赖、日语词典）"
 # 官方脚本里用 wget 下日语词典等：给它连接 / 读取各 20 秒的超时（只在这个文件夹里生效，不改服务器的配置）
@@ -126,7 +142,7 @@ export WGETRC="$ROOT/.cache/wgetrc"
 cd "$ROOT/GPT-SoVITS"
 # 只用 conda-forge：不碰 Anaconda 官方频道（新版 conda 用官方频道要先接受服务条款，非交互运行会直接报错）
 sed -i 's/conda install --yes --quiet -c conda-forge/conda install --yes --quiet --override-channels -c conda-forge/' install.sh
-bash install.sh --device "$CUDA_VER" --source "$SOURCE"
+with_mirrors bash install.sh --device "$CUDA_VER" --source "$SOURCE" || { echo "官方安装脚本失败（往上翻看报错；重新运行 bash setup.sh 会接着装）" >&2; exit 1; }
 
 say "检查"
 python -c "import torch; print('PyTorch', torch.__version__, '显卡可用:', torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"
