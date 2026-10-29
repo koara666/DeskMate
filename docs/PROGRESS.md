@@ -2,6 +2,16 @@
 
 > 最新条目在最上面。超过 300 行时把旧条目压缩成摘要移到 `docs/progress-archive/`。
 
+## 2026-10-29 20:20（进行中）
+- 背景：用户重连了 Q 盘；决定千秋的声音主要说日语（中文以后再说）；让 agent 自己在服务器上训练（用户本机 `~/.ssh/config` 已配好密钥登录）。
+- 完成：
+  - 训练包传完：Q 盘 = 服务器 `/home/crossai/feng`（不是主目录），在 `~/feng/chiaki-voice-train/` 里 sha256 核对通过并解压。以后传文件、拉模型都走 SSH（`scp` / `sftp reget`），不再走 Q 盘。
+  - **0.3.2 千秋说日语**（DECISIONS #58）：设置「她说话的语言」（默认日语）；247 句台词全部写了日语版；聊天回复附 `[[日语：]]`；兜底用聊天模型翻译；GPT-SoVITS 的 `text_lang` 跟着语言走；系统语音按语言挑声音。版本号已改 0.3.2、更新说明已写（`docs/release-notes/v0.3.2.md`），**还没跑端到端、没发布**。
+  - 服务器装环境踩的坑都写进了 `setup.sh` 和 DECISIONS #56 补充 4：wget 偶尔连到不通的地址一直等（下载改用 curl、install.sh 的 wget 用文件夹里的 wgetrc 加超时）；hf-mirror 偶尔 429 / 小文件不响应（重试；卡住的小配置文件从本机 scp）；`pypi.nvidia.com` 国内读超时（torch 本体走官方源 `--no-deps`，依赖走阿里云 PyPI）。
+- 进行中：服务器上 `setup.sh`（第六次）在装 PyTorch。日志 `~/feng/chiaki-voice-train/chiaki-voice/setup.log`。
+- 下一步：装好 → `bash train.sh --quick` → `nohup bash train.sh > train.log` 正式训练 → 用 sftp reget 拉回 `output/chiaki-model.tar.gz` → 本机解压到 `chiaki-voice/chiaki-model/` → `chiaki-voice/start-voice.bat`（或 `serve_local.py`）→ 合成几句、Whisper 识别回来检查 → 跑端到端、实测、发布 0.3.2。
+- 工具（在本次会话的临时目录里，换人接手要重写）：SSH 一律用 `C:\Windows\System32\OpenSSH\ssh.exe`（Git Bash 自带的 ssh 读不到配置）；远程长任务用 `setsid -f` 后台跑、写日志，本机每 30 秒看一次。
+
 ## 2026-10-29 19:10
 - 完成：
   - **本机全流程跑通**（DECISIONS #56 补充 3）：`train.py --quick` 从头到尾通过（预处理四步 40/40 → SoVITS → GPT → 打包，RTX 4060 Laptop 6 分 40 秒）。GPT 训练在 Windows 上起不来的真正原因是 PyTorch 2.9.1 的 Windows 版 gloo 根本不可用（和主机名、代理无关），新增 `s1_single_gpu.py`（单卡启动器，不改官方源码，只在 Windows 上用）；去掉了和官方 DataLoader 冲突的「Windows 上 0 个读数据进程」。
