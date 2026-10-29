@@ -342,6 +342,12 @@ pub fn find_ja(table: &VecDeque<(String, String)>, text: &str) -> Option<String>
     if let Some((_, j)) = table.iter().rev().find(|(z, _)| z == text) {
         return Some(j.clone());
     }
+    // 显示出来的只是原文的开头（选项题「问题 | 选项 => 回应」只显示问题）
+    if text.chars().count() >= 4
+        && let Some((_, j)) = table.iter().rev().find(|(z, _)| z.starts_with(text))
+    {
+        return Some(j.clone());
+    }
     table
         .iter()
         .rev()
@@ -979,6 +985,15 @@ mod tests {
             Some("今日は雨だから、傘を持っていってね。")
         );
         assert_eq!(find_ja(&t, "没见过的话"), None);
+        // 选项题只显示问题
+        t.push_back((
+            "待会儿想做什么？ | 继续 => 好 | 休息 => 嗯".to_string(),
+            "このあと、何がしたい？".to_string(),
+        ));
+        assert_eq!(
+            find_ja(&t, "待会儿想做什么？").as_deref(),
+            Some("このあと、何がしたい？")
+        );
         // 太短的不按开头匹配（避免误配）
         t.push_back(("好".to_string(), "うん".to_string()));
         assert_eq!(find_ja(&t, "好久不见"), None);

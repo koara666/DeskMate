@@ -59,7 +59,8 @@ for f in \
         echo "  $f"
         # 大文件会被跳转到 HF 的存储，偶尔临时返回错误（实测 wget 退出码 8），wget 遇到这种不会自己重试：失败就等几秒再来
         for i in 1 2 3 4 5; do
-            wget -c --tries=25 --wait=5 --read-timeout=40 -q --show-progress -O "$PM/$f" "$HF_BASE/lj1995/GPT-SoVITS/resolve/main/$f" && break
+            # --timeout：连接、读取都最多等 30 秒（实测有的地址连不上时 wget 会一直卡在连接上）
+            wget -c --tries=25 --wait=5 --timeout=30 -q --show-progress -O "$PM/$f" "$HF_BASE/lj1995/GPT-SoVITS/resolve/main/$f" && break
             [ "$i" = 5 ] && { echo "下载失败：$f（重新运行 bash setup.sh 会接着下）" >&2; exit 1; }
             echo "  下载出错，5 秒后重试（第 $i 次）"
             sleep 5

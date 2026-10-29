@@ -581,6 +581,23 @@ mod tests {
     }
 
     #[test]
+    fn chiaki_lines_all_have_japanese() {
+        // 千秋的声音默认说日语（DECISIONS #58）：她的每句台词都要有日语版
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../characters/nanami-chiaki/lines");
+        let l = Lines::load_dir(&dir);
+        let missing: Vec<&str> = l
+            .scenes
+            .values()
+            .flatten()
+            .filter(|x| x.ja.is_none())
+            .map(|x| x.text.as_str())
+            .collect();
+        assert!(missing.is_empty(), "缺日语版：{missing:?}");
+        assert!(l.line_count() >= 240);
+    }
+
+    #[test]
     fn mood_tags() {
         let l = Lines::parse("## m\n- [心情好] 开心\n- [心情差] 难过\n- 平常\n");
         let mut c = ctx(12, &[]);
