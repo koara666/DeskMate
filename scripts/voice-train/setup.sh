@@ -140,6 +140,8 @@ say "运行 GPT-SoVITS 官方安装脚本（依赖、日语词典）"
 printf 'timeout = 20\ntries = 30\nwaitretry = 3\n' > "$ROOT/.cache/wgetrc"
 export WGETRC="$ROOT/.cache/wgetrc"
 cd "$ROOT/GPT-SoVITS"
+# GPT-SoVITS 的源码是在 Windows 上取的，.sh 是 CRLF 换行，bash 不认（实测「$'\r'：未找到命令」）
+sed -i 's/\r$//' install.sh
 # 只用 conda-forge：不碰 Anaconda 官方频道（新版 conda 用官方频道要先接受服务条款，非交互运行会直接报错）
 sed -i 's/conda install --yes --quiet -c conda-forge/conda install --yes --quiet --override-channels -c conda-forge/' install.sh
 with_mirrors bash install.sh --device "$CUDA_VER" --source "$SOURCE" || { echo "官方安装脚本失败（往上翻看报错；重新运行 bash setup.sh 会接着装）" >&2; exit 1; }

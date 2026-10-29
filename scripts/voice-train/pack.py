@@ -30,6 +30,14 @@ def main():
         if f.endswith(".sh"):
             data = data.replace(b"\r\n", b"\n")
         open(os.path.join(root, f), "wb").write(data)
+    # 训练包里所有 .sh 都统一成 LF（GPT-SoVITS 的源码在 Windows 上取出来是 CRLF，Linux 的 bash 不认）
+    for d, _, files in os.walk(root):
+        for f in files:
+            if f.endswith(".sh"):
+                p = os.path.join(d, f)
+                data = open(p, "rb").read()
+                if b"\r\n" in data:
+                    open(p, "wb").write(data.replace(b"\r\n", b"\n"))
     for need in ("dataset/chiaki.list", "dataset/wavs", "GPT-SoVITS/webui.py"):
         if not os.path.exists(os.path.join(root, need)):
             sys.exit("训练包里缺少 " + need)
