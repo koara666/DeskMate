@@ -82,3 +82,6 @@ desktop.ini
 /chiaki-voice/
 /chiaki-voice*.zip
 /chiaki-voice*.tar*
+
+# ===== 用户自己生成的 Q 版拼图（切好的图在用户数据目录） =====
+/nanami*.png
