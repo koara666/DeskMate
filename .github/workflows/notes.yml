@@ -1,0 +1,27 @@
+# 把 CHANGELOG.md 里每个版本的说明同步到对应的发布页（只改说明文字，不动安装包）。
+name: Sync release notes
+
+on:
+  push:
+    branches: [main]
+    paths: [CHANGELOG.md]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 同步
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for v in $(grep -oP '^## \K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md); do
+            # 这个版本还没发布（或者正在发布）就跳过
+            if gh release view "v$v" >/dev/null 2>&1; then
+              python3 scripts/release_notes.py "v$v" > "$RUNNER_TEMP/notes.md"
+              gh release edit "v$v" --notes-file "$RUNNER_TEMP/notes.md"
+            fi
+          done

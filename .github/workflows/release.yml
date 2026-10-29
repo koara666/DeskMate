@@ -1,5 +1,5 @@
 # 发布：推送 v<数字> 开头的版本标签（比如 v0.3.0）时，构建安装包并发布到 GitHub Releases。
-# 发布是公开操作：只有用户确认后才推送标签（见 docs/NEEDS_USER.md）。
+# 发布是公开操作：发布前先在 CHANGELOG.md 写好这个版本改了什么，本机检查全过再推送标签。
 # DeskMate 的「检查更新」读的就是这里发布的最新正式版本；SHA256SUMS.txt 用来校验下载的安装包。
 name: Release
 
@@ -36,19 +36,20 @@ jobs:
           test "v$v" = "${GITHUB_REF_NAME}" || { echo "标签 ${GITHUB_REF_NAME} 和版本 v$v 不一致"; exit 1; }
       # 不再在这里重跑测试：推送前本机 `npm run check` 已经全过，推送到 main 的 CI 也会再跑一遍；
       # 这里重跑只是白白多花十来分钟（DECISIONS #66）。
-      - name: 放进千秋的 Q 版形象包（用户装完就是 Q 版，不用自己放文件）
-        run: python scripts/chibi/fetch_art.py
+      # 下面两个包放在发布页上，找不到就让发布失败（--require）：保证下载到的安装包和开发机上的一样
+      - name: 放进千秋的 Q 版形象包
+        run: python scripts/chibi/fetch_art.py --require
+      - name: 放进千秋的预录语音包
+        run: python scripts/voice/fetch_voice_pack.py --require
       - name: 构建安装包
         run: npx tauri build
       - name: 计算 SHA-256
         shell: bash
         working-directory: src-tauri/target/release/bundle/nsis
         run: sha256sum *.exe > SHA256SUMS.txt && cat SHA256SUMS.txt
-      - name: 更新说明
+      - name: 更新说明（取自 CHANGELOG.md，只写改了什么）
         shell: bash
-        run: |
-          f="docs/release-notes/${GITHUB_REF_NAME}.md"
-          if [ -f "$f" ]; then cp "$f" notes.md; else echo "DeskMate ${GITHUB_REF_NAME}" > notes.md; fi
+        run: python scripts/release_notes.py ${{ github.ref_name }} > notes.md
       - name: 发布
         uses: softprops/action-gh-release@v2
         with:

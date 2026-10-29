@@ -95,3 +95,17 @@ __pycache__/
 
 # 构建时从发布页放进来的千秋形象（scripts/chibi/fetch_art.py），不进仓库
 /characters/nanami-chiaki/assets/*.png
+
+# 构建时从发布页放进来的千秋预录语音（scripts/voice/fetch_voice_pack.py），不进仓库
+/characters/*/voice/
+
+# ===== 只留在维护者本机的东西：开发过程文档、内部工具 =====
+# 对外只留 README、CHANGELOG 和用户用得上的说明（docs/VOICE.md）
+/AGENTS.md
+/CLAUDE.md
+/docs/*
+!/docs/VOICE.md
+/scripts/voice-train/
+/scripts/voice-pack/
+/scripts/chibi/pack_art.py
+/scripts/chibi/slice_sheet.py

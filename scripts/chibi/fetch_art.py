@@ -3,6 +3,7 @@
 用法：
   python scripts/chibi/fetch_art.py              从 GitHub 发布页下载（发布流程里自动调用）
   python scripts/chibi/fetch_art.py --from-zip X 用本地的包（本机打包、还没上传时用；同样要校验）
+  加 --require：发布页上找不到就失败（发布用）；不加只警告、不带图继续构建
 
 - 图不进代码仓库（解出来的 characters/nanami-chiaki/assets/*.png 已写进 .gitignore）：
   它们放在发布页 art-chiaki-v1，哪天需要撤下，删掉那个附件，之后的安装包就不再带。
@@ -65,7 +66,10 @@ def main():
     else:
         data = download()
         if data is None:
-            warn("千秋形象包在 GitHub 发布页上找不到（art-chiaki-v1），这次的安装包不带 Q 版形象。")
+            msg = "千秋形象包在 GitHub 发布页上找不到（art-chiaki-v1），这次的安装包不带 Q 版形象。"
+            if "--require" in sys.argv:
+                sys.exit(msg)  # 发布用：保证装上的版本和本机一样
+            warn(msg)
             return
     got = hashlib.sha256(data).hexdigest()
     if got != SHA256:
