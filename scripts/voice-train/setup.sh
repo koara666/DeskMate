@@ -57,14 +57,16 @@ for f in \
     mkdir -p "$PM/$(dirname "$f")"
     if [ ! -s "$PM/$f" ]; then
         echo "  $f"
-        # 大文件会被跳转到 HF 的存储，偶尔临时返回错误（实测 wget 退出码 8），wget 遇到这种不会自己重试：失败就等几秒再来
-        for i in 1 2 3 4 5; do
-            # --timeout：连接、读取都最多等 30 秒（实测有的地址连不上时 wget 会一直卡在连接上）
-            wget -c --tries=25 --wait=5 --timeout=30 -q --show-progress -O "$PM/$f" "$HF_BASE/lj1995/GPT-SoVITS/resolve/main/$f" && break
-            [ "$i" = 5 ] && { echo "下载失败：$f（重新运行 bash setup.sh 会接着下）" >&2; exit 1; }
+        # 大文件会被跳转到 HF 的存储。实测偶尔会被解析到连不上的地址、或临时返回错误，
+        # wget 会在连接上一等好几分钟、-q 时日志里什么都看不到，所以用 curl：连接 15 秒超时、失败就打印出来再试
+        for i in 1 2 3 4 5 6 7 8; do
+            curl -fL -sS --connect-timeout 15 --speed-limit 100000 --speed-time 60 -C - -o "$PM/$f" \
+                "$HF_BASE/lj1995/GPT-SoVITS/resolve/main/$f" && break
+            [ "$i" = 8 ] && { echo "下载失败：$f（重新运行 bash setup.sh 会接着下）" >&2; exit 1; }
             echo "  下载出错，5 秒后重试（第 $i 次）"
             sleep 5
         done
+        echo "    $(du -h "$PM/$f" | cut -f1)"
     fi
 done
 # install.sh 看到 pretrained_models/sv 已经存在，就不会再下载 4.5 GB 的全套模型包
@@ -76,6 +78,9 @@ python -m pip install torch==2.9.1 torchaudio==2.9.1 --index-url "$TORCH_INDEX"
 python -m pip install torchcodec==0.8.1
 
 say "运行 GPT-SoVITS 官方安装脚本（依赖、日语词典）"
+# 官方脚本里用 wget 下日语词典等：给它连接 / 读取各 20 秒的超时（只在这个文件夹里生效，不改服务器的配置）
+printf 'timeout = 20\ntries = 30\nwaitretry = 3\n' > "$ROOT/.cache/wgetrc"
+export WGETRC="$ROOT/.cache/wgetrc"
 cd "$ROOT/GPT-SoVITS"
 # 只用 conda-forge：不碰 Anaconda 官方频道（新版 conda 用官方频道要先接受服务条款，非交互运行会直接报错）
 sed -i 's/conda install --yes --quiet -c conda-forge/conda install --yes --quiet --override-channels -c conda-forge/' install.sh
