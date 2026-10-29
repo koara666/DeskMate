@@ -8,7 +8,7 @@
   - 训练包传完：Q 盘 = 服务器 `/home/crossai/feng`（不是主目录），在 `~/feng/chiaki-voice-train/` 里 sha256 核对通过并解压。以后传文件、拉模型都走 SSH（`scp` / `sftp reget`），不再走 Q 盘。
   - **0.3.2 千秋说日语**（DECISIONS #58）：设置「她说话的语言」（默认日语）；247 句台词全部写了日语版；聊天回复附 `[[日语：]]`；兜底用聊天模型翻译；GPT-SoVITS 的 `text_lang` 跟着语言走；系统语音按语言挑声音。版本号已改 0.3.2、更新说明已写（`docs/release-notes/v0.3.2.md`），**还没跑端到端、没发布**。
   - 服务器装环境踩的坑都写进了 `setup.sh` 和 DECISIONS #56 补充 4：wget 偶尔连到不通的地址一直等（下载改用 curl、install.sh 的 wget 用文件夹里的 wgetrc 加超时）；hf-mirror 偶尔 429 / 小文件不响应（重试；卡住的小配置文件从本机 scp）；`pypi.nvidia.com` 国内读超时（torch 本体走官方源 `--no-deps`，依赖走阿里云 PyPI）。
-- 进行中：服务器上 `setup.sh`（第六次）在装 PyTorch。日志 `~/feng/chiaki-voice-train/chiaki-voice/setup.log`。
+- 进行中（20:50）：服务器上 `setup.sh`（第九次）在跑最后一步官方 install.sh；预训练模型、torch 2.9.1+cu126 和依赖都已装好。服务器上 `chain.sh` 无人值守：等 setup 结束 → `train.sh --quick` → `train.sh` 正式训练，结果在 `~/feng/chiaki-voice-train/chiaki-voice/chain.log` 最后一行（exit 0 = 完成；1 装环境失败看 setup.log；2 试跑失败看 quick.log；3 训练失败看 train.log）。用户嫌盯得太勤、额度烧得多：以后长任务一律服务器端串起来跑，本机只低频（5 分钟）查一次结果。
 - 下一步：装好 → `bash train.sh --quick` → `nohup bash train.sh > train.log` 正式训练 → 用 sftp reget 拉回 `output/chiaki-model.tar.gz` → 本机解压到 `chiaki-voice/chiaki-model/` → `chiaki-voice/start-voice.bat`（或 `serve_local.py`）→ 合成几句、Whisper 识别回来检查 → 跑端到端、实测、发布 0.3.2。
 - 工具（在本次会话的临时目录里，换人接手要重写）：SSH 一律用 `C:\Windows\System32\OpenSSH\ssh.exe`（Git Bash 自带的 ssh 读不到配置）；远程长任务用 `setsid -f` 后台跑、写日志，本机每 30 秒看一次。
 
