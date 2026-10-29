@@ -2,7 +2,15 @@
 
 > 最新条目在最上面。超过 300 行时把旧条目压缩成摘要移到 `docs/progress-archive/`。
 
-## 2026-10-29 21:15（进行中）
+## 2026-10-29 21:30
+- 完成：**千秋的声音训练完了并拉回本机**。chain.sh 全自动：装环境 6 分钟 → 试跑 1 分钟 → 正式训练 5 分钟（SoVITS 12 轮 + GPT 15 轮，4090）；`scp` 拉回 306 MB 只要 157 秒（SSH 通道 ~1.5 MB/s，比 Q 盘快 5 倍），sha256 与服务器一致，解压到 `chiaki-voice/chiaki-model/`。本机 `serve_local.py` 加载的是 e15 / e12（日志确认没有退回底模），按 DeskMate 的请求格式合成 4 句日语，Whisper 识别回来 3 句一字不差、第 4 句开头的「うーん」被识别成「ふぅ」。合成速度：第一句 20 秒（预热），之后每句约 2 秒。`npm run check` 全部通过（0.3.2）。
+- 进行中：无（本机语音服务已停；服务器上 `~/feng/chiaki-voice-train/` 先留着，中间几轮模型还要用）。
+- 没做（原因）：**0.3.2 的端到端和发布**——用户在全屏（`SHQueryUserNotificationState` = 2），按规定不启动可见窗口；发布要等端到端过（AGENTS §6）。
+- 下一步：① 用户试听（NEEDS_USER #13：`chiaki-voice\start-voice.bat`，声音页填参考音频），不像就用 `scp` 把服务器上 `GPT-SoVITS/SoVITS_weights_v2ProPlus/`、`GPT_weights_v2ProPlus/` 里的中间几轮拉回来换着试；② 用户不在全屏时：`npx tauri build --no-bundle && npm run e2e` → `scripts/measure.ps1` → 推送 `v0.3.2` 标签发布；③ ROADMAP 的 v2.3 待办。
+- 已知问题：音色像不像只有用户的耳朵能判断，Whisper 只能证明「能听懂、读对了」；`serve_local.py` 第一次合成要预热约 20 秒（DeskMate 对 GPT-SoVITS 的合成超时是 90 秒，`voice.rs` 782 行，够用）。
+- 本次决策：DECISIONS #56 补充 5
+
+## 2026-10-29 21:15（进行中；下面已被 21:30 条目取代）
 - 完成：**服务器装环境「一直卡在下载」彻底解决**（DECISIONS #56 补充 5）。真正原因不是 pip：官方 `install.sh` 用 conda 从 conda-forge 装 gcc 11 / ffmpeg / cmake / make / unzip，conda 的软件包本体被跳转到国外对象存储，国内下不动（之前九次重试都栽在这）。`setup.sh` 现在：只用国内 conda 镜像装 ffmpeg（不到 1 分钟），install.sh 里的 conda 步骤全部跳过（服务器自带 gcc/cmake 等），wget 换成 curl 小脚本，`TERM=xterm`（官方脚本下载成功后的 `tput` 在后台会报错、被当成失败整个重跑，G2PW 520 MB 因此白下两遍）。装环境 6 分钟走完，自检：RTX 4090 可用、日语词典 OK、读音频 OK。
 - 进行中：服务器 `chain.sh` 无人值守——`train.sh --quick`（21:09 开始，已在 SoVITS 训练）→ 通过后自动 `train.sh` 正式训练。结果看 `~/feng/chiaki-voice-train/chiaki-voice/chain.log` 最后一行（exit 0 完成 / 2 试跑失败看 quick.log / 3 训练失败看 train.log）。
 - 下一步：chain.log 出现 `exit 0` → `scp` / `sftp reget` 拉回 `output/chiaki-model.tar.gz` → 本机解压到 `chiaki-voice/chiaki-model/` → `serve_local.py` 合成几句、Whisper 识别回来对照 → 跑端到端、实测、发布 0.3.2。

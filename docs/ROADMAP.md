@@ -17,7 +17,10 @@
 - [x] 用户生成的 23 格表情拼图 `nanami.png` 切成透明背景的单图，放进用户图片目录（`scripts/chibi/slice_sheet.py`，DECISIONS #57）
 - [ ] 用户看了新形象后：按反馈调整反应显示时长、桌宠窗口里的大小和位置；内置的代码画 SVG 保留作没放图时的兜底。
 - [x] 声音训练包（DECISIONS #56）：取出千秋 711 条原声 → Whisper 识别、人名纠错、过滤后 635 条 / 51 分钟 → 无界面训练脚本 → 本机 4060 上 `train.py --quick` 全流程通过（Windows 上 GPT 训练用单卡启动器）、试跑模型合成日语 / 中文再用 Whisper 识别回来一致 → 传到服务器 `~/feng/chiaki-voice-train/`（Q 盘对应 `~/feng`）
-- [ ] 训练（用户 2026-10-29 让 agent 通过 SSH 代为训练，用用户本机已配好的密钥登录）→ 用 SSH 拷回最后一轮的模型 → 本机推理服务（`D:\dev\chiaki-gsv-venv`，`scripts/voice-train/serve_local.py`，127.0.0.1:9880）→ DeskMate「声音」页选 GPT-SoVITS、填参考音频 → 试听调参
+- [x] 训练（用户 2026-10-29 让 agent 通过 SSH 代为训练，用用户本机已配好的密钥登录）→ 用 SSH 拷回最后一轮的模型 → 本机推理服务（`D:\dev\chiaki-gsv-venv`，`scripts/voice-train/serve_local.py`，127.0.0.1:9880）→ DeskMate「声音」页选 GPT-SoVITS、填参考音频 → 试听调参
+  - 2026-10-29 21:20 训练完成并拉回（装环境 6 分钟 + 试跑 1 分钟 + 正式训练 5 分钟，SSH 拷回 306 MB 只要 2.5 分钟，sha256 一致，解压在 `chiaki-voice/chiaki-model/`）；本机服务加载的是 e15 / e12 模型（没退回底模），按 DeskMate 请求格式合成 4 句日语、Whisper 识别回来 3 句一字不差。**音色像不像还没人听过。**
+- [ ] 用户试听 + 调参（NEEDS_USER #13：`start-voice.bat`，声音页填参考音频）；不像就拉服务器上留着的中间几轮换着试
+- [ ] 0.3.2 端到端（`npx tauri build --no-bundle && npm run e2e`，要用户不在全屏时跑）→ 实测 → 推送 `v0.3.2` 标签发布（`npm run check` 已于 2026-10-29 21:20 通过）
 
 ## v2.3 待办（用户 2026-10-29 晚上的反馈，用户说先记着、声音训练做完再做）
 
