@@ -52,7 +52,7 @@ DeskMate：住在桌面角落、像真人一样陪着用户的角色（v2，日�
 - API Key 只存系统凭据管理器（`keyring` crate）。不能明文落盘、不能进日志、不能进 git、不能传给前端（前端只拿到末尾 4 位）。
 - 日志不记录密钥和完整对话内容；日志自动轮换、限大小。
 - 每次提交前跑 gitleaks（pre-commit 钩子：`.githooks/pre-commit`，`git config core.hooksPath .githooks`）。发现疑似密钥立刻停止提交并修复。CI 里也跑一次。
-- 仓库 https://github.com/koara666/DeskMate 是**公开**的（用户 2026-10-28 确认，见 NEEDS_USER #2、DECISIONS #24）：每次提交都会被所有人看到，绝不能提交密钥、个人信息、他人的角色图片。不要发布 Release，除非 NEEDS_USER 里记录了用户已确认。
+- 仓库 https://github.com/koara666/DeskMate 是**公开**的（用户 2026-10-28 确认，见 NEEDS_USER #2、DECISIONS #24）：每次提交都会被所有人看到，绝不能提交密钥、个人信息、他人的角色图片。**发布 Release：用户 2026-10-29 确认「每次更新版本之后都直接发布」**（DECISIONS #54）——版本号改了、`npm run check` 和端到端都通过后，推送代码和 `v<版本>` 标签，由 `.github/workflows/release.yml` 自动发布；发布前先用 gitleaks 扫一遍全部历史。
 - 本仓库的 git 提交邮箱是 GitHub 匿名地址（仓库内 `git config user.email`），不要改回真实邮箱。
 - Tauri capabilities 最小化；严格 CSP；不加载远程网页；不用 eval / `innerHTML` 渲染模型输出（Preact 默认转义，禁止 `dangerouslySetInnerHTML`）。
 - 不做遥测，不做静默的自动更新：只检查 GitHub 上的最新版本号（默认开、可关，DECISIONS #48），下载和安装必须用户点了才做，安装包要校验 SHA-256。
