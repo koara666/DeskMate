@@ -44,6 +44,8 @@ impl Default for MockBackend {
 }
 
 impl MockBackend {
+    /// 测试用：不逐字等待
+    #[cfg(test)]
     pub fn instant() -> Self {
         Self {
             chunk_delay: Duration::ZERO,

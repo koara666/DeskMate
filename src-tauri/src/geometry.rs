@@ -24,9 +24,6 @@ impl Rect {
     pub fn center(&self) -> (i32, i32) {
         (self.x + self.w / 2, self.y + self.h / 2)
     }
-    pub fn contains_point(&self, (px, py): (i32, i32)) -> bool {
-        px >= self.x && px < self.right() && py >= self.y && py < self.bottom()
-    }
     /// 与另一个矩形重叠的面积
     pub fn intersection_area(&self, o: &Rect) -> i64 {
         let w = (self.right().min(o.right()) - self.x.max(o.x)).max(0) as i64;

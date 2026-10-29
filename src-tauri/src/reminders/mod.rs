@@ -278,6 +278,8 @@ pub fn delete(db: &Connection, id: i64) -> rusqlite::Result<bool> {
     Ok(db.execute("DELETE FROM reminders WHERE id = ?1", [id])? > 0)
 }
 
+/// 测试用：直接改状态（界面上暂停 / 恢复走 `reminder_set_status` 命令，整条保存）
+#[cfg(test)]
 pub fn set_status(db: &Connection, id: i64, status: &str) -> rusqlite::Result<bool> {
     Ok(db.execute(
         "UPDATE reminders SET status = ?2 WHERE id = ?1",

@@ -252,6 +252,23 @@ pub async fn complete(
     Ok(out)
 }
 
+/// 把一轮不经过模型的对话记进聊天记录，之后聊天时角色知道刚才发生了什么（吩咐的提醒、聊天里开的游戏、
+/// 小事件的选项……）。`user` 为空 = 只记她主动说的话。用户暂停了记忆时由 `current_or_new` 处理。
+pub fn record_exchange(st: &AppState, user: Option<&str>, assistant: &str) {
+    let Some(c) = st.current_character() else {
+        return;
+    };
+    let now = memory::now_secs();
+    let paused = st.settings().memory_paused;
+    let db = st.db();
+    if let Ok(conv) = conversation::current_or_new(&db, &c.manifest.id, now, paused) {
+        if let Some(u) = user {
+            let _ = conversation::append(&db, conv, Role::User, u, now);
+        }
+        let _ = conversation::append(&db, conv, Role::Assistant, assistant, now);
+    }
+}
+
 pub fn now_text() -> String {
     use chrono::Datelike;
     let now = chrono::Local::now();

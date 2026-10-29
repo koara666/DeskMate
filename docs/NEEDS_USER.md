@@ -136,6 +136,20 @@
   4. 告诉 Claude「训练完了」——Claude 会从 Q 盘把最后一轮的模型（约 300 MB，Q 盘很慢，要 15~20 分钟）拷回来、在你电脑上配好语音服务。
   5. 声音满意以后再在服务器上 `rm -rf ~/feng/chiaki-voice-train`（所有东西都在这一个文件夹里；中间几轮的模型也在里面，最后一轮不好听时还要用）。
 
+### [ ] 14. 把千秋的声音模型传到 GitHub（用户 2026-10-29 要求，需要你来点一下）
+- **做什么**：把训练好的模型 `D:\DeskMate\chiaki-voice\output\chiaki-model.tar.gz`（306 MB）传到 GitHub 的一个**单独的发布页**（Release），别人和以后的你换电脑都能下载。
+- **为什么这样传、为什么要你来**：两个模型文件各 150 MB 左右，超过 GitHub 代码仓库单文件 100 MB 的限制；而且放进代码历史就删不干净了，万一版权方要求删除就麻烦。发布页附件删除就是点一下。传上去需要你的 GitHub 登录（我没有，也不去读你电脑里保存的登录凭据；自动模式也拦下了我「下载并运行 gh 命令行」的操作）。
+- **怎么做（网页，最简单）**：
+  1. 打开 https://github.com/koara666/DeskMate/releases/new
+  2. 点 **Choose a tag**，输入 `voice-chiaki-v1`，选 **Create new tag: voice-chiaki-v1 on publish**。
+  3. 标题填 `千秋的声音模型（GPT-SoVITS，日语）`；说明栏把 `D:\DeskMate\docs\release-notes\voice-chiaki-v1.md` 的全部内容复制进去。
+  4. 把 `D:\DeskMate\chiaki-voice\output\chiaki-model.tar.gz` 拖到 **Attach binaries** 那一栏，等进度条走完（306 MB，看你的上传网速）。
+  5. **一定要勾上 `Set as a pre-release`，并取消勾选 `Set as the latest release`**。原因：DeskMate 的「检查更新」读的是 GitHub 的「最新发布」，这个发布页不是软件版本，如果被当成最新，所有人以后都收不到软件更新（程序会跳过预发布，所以勾了就没事）。
+  6. 点 **Publish release**。
+  7. 告诉 Claude「传好了」，Claude 会核对下载下来的 SHA-256（应该是 `630af666d19d4521c834bbd6cb10ec8dc30a0d8e85e331a7ef18953a4fa14256`），然后删掉 `docs/voice/CHIAKI_MODEL.md` 开头那行「还没上传」的提示。
+- **或者用命令行**：先装 GitHub 官方命令行（在 DeskMate 对话框里输入 `! winget install GitHub.cli`），再 `! gh auth login`（按提示在浏览器里点授权），然后告诉 Claude，Claude 会用 `gh release create voice-chiaki-v1 … --prerelease --latest=false` 上传。
+- 之后想撤下：发布页右上角 Delete，或告诉 Claude。
+
 ## 已完成
 
 ### [x] 10. 发布 GitHub Release

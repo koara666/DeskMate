@@ -385,7 +385,8 @@ pub async fn start_live_with(st: &AppState, game: &str) -> Result<Start, String>
     }
 }
 
-/// 只用内置题库（测试、离线兜底）
+/// 只用内置题库（测试用；正式开局走 `start_live_with`，出题失败时也退回内置题库）
+#[cfg(test)]
 pub fn start_with(st: &AppState, game: &str) -> Result<Start, String> {
     check_backend(st)?;
     start_inner(st, game, None, None)

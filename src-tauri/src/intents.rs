@@ -5,9 +5,8 @@
 //! `[[玩：游戏名]]` / `[[提醒：一句吩咐]]` 动作标记（`markers.rs`）兜底。
 //! 这些都是用户自己要求的、可以撤回的小事（打开游戏、开关勿扰、藏起来），所以直接做；删提醒只删内容对得上的那一个。
 
-use crate::backends::{FinishReason, Role};
+use crate::backends::FinishReason;
 use crate::chat::{self, ChatEvent, PetState};
-use crate::memory::{self, conversation};
 use crate::state::AppState;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager};
@@ -370,15 +369,7 @@ pub async fn handle(
         Intent::CancelReminder(k) => cancel_reminder(app, &st, &k),
     };
     // 记进聊天记录：之后聊天时她知道刚才做了什么
-    if let Some(c) = st.current_character() {
-        let now = memory::now_secs();
-        let paused = st.settings().memory_paused;
-        let db = st.db();
-        if let Ok(conv) = conversation::current_or_new(&db, &c.manifest.id, now, paused) {
-            let _ = conversation::append(&db, conv, Role::User, text, now);
-            let _ = conversation::append(&db, conv, Role::Assistant, &say, now);
-        }
-    }
+    chat::record_exchange(&st, Some(text), &say);
     crate::companion::interact(app, crate::companion::Interaction::Chat);
     chat::emit_pet_state(app, PetState::Happy);
     crate::voice::on_line(app, &say, crate::voice::Scene::Chat);

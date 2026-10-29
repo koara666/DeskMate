@@ -8,7 +8,7 @@
 //!   用户和角色互动后恢复。
 
 use crate::chat::{self, PetState};
-use crate::memory::{self, conversation};
+use crate::memory;
 use crate::state::AppState;
 use crate::usage::{self, Budget};
 use rusqlite::Connection;
@@ -523,17 +523,8 @@ pub fn say_now(app: &AppHandle, item: Item) {
 
 fn deliver(app: &AppHandle, item: Item, decision: Decision, id: u64) {
     let st = app.state::<AppState>();
-    if item.store
-        && !item.ephemeral
-        && let Some(c) = st.current_character()
-    {
-        let now = memory::now_secs();
-        let paused = st.settings().memory_paused;
-        let db = st.db();
-        if let Ok(conv) = conversation::current_or_new(&db, &c.manifest.id, now, paused) {
-            let _ =
-                conversation::append(&db, conv, crate::backends::Role::Assistant, &item.text, now);
-        }
+    if item.store && !item.ephemeral {
+        chat::record_exchange(&st, None, &item.text);
     }
     log::info!("主动发言：{:?}（{:?}）", item.kind, decision);
     let msg = ProactiveMessage {

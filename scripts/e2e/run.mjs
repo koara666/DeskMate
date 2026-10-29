@@ -599,6 +599,14 @@ async function main() {
       console.log(`    （桌宠页面的系统声音：${n} 个，其中日语 ${nja} 个）`);
       if (n < 0) throw new Error('WebView2 里没有 speechSynthesis');
     });
+    await test('模型页：有联网搜索开关，默认开着（DECISIONS #59）', async () => {
+      await settings.click('模型');
+      await settings.waitFor(`document.querySelector('main h1')?.innerText === '模型'`, '模型页');
+      await settings.waitText('允许她上网搜索');
+      const on = await settings.eval(`[...document.querySelectorAll('label.row')].find(l => l.innerText.includes('允许她上网搜索'))?.querySelector('input')?.checked === true`);
+      if (!on) throw new Error('联网搜索默认应该是开着的');
+      await settings.shot('settings-模型.png');
+    });
     await test('换成七海千秋：桌宠和聊天窗口换上掌机风皮肤', async () => {
       await settings.click('角色');
       await settings.waitFor(`document.body.innerText.includes('七海千秋')`, '角色列表');

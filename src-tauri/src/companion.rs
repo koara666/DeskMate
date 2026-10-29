@@ -581,18 +581,7 @@ pub fn choose(app: &AppHandle, id: u64, index: usize) -> Result<String, String> 
         .ok_or("这个问题已经过去啦")?;
     let opt = ch.options.get(index).ok_or("没有这个选项")?.clone();
     let reply = ch.replies[index].clone();
-    if let Some(c) = st.current_character() {
-        let now = crate::memory::now_secs();
-        let paused = st.settings().memory_paused;
-        let db = st.db();
-        if let Ok(conv) =
-            crate::memory::conversation::current_or_new(&db, &c.manifest.id, now, paused)
-        {
-            use crate::backends::Role;
-            let _ = crate::memory::conversation::append(&db, conv, Role::User, &opt, now);
-            let _ = crate::memory::conversation::append(&db, conv, Role::Assistant, &reply, now);
-        }
-    }
+    crate::chat::record_exchange(&st, Some(&opt), &reply);
     interact(app, Interaction::Engaged);
     Ok(reply)
 }

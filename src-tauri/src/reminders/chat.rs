@@ -2,11 +2,12 @@
 //! 只在吩咐的那一刻最多调用一次模型（本地规则解析不了时）；离线 / mock 时本地规则照样能用。
 
 use super::model::{self, ModelOutcome};
-use super::parse::{self, Outcome, Parsed};
+#[cfg(test)]
+use super::parse::Parsed;
+use super::parse::{self, Outcome};
 use super::{Draft, draft_from, now_local};
-use crate::backends::{FinishReason, Role};
+use crate::backends::FinishReason;
 use crate::chat::{self, ChatEvent, PetState};
-use crate::memory::{self, conversation};
 use crate::state::AppState;
 use crate::usage;
 use std::time::Duration;
@@ -92,15 +93,7 @@ pub async fn handle(
         }
     };
     // 记进聊天记录：之后聊天时角色知道刚才在设提醒
-    if let Some(c) = st.current_character() {
-        let now = memory::now_secs();
-        let paused = st.settings().memory_paused;
-        let db = st.db();
-        if let Ok(conv) = conversation::current_or_new(&db, &c.manifest.id, now, paused) {
-            let _ = conversation::append(&db, conv, Role::User, text, now);
-            let _ = conversation::append(&db, conv, Role::Assistant, &say, now);
-        }
-    }
+    chat::record_exchange(&st, Some(text), &say);
     chat::emit_pet_state(app, PetState::Happy);
     crate::voice::on_line(app, &say, crate::voice::Scene::Chat);
     let _ = channel.send(ChatEvent::Delta { text: say.clone() });
@@ -131,6 +124,7 @@ pub fn draft_for_marker(st: &AppState, text: &str) -> (Option<Draft>, bool) {
 }
 
 /// 测试用：本地解析 + 复述（不需要 Tauri）
+#[cfg(test)]
 pub fn local_draft(st: &AppState, text: &str) -> Option<(Parsed, Draft)> {
     match parse::parse(text, now_local()) {
         Outcome::Ok(p) => {
