@@ -1,7 +1,5 @@
 # 七海千秋的声音模型（GPT-SoVITS）
 
-> **状态：发布页还没上传**（需要仓库所有者操作，步骤见 `docs/NEEDS_USER.md` 第 14 项）。上传后删掉这一行。
-
 用《超级弹丸论破 2》里七海千秋的日语原声训练出来的 GPT-SoVITS 模型，给 DeskMate 的「声音」功能用。模型文件**不放在代码仓库里，也不在安装包里**，单独放在 GitHub 的一个发布页（Release）：
 
 - 发布页标签：`voice-chiaki-v1`（https://github.com/koara666/DeskMate/releases/tag/voice-chiaki-v1）
