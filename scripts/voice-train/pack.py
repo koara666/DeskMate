@@ -12,13 +12,13 @@ import sys
 import tarfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SKIP_DIRS = {"pretrained_models", "TEMP", "logs", "output", "__pycache__", ".git"}
+SKIP_DIRS = {"pretrained_models", "TEMP", "logs", "output", "__pycache__", ".git", "env", ".cache", "miniforge3"}
 SKIP_PREFIX = ("SoVITS_weights", "GPT_weights")
 
 
 def main():
     root = os.path.abspath(sys.argv[1])
-    for f in ("setup.sh", "train.sh", "train.py", "README.md"):
+    for f in ("env.sh", "setup.sh", "train.sh", "train.py", "README.md"):
         src = os.path.join(HERE, f)
         data = open(src, "rb").read()
         if f.endswith(".sh"):

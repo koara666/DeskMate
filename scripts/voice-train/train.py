@@ -63,11 +63,17 @@ def main():
             sys.exit("缺少预训练模型 %s（%s）。先运行 setup.sh。" % (k, p))
     if not torch.cuda.is_available():
         sys.exit("没有检测到 NVIDIA 显卡（torch.cuda.is_available() = False）。")
+    for i in range(torch.cuda.device_count()):
+        free, total = torch.cuda.mem_get_info(i)
+        print("  显卡 %d：%s，空闲 %.1f / %.1f GB" % (i, torch.cuda.get_device_name(i), free / 1024**3, total / 1024**3))
     gpu_idx = int(a.gpu)
-    props = torch.cuda.get_device_properties(gpu_idx)
-    mem_gb = int(props.total_memory / 1024**3 + 0.4)
-    batch = a.batch or max(1, mem_gb // 2)
-    print("显卡：%s，%d GB，batch = %d" % (props.name, mem_gb, batch))
+    free, total = torch.cuda.mem_get_info(gpu_idx)
+    free_gb = int(free / 1024**3)
+    # 和网页界面一样按「显存 GB / 2」定 batch，但用的是现在空闲的显存（服务器上可能有别的任务）
+    batch = a.batch or min(12, max(1, free_gb // 2))
+    print("用显卡 %d，空闲 %d GB，batch = %d" % (gpu_idx, free_gb, batch))
+    if free_gb < 6 and not a.batch:
+        print("  提醒：这张卡空闲显存不多，可能有别人在用。换一张空闲的：--gpu 编号")
 
     exp = a.exp + ("_quick" if a.quick else "")
     wav_dir = os.path.join(ROOT, "dataset", "wavs")
