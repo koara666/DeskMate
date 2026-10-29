@@ -62,7 +62,13 @@ for f in \
 done
 # install.sh 看到 pretrained_models/sv 已经存在，就不会再下载 4.5 GB 的全套模型包
 
-say "运行 GPT-SoVITS 官方安装脚本（PyTorch、依赖、日语词典）"
+say "PyTorch 2.9.1（固定成本机测试过的版本）"
+# 官方 install.sh 装 torch 不写版本，会装到当时最新的；先装好固定版本，它看到已经装了就不会再换
+TORCH_INDEX="https://download.pytorch.org/whl/$(echo "$CUDA_VER" | tr 'A-Z' 'a-z')"
+python -m pip install torch==2.9.1 torchaudio==2.9.1 --index-url "$TORCH_INDEX"
+python -m pip install torchcodec==0.8.1
+
+say "运行 GPT-SoVITS 官方安装脚本（依赖、日语词典）"
 cd "$ROOT/GPT-SoVITS"
 # 只用 conda-forge：不碰 Anaconda 官方频道（新版 conda 用官方频道要先接受服务条款，非交互运行会直接报错）
 sed -i 's/conda install --yes --quiet -c conda-forge/conda install --yes --quiet --override-channels -c conda-forge/' install.sh

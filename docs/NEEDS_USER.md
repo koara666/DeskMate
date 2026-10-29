@@ -115,19 +115,20 @@
 ### [ ] 13. 在你的 4090 服务器上训练千秋的声音（2026-10-29 更新）
 - **做什么**：Claude 已经从你的游戏里取出千秋的 711 条日语原声、识别好文字，连同训练脚本打成一个包，放进 Q 盘（服务器主目录）里单独的 `chiaki-voice-train` 文件夹。你只需要 SSH 登录服务器敲几条命令。
 - **为什么**：Fish Audio 的社区声音不像；用她本人的原声训练最像。模型以后在你电脑上跑，DeskMate 安装包不会变大。
-- **怎么做**（完整说明在训练包里的 `README.md`，也就是 `scripts/voice-train/README.md`）：
+- **怎么做**（完整说明在训练包里的 `README.md`，Q 盘 `chiaki-voice-train` 里也放了一份，也就是 `scripts/voice-train/README.md`）：
   1. SSH 登录服务器，运行：
      ```
      cd ~/chiaki-voice-train
-     sha256sum -c chiaki-voice.tar.gz.sha256
+     sha256sum -c chiaki-voice.tar.gz.sha256 chiaki-voice-scripts.tar.gz.sha256
      tar -xzf chiaki-voice.tar.gz
+     tar -xzf chiaki-voice-scripts.tar.gz
      cd chiaki-voice
      bash setup.sh
      ```
-  2. 试跑：`bash train.sh --quick`，看到「完成！」再继续。
-  3. 先 `nvidia-smi` 看哪张卡空着，正式训练：`nohup bash train.sh --gpu 空闲的卡号 > train.log 2>&1 &`，`tail -f train.log` 看进度（大约 20~40 分钟）。
-  4. 告诉 Claude「训练完了」——Claude 会从 Q 盘把模型拷回来、在你电脑上配好语音服务。
-  5. 拿回来以后在服务器上 `rm -rf ~/chiaki-voice-train`（所有东西都在这一个文件夹里）。
+  2. 试跑：`bash train.sh --quick`（约 5 分钟），看到「完成！」再继续。
+  3. 正式训练：`nohup bash train.sh > train.log 2>&1 &`，`tail -f train.log` 看进度（大约 20~40 分钟）。默认自动用空闲显存最多的卡；想指定就加 `--gpu 卡号`（编号看 `nvidia-smi`）。
+  4. 告诉 Claude「训练完了」——Claude 会从 Q 盘把最后一轮的模型（约 300 MB，Q 盘很慢，要 15~20 分钟）拷回来、在你电脑上配好语音服务。
+  5. 声音满意以后再在服务器上 `rm -rf ~/chiaki-voice-train`（所有东西都在这一个文件夹里；中间几轮的模型也在里面，最后一轮不好听时还要用）。
 
 ## 已完成
 

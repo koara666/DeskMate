@@ -11,6 +11,8 @@ export TMPDIR="$ROOT/.cache/tmp"
 export TORCH_HOME="$ROOT/.cache/torch"
 export MPLCONFIGDIR="$ROOT/.cache/matplotlib"
 export NUMBA_CACHE_DIR="$ROOT/.cache/numba"
+# 显卡编号按 PCI 顺序，和 nvidia-smi 显示的一致（不然 --gpu 1 可能用到别的卡）
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
 mkdir -p "$PIP_CACHE_DIR" "$HF_HOME" "$CONDA_PKGS_DIRS" "$TMPDIR" "$TORCH_HOME" "$MPLCONFIGDIR" "$NUMBA_CACHE_DIR"
 
 # 找 conda：优先用包里自己装的，其次用服务器上已有的（只借用 conda 命令，环境建在包里）

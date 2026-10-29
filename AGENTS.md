@@ -89,6 +89,7 @@ npx tauri build --no-bundle && npm run e2e   # 端到端界面测试（隔离的
 - 单实例：测 release 前先关掉 `tauri dev` 启动的实例（同一个 identifier）。设置了 `DESKMATE_DATA_DIR` 的测试实例不受单实例限制，可以和用户正在用的 DeskMate 同时运行。
 - 会创建或操作窗口的 Tauri 命令必须是 async，主线程回调（菜单、快捷键）里要放到后台执行，否则 Windows 上会死锁（DECISIONS #22）。
 - 启动任何可见窗口（实测、截图）前先确认用户没有在全屏玩游戏/看视频（`SHQueryUserNotificationState` 返回 2~4 就先别启动）。
+- Q 盘是用户服务器的 sshfs 网络盘（用户的科研目录，只动 `chiaki-voice-train/`），走 Tailscale 香港中转，只有 0.3~0.4 MB/s，**连接会整个卡死**：卡死后碰 Q 盘的进程停在内核里，不报错、`timeout` 和 `taskkill` 都杀不掉，只能用户重连 Q 盘。所以：传文件只用 `scripts/voice-train/safe_copy.py`（续传 + 卡住提示）并放后台；**不要只等后台任务的完成通知**，同时用 Monitor 盯日志里的「卡住了」或日志超过几分钟没更新；不要在前台命令里直接 `ls` / `stat` Q 盘。
 
 ## 9. 文档地图
 | 文件 | 内容 |

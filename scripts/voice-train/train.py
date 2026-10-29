@@ -6,13 +6,14 @@
     python train.py --quick    # 冒烟测试：只用 40 条、各训练 1 轮，几分钟，确认环境没问题
 做的事和 GPT-SoVITS 网页界面「1-GPT-SoVITS-TTS」那一页完全一样（照 webui.py 的 open1abc / open1Ba / open1Bb 写的）：
   1A 文字转音素 + BERT 特征 → 1B 音频特征（HuBERT、32k 音频、声纹）→ 1C 语义编码 → SoVITS 训练 → GPT 训练
-最后把训练出来的模型和参考音频放进 output/，打成一个压缩包，拿回来就行。
+最后把最后一轮的模型和参考音频放进 output/，打成一个压缩包，拿回来就行（其他几轮留在服务器上）。
 中途断了重新运行会跳过已经做完的预处理步骤。
 """
 import argparse
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -72,7 +73,7 @@ def main():
     ap.add_argument("--gpt-epochs", type=int, default=15)
     ap.add_argument("--gpt-save-every", type=int, default=5)
     ap.add_argument("--batch", type=int, default=0, help="每批多少条，0 = 按显存自动（显存 GB / 2）")
-    ap.add_argument("--gpu", default="0", help="用哪张显卡")
+    ap.add_argument("--gpu", default="", help="用哪张显卡（编号和 nvidia-smi 一样）；不填就用空闲显存最多的那张")
     ap.add_argument("--quick", action="store_true", help="冒烟测试：40 条、各 1 轮")
     a = ap.parse_args()
 
@@ -83,12 +84,23 @@ def main():
             sys.exit("缺少预训练模型 %s（%s）。先运行 setup.sh。" % (k, p))
     if not torch.cuda.is_available():
         sys.exit("没有检测到 NVIDIA 显卡（torch.cuda.is_available() = False）。")
-    for i in range(torch.cuda.device_count()):
-        free, total = torch.cuda.mem_get_info(i)
-        print("  显卡 %d：%s，空闲 %.1f / %.1f GB" % (i, torch.cuda.get_device_name(i), free / 1024**3, total / 1024**3))
-    gpu_idx = int(a.gpu)
-    free, total = torch.cuda.mem_get_info(gpu_idx)
-    free_gb = int(free / 1024**3)
+    # 用 nvidia-smi 看空闲显存：torch.cuda.mem_get_info 会在每张卡上建一个 CUDA 上下文，
+    # 这个进程一直开到训练结束，等于在服务器每张卡上都白占几百 MB（别人的卡也算）
+    q = subprocess.run(
+        ["nvidia-smi", "--query-gpu=index,name,memory.free,memory.total", "--format=csv,noheader,nounits"],
+        capture_output=True, text=True,
+    )
+    gpus = {}
+    for row in q.stdout.strip().splitlines():
+        idx, name, free_mb, total_mb = [x.strip() for x in row.split(",")]
+        gpus[int(idx)] = int(free_mb) / 1024
+        print("  显卡 %s：%s，空闲 %.1f / %.1f GB" % (idx, name, int(free_mb) / 1024, int(total_mb) / 1024))
+    if not gpus:
+        sys.exit("nvidia-smi 没有列出显卡：" + (q.stderr or "").strip())
+    gpu_idx = int(a.gpu) if a.gpu else max(gpus, key=gpus.get)
+    if gpu_idx not in gpus:
+        sys.exit("没有 %d 号显卡，可选：%s" % (gpu_idx, ", ".join(map(str, gpus))))
+    free_gb = int(gpus[gpu_idx])
     # 和网页界面一样按「显存 GB / 2」定 batch，但用的是现在空闲的显存（服务器上可能有别的任务）
     batch = a.batch or min(12, max(1, free_gb // 2))
     print("用显卡 %d，空闲 %d GB，batch = %d" % (gpu_idx, free_gb, batch))
@@ -177,79 +189,96 @@ def main():
     check("1C 语义", count_lines(sem_path) - 1, n_hubert)
 
     # ---------- SoVITS ----------
-    log("SoVITS 训练（%d 轮）" % a.sovits_epochs)
-    data = json.load(open(os.path.join(GSV, env["s2config_path"]), encoding="utf8"))
-    data["train"].update(
-        {
-            "batch_size": batch,
-            "epochs": a.sovits_epochs,
-            "text_low_lr_rate": 0.4,
-            "pretrained_s2G": PRETRAINED["s2G"],
-            "pretrained_s2D": PRETRAINED["s2D"],
-            "if_save_latest": True,
-            "if_save_every_weights": True,
-            "save_every_epoch": a.sovits_save_every,
-            "gpu_numbers": str(gpu_idx),
-            "grad_ckpt": False,
-            "lora_rank": "32",
-        }
-    )
-    data["model"]["version"] = VERSION
-    data["data"]["exp_dir"] = data["s2_ckpt_dir"] = opt_dir
-    data["save_weight_dir"] = "SoVITS_weights_" + VERSION
-    data["name"] = exp
-    data["version"] = VERSION
-    os.makedirs(os.path.join(opt_dir, "logs_s2_" + VERSION), exist_ok=True)
-    s2_cfg = os.path.join(tmp, "tmp_s2.json")
-    json.dump(data, open(s2_cfg, "w", encoding="utf8"))
-    run("GPT_SoVITS/s2_train.py", env, "--config", s2_cfg)
+    sovits_done = glob.glob(os.path.join(GSV, "SoVITS_weights_%s" % VERSION, "%s_e%d_s*.pth" % (exp, a.sovits_epochs)))
+    if sovits_done:
+        log("SoVITS 已经训练完（%s），跳过" % os.path.basename(sovits_done[0]))
+    else:
+        log("SoVITS 训练（%d 轮）" % a.sovits_epochs)
+        data = json.load(open(os.path.join(GSV, env["s2config_path"]), encoding="utf8"))
+        data["train"].update(
+            {
+                "batch_size": batch,
+                "epochs": a.sovits_epochs,
+                "text_low_lr_rate": 0.4,
+                "pretrained_s2G": PRETRAINED["s2G"],
+                "pretrained_s2D": PRETRAINED["s2D"],
+                "if_save_latest": True,
+                "if_save_every_weights": True,
+                "save_every_epoch": a.sovits_save_every,
+                "gpu_numbers": str(gpu_idx),
+                "grad_ckpt": False,
+                "lora_rank": "32",
+            }
+        )
+        data["model"]["version"] = VERSION
+        data["data"]["exp_dir"] = data["s2_ckpt_dir"] = opt_dir
+        data["save_weight_dir"] = "SoVITS_weights_" + VERSION
+        data["name"] = exp
+        data["version"] = VERSION
+        os.makedirs(os.path.join(opt_dir, "logs_s2_" + VERSION), exist_ok=True)
+        s2_cfg = os.path.join(tmp, "tmp_s2.json")
+        json.dump(data, open(s2_cfg, "w", encoding="utf8"))
+        run("GPT_SoVITS/s2_train.py", env, "--config", s2_cfg)
 
     # ---------- GPT ----------
-    log("GPT 训练（%d 轮）" % a.gpt_epochs)
-    import yaml
+    gpt_done = os.path.join(GSV, "GPT_weights_%s" % VERSION, "%s-e%d.ckpt" % (exp, a.gpt_epochs))
+    if os.path.exists(gpt_done):
+        log("GPT 已经训练完（%s），跳过" % os.path.basename(gpt_done))
+    else:
+        # 上次中途断了留下的检查点不接着训：PyTorch 2.6 起默认只读权重，Lightning 续训读不了检查点里的路径对象
+        # （实测 Unsupported global: pathlib.WindowsPath，Linux 上是 PosixPath）。GPT 从头训也就几分钟。
+        shutil.rmtree(os.path.join(opt_dir, "logs_s1_" + VERSION, "ckpt"), ignore_errors=True)
+        log("GPT 训练（%d 轮）" % a.gpt_epochs)
+        import yaml
 
-    data = yaml.load(open(os.path.join(GSV, "GPT_SoVITS/configs/s1longer-v2.yaml"), encoding="utf8"), Loader=yaml.FullLoader)
-    data["train"].update(
-        {
-            "batch_size": batch,
-            "epochs": a.gpt_epochs,
-            "save_every_n_epoch": a.gpt_save_every,
-            "if_save_every_weights": True,
-            "if_save_latest": True,
-            "if_dpo": False,
-            "half_weights_save_dir": "GPT_weights_" + VERSION,
-            "exp_name": exp,
-        }
-    )
-    data["pretrained_s1"] = PRETRAINED["s1"]
-    data["train_semantic_path"] = sem_path
-    data["train_phoneme_path"] = text_path
-    data["output_dir"] = os.path.join(opt_dir, "logs_s1_" + VERSION)
-    if os.name == "nt":
-        data["data"]["num_workers"] = 0  # Windows 上多进程读数据容易卡住
-    env["hz"] = "25hz"
-    s1_cfg = os.path.join(tmp, "tmp_s1.yaml")
-    yaml.dump(data, open(s1_cfg, "w", encoding="utf8"), default_flow_style=False)
-    run("GPT_SoVITS/s1_train.py", env, "--config_file", s1_cfg)
+        data = yaml.load(open(os.path.join(GSV, "GPT_SoVITS/configs/s1longer-v2.yaml"), encoding="utf8"), Loader=yaml.FullLoader)
+        data["train"].update(
+            {
+                "batch_size": batch,
+                "epochs": a.gpt_epochs,
+                "save_every_n_epoch": a.gpt_save_every,
+                "if_save_every_weights": True,
+                "if_save_latest": True,
+                "if_dpo": False,
+                "half_weights_save_dir": "GPT_weights_" + VERSION,
+                "exp_name": exp,
+            }
+        )
+        data["pretrained_s1"] = PRETRAINED["s1"]
+        data["train_semantic_path"] = sem_path
+        data["train_phoneme_path"] = text_path
+        data["output_dir"] = os.path.join(opt_dir, "logs_s1_" + VERSION)
+        env["hz"] = "25hz"
+        s1_cfg = os.path.join(tmp, "tmp_s1.yaml")
+        yaml.dump(data, open(s1_cfg, "w", encoding="utf8"), default_flow_style=False)
+        if os.name == "nt":
+            # PyTorch 2.9 的 Windows 版跑不了 DDP（gloo 不可用），换成单卡启动器；Linux 服务器照常走官方脚本
+            run(os.path.join(ROOT, "s1_single_gpu.py"), env, "--config_file", s1_cfg)
+        else:
+            run("GPT_SoVITS/s1_train.py", env, "--config_file", s1_cfg)
 
     # ---------- 打包 ----------
+    # Q 盘只有约 0.4 MB/s，全部 6 个模型约 1 GB 要拷 40 分钟，所以只打包最后一轮的两个（其他几轮留在服务器上，需要时再拿）
     log("打包结果")
     out = os.path.join(ROOT, "output", exp)
-    os.makedirs(out, exist_ok=True)
+    shutil.rmtree(out, ignore_errors=True)
+    os.makedirs(out)
     got = []
-    for pat in ("SoVITS_weights_%s/%s_e*.pth" % (VERSION, exp), "GPT_weights_%s/%s-e*.ckpt" % (VERSION, exp)):
-        for f in glob.glob(os.path.join(GSV, pat)):
-            shutil.copy2(f, out)
-            got.append(os.path.basename(f))
+    for pat, rx in (("SoVITS_weights_%s/%s_e*.pth" % (VERSION, exp), r"_e(\d+)_s"), ("GPT_weights_%s/%s-e*.ckpt" % (VERSION, exp), r"-e(\d+)\.ckpt")):
+        files = sorted(glob.glob(os.path.join(GSV, pat)), key=lambda f: int(re.search(rx, os.path.basename(f)).group(1)))
+        if files:
+            print("  %s：%s" % (os.path.dirname(pat), ", ".join(os.path.basename(f) for f in files)))
+            shutil.copy2(files[-1], out)
+            got.append(os.path.basename(files[-1]))
     ref = os.path.join(ROOT, "ref")
     if os.path.isdir(ref):
         shutil.copytree(ref, os.path.join(out, "ref"), dirs_exist_ok=True)
-    if not got:
-        sys.exit("没有找到训练出来的模型文件，往上翻看看有没有报错。")
+    if len(got) < 2:
+        sys.exit("没有找到训练出来的模型文件（SoVITS 和 GPT 各一个），往上翻看看有没有报错。")
     tar_path = os.path.join(ROOT, "output", exp + "-model.tar.gz")
     with tarfile.open(tar_path, "w:gz") as t:
         t.add(out, arcname=exp + "-model")
-    print("\n完成！模型：", ", ".join(sorted(got)))
+    print("\n完成！打包了最后一轮的模型：", ", ".join(got))
     print("把这个文件拿回来：", tar_path, "（%.0f MB）" % (os.path.getsize(tar_path) / 1e6))
 
 

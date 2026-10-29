@@ -2,6 +2,23 @@
 
 > 最新条目在最上面。超过 300 行时把旧条目压缩成摘要移到 `docs/progress-archive/`。
 
+## 2026-10-29 19:10
+- 完成：
+  - **本机全流程跑通**（DECISIONS #56 补充 3）：`train.py --quick` 从头到尾通过（预处理四步 40/40 → SoVITS → GPT → 打包，RTX 4060 Laptop 6 分 40 秒）。GPT 训练在 Windows 上起不来的真正原因是 PyTorch 2.9.1 的 Windows 版 gloo 根本不可用（和主机名、代理无关），新增 `s1_single_gpu.py`（单卡启动器，不改官方源码，只在 Windows 上用）；去掉了和官方 DataLoader 冲突的「Windows 上 0 个读数据进程」。
+  - **推理验证**：`serve_local.py` 加载试跑模型，按 DeskMate 的请求格式合成日语两句、中文一句，再用 Whisper 识别回来，和原文一字不差。修了 `serve_local.py` 的相对路径：api_v2.py 找不到模型时会悄悄退回底模、还改写配置文件。
+  - **服务器上更稳**：PyTorch 固定 2.9.1 / torchcodec 0.8.1（官方 install.sh 不写版本）；显卡编号和 nvidia-smi 一致、不填 `--gpu` 时自动用空闲显存最多的卡、查显存改用 nvidia-smi（不在别人的卡上建 CUDA 上下文）；已经训完的步骤重跑时跳过；GPT 中途断了从头训（PyTorch 2.6+ 续训读不了检查点里的路径对象，本机实测）；只打包最后一轮的两个模型（约 300 MB）。
+  - `safe_copy.py`：续传（逐块核对已写部分）、1 MB 一块、默认 0.25 MB/s、卡住提示；`pack.py --scripts-only`（几十 KB 的脚本小包）。
+  - ROADMAP 新增「v2.3 待办」：用户反馈的表情对不上、方块对战不公平、海龟汤 / 猜东西答错、联网——用户说先记着、声音训练做完再做。
+  - 删掉误提交的 `__pycache__/*.pyc`，`.gitignore` 加 Python 缓存。
+- 进行中：**往 Q 盘传训练包又卡住了**——前 210 MB 读回核对全对，补写剩下 31 MB 时 sshfs 卡死（18:46 起没进展）。原因见 DECISIONS #56 的「Q 盘卡死」：Tailscale 走香港中转，sshfs 卡死后访问 Q 盘的进程都停在内核里、杀不掉（本机现在有两个这样的 python 进程：上传 21656、查空间 25012，重连 Q 盘后会自己退出）。要用户重连 Q 盘。
+- 下一步：用户重连 Q 盘后——
+  1. `python -I -X utf8 scripts/voice-train/safe_copy.py chiaki-voice.tar.gz "Q:\chiaki-voice-train"`（续传，只剩 31 MB），后台跑 + Monitor 盯「卡住了」；
+  2. 同样传 `chiaki-voice-scripts.tar.gz`（已打好，在仓库根目录）和 `scripts/voice-train/README.md`；
+  3. 如果又卡在 210 MB：可能是服务器硬盘满了或有配额，请用户在服务器上 `df -h ~`；
+  4. 告诉用户服务器上的命令（NEEDS_USER #13），等训练完拷回模型（README「给接手的人」里有步骤）。
+- 已知问题：本机试跑模型在 `chiaki-voice/output/chiaki_quick/`（只训练 1 轮，只用来测链路）。DeskMate 发给 GPT-SoVITS 的 `text_lang` 还写死 `zh`。
+- 本次决策：DECISIONS #56 补充 3、Q 盘卡死
+
 ## 2026-10-29 16:45
 - 完成：
   - **Q 版形象**（DECISIONS #57）：用户自己生成的 23 格表情拼图 `nanami.png`（根目录，已 .gitignore）→ `scripts/chibi/slice_sheet.py` 切成 23 张透明背景 PNG（253×223，底边对齐），放进 `%APPDATA%\DeskMate\characters\nanami-chiaki\assets\`。23 个名字和 CHIAKI_PROMPTS 第四节完全对上，够用。第一次抠图把脸颊抠穿了（皮肤暖白被当成背景、腮红被当成标签），已修好。
