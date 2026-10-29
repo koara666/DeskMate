@@ -475,12 +475,25 @@ fn read_head(path: &Path) -> std::io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-/// 在用户目录 assets/ 里找 `<name>.<ext>`：不跟随符号链接、限制大小、校验文件头
+/// 在用户目录 assets/ 里找 `<name>.<ext>`
 fn find_user_image(user_dir: &Path, name: &str) -> Option<UserImage> {
+    find_image_in(&user_dir.join("assets"), name)
+}
+
+/// 这个角色用哪张图：用户自己放的永远优先；没有就用安装包里自带的图片（比如千秋的 Q 版形象包，DECISIONS #66）。
+/// 内置的 SVG 不走这里（是另一套，见 `builtin_set`）。
+fn find_char_image(c: &Character, name: &str) -> Option<UserImage> {
+    find_user_image(&c.user_dir, name).or_else(|| {
+        let dir = c.builtin_dir.as_ref()?.join("assets");
+        find_image_in(&dir, name)
+    })
+}
+
+/// 在一个 assets 文件夹里找 `<name>.<ext>`：不跟随符号链接、限制大小、校验文件头
+fn find_image_in(assets: &Path, name: &str) -> Option<UserImage> {
     if !valid_id(name) {
         return None;
     }
-    let assets = user_dir.join("assets");
     for ext in IMAGE_EXTS {
         let p = assets.join(format!("{name}.{ext}"));
         let Ok(meta) = std::fs::symlink_metadata(&p) else {
@@ -518,7 +531,7 @@ fn find_user_image(user_dir: &Path, name: &str) -> Option<UserImage> {
 
 /// 用户图片的访问地址；没有可用的图片时返回 None
 fn user_image_url(c: &Character, name: &str) -> Option<String> {
-    let img = find_user_image(&c.user_dir, name)?;
+    let img = find_char_image(c, name)?;
     Some(format!(
         "{}/{}/{name}?v={}",
         image_url_base(),
@@ -536,7 +549,7 @@ pub fn serve_image(c: Option<&Character>, path: &str) -> Option<(Vec<u8>, &'stat
         return None;
     }
     let c = c.filter(|c| c.manifest.id == id)?;
-    let img = find_user_image(&c.user_dir, name)?;
+    let img = find_char_image(c, name)?;
     let bytes = read_limited(&img.path, MAX_IMAGE_BYTES).ok()?;
     let mime = sniff_image(&bytes)?;
     Some((bytes, mime))
@@ -667,14 +680,13 @@ mod tests {
             .find(|c| c.manifest.id == "nanami-chiaki")
             .unwrap();
         let a = appearance(c);
-        assert!(!a.placeholder, "千秋用自己画的 Q 版形象");
+        assert!(!a.placeholder, "千秋用自己的 Q 版形象");
+        // 内置的是代码画的 SVG；构建时放进了形象包（DECISIONS #66）就是 PNG（走图片协议）。两种都对
+        let ok = |u: &str| {
+            u.starts_with("data:image/svg+xml;base64,") || u.starts_with(image_url_base())
+        };
         for k in STATES.iter().chain(POSES.iter()) {
-            assert!(
-                a.images
-                    .get(*k)
-                    .is_some_and(|u| u.starts_with("data:image/svg+xml;base64,")),
-                "缺少 {k}"
-            );
+            assert!(a.images.get(*k).is_some_and(|u| ok(u)), "缺少 {k}");
         }
         assert!(a.images.contains_key("idle_night"));
         // 没有画好整套的角色照旧用占位形象
@@ -920,6 +932,46 @@ mod tests {
         assert!(serve_image(c, "/cat/idle/x").is_none());
         assert!(serve_image(c, "/cat/IDLE").is_none());
         assert!(serve_image(None, "/cat/idle").is_none());
+    }
+
+    /// 安装包里自带的 PNG（千秋的 Q 版形象包）：没有用户图片时直接用，用户自己的永远优先
+    #[test]
+    fn bundled_pngs_are_used_but_user_images_win() {
+        let b = tempfile::tempdir().unwrap();
+        let u = tempfile::tempdir().unwrap();
+        let bd = write_pack(b.path(), "cat", r#"{"id":"cat","name":"猫"}"#);
+        fs::write(bd.join("assets").join("placeholder.svg"), "<svg/>").unwrap();
+        fs::write(bd.join("assets").join("idle.svg"), "<svg/>").unwrap();
+        let all = load_all(Some(b.path()), u.path());
+        // 只有内置 SVG：和以前一样
+        assert!(appearance(&all[0]).images["idle"].starts_with("data:image/svg+xml"));
+
+        // 安装包里多了 PNG：直接用它（走自定义协议），不用用户放任何东西
+        let png = |tail: &str| [&b"\x89PNG\r\n\x1a\n"[..], tail.as_bytes()].concat();
+        fs::write(bd.join("assets").join("idle.png"), png("BUNDLED")).unwrap();
+        fs::write(bd.join("assets").join("happy.png"), png("BUNDLED-HAPPY")).unwrap();
+        fs::write(bd.join("assets").join("sad.png"), "not really a png").unwrap(); // 文件头不对，忽略
+        let a = appearance(&all[0]);
+        assert!(!a.placeholder);
+        let base = format!("{}/cat/", image_url_base());
+        assert!(a.images["idle"].starts_with(&format!("{base}idle?v=")));
+        assert!(a.images["happy"].starts_with(&format!("{base}happy?v=")));
+        assert_eq!(a.images["sad"], a.images["idle"], "坏文件 → 回退到 idle");
+        let c = Some(&all[0]);
+        assert_eq!(serve_image(c, "/cat/idle").unwrap().0, png("BUNDLED"));
+        // 设置页「你放了哪些图」只算用户自己放的
+        assert!(user_image_states(&all[0]).is_empty());
+
+        // 用户自己放了同名图：用户的优先，没放的仍然用内置的
+        let ua = u.path().join("cat").join("assets");
+        fs::create_dir_all(&ua).unwrap();
+        fs::write(ua.join("idle.png"), png("MINE")).unwrap();
+        assert_eq!(serve_image(c, "/cat/idle").unwrap().0, png("MINE"));
+        assert_eq!(
+            serve_image(c, "/cat/happy").unwrap().0,
+            png("BUNDLED-HAPPY")
+        );
+        assert_eq!(user_image_states(&all[0]), vec!["idle"]);
     }
 
     #[test]

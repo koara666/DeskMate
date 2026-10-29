@@ -3,7 +3,14 @@ name: CI
 
 on:
   push:
+    # 只在分支上跑。以前推送版本标签也会再跑一遍，同一个提交白白多构建一次
+    branches: ['**']
   pull_request:
+
+# 连着推送几次时，只留最新的那次
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -39,6 +46,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: win-build
       - run: npm ci
       - name: 前端类型检查与测试
         run: |

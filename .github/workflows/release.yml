@@ -22,25 +22,22 @@ jobs:
           node-version: 22
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+      # 和 CI 共用同一份依赖缓存（以前各用各的，发布每次都从零编译所有依赖，是最慢的一步）；发布这边只读不存
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: win-build
+          save-if: false
       - run: npm ci
       - name: 标签必须和程序版本一致
         shell: bash
         run: |
           v=$(node -p "require('./src-tauri/tauri.conf.json').version")
           test "v$v" = "${GITHUB_REF_NAME}" || { echo "标签 ${GITHUB_REF_NAME} 和版本 v$v 不一致"; exit 1; }
-      - name: 测试
-        shell: bash
-        run: |
-          set -o pipefail
-          npm test
-          cd src-tauri
-          if ! cargo test 2>&1 | tee ../rust-test.log; then
-            grep -E "panicked at|^test .+ FAILED|^error|left:|right:|assertion" ../rust-test.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
-            exit 1
-          fi
+      # 不再在这里重跑测试：推送前本机 `npm run check` 已经全过，推送到 main 的 CI 也会再跑一遍；
+      # 这里重跑只是白白多花十来分钟（DECISIONS #66）。
+      - name: 放进千秋的 Q 版形象包（用户装完就是 Q 版，不用自己放文件）
+        run: python scripts/chibi/fetch_art.py
       - name: 构建安装包
         run: npx tauri build
       - name: 计算 SHA-256

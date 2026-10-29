@@ -150,6 +150,19 @@
 - **或者用命令行**：先装 GitHub 官方命令行（在 DeskMate 对话框里输入 `! winget install GitHub.cli`），再 `! gh auth login`（按提示在浏览器里点授权），然后告诉 Claude，Claude 会用 `gh release create voice-chiaki-v1 … --prerelease --latest=false` 上传。
 - 之后想撤下：发布页右上角 Delete，或告诉 Claude。
 
+### [ ] 15. 把千秋的 Q 版形象包传到 GitHub（发布 0.4.3 之前要做；**需要你的 GitHub 登录**）
+- **做什么**：把 `D:\DeskMate\chiaki-art-v1.zip`（23 张图，1.74 MiB）传到 GitHub 的一个单独发布页 `art-chiaki-v1`。0.4.3 的发布流程会从这里下载、校验后把图打进安装包，用户更新后就直接是 Q 版（DECISIONS #66）。
+- **为什么要你来**：传发布页需要你的 GitHub 登录，我没有，也不去读你电脑里保存的登录凭据。
+- **怎么做（和传声音模型一样）**：
+  1. 打开 https://github.com/koara666/DeskMate/releases/new
+  2. 点 **Choose a tag**，输入 `art-chiaki-v1`，选 **Create new tag: art-chiaki-v1 on publish**（标签不能以 `v` 加数字开头，不然会被当成软件版本去触发发布）。
+  3. 标题填 `千秋的 Q 版形象包`。
+  4. 把 `D:\DeskMate\chiaki-art-v1.zip` 拖到 **Attach binaries** 那一栏。**文件名别改。**
+  5. **勾上 `Set as a pre-release`，并取消勾选 `Set as the latest release`**（不然「检查更新」会把它当成软件的最新版本）。
+  6. 点 **Publish release**。
+  7. 告诉 Claude「传好了」。Claude 会核对下载下来的 SHA-256（应该是 `9ebba3cfb970f445c8f3af220c0e2120656ec37813f19cf6ad776bcd2b480bff`）再推送 0.4.3。
+- 之后想撤下这套图：发布页右上角 Delete，之后的安装包就不再带。
+
 ## 已完成
 
 ### [x] 10. 发布 GitHub Release

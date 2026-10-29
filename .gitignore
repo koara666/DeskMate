@@ -89,3 +89,9 @@ desktop.ini
 # Python 缓存
 __pycache__/
 *.pyc
+
+# 千秋形象包（用户生成的图，单独放 GitHub 发布页，DECISIONS #66）
+/chiaki-art*.zip
+
+# 构建时从发布页放进来的千秋形象（scripts/chibi/fetch_art.py），不进仓库
+/characters/nanami-chiaki/assets/*.png
