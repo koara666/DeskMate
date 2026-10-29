@@ -1,11 +1,12 @@
-# 发布：推送 v* 标签（比如 v0.3.0）时，构建安装包并发布到 GitHub Releases。
+# 发布：推送 v<数字> 开头的版本标签（比如 v0.3.0）时，构建安装包并发布到 GitHub Releases。
 # 发布是公开操作：只有用户确认后才推送标签（见 docs/NEEDS_USER.md）。
 # DeskMate 的「检查更新」读的就是这里发布的最新正式版本；SHA256SUMS.txt 用来校验下载的安装包。
 name: Release
 
 on:
   push:
-    tags: ['v*']
+    # 只认 v 加数字：声音模型的发布页标签 voice-chiaki-v1 也以 v 开头，用 'v*' 会误触发（实测在它上面白跑了一次然后失败）
+    tags: ['v[0-9]*']
 
 permissions:
   contents: write

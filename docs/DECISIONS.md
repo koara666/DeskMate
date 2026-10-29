@@ -532,3 +532,4 @@
 - **必须标成「预发布」且不设为「最新」**：「检查更新」读 `releases/latest`（`update::RELEASES_API`），程序会跳过 draft / prerelease；如果模型发布页成了「最新」，`parse_version("voice-chiaki-v1")` 失败，所有用户都收不到以后的软件更新。写在 NEEDS_USER #14 里。
 - 说明文档 `docs/voice/CHIAKI_MODEL.md`（内容、用法、SHA-256、版权与删除办法）和发布页文案 `docs/release-notes/voice-chiaki-v1.md` 已在仓库里。上传本身需要用户的 GitHub 登录，agent 没有也不读取用户保存的凭据；自动模式拦下了「下载并运行 gh」，所以改成用户在网页上点一下（NEEDS_USER #14）。
 - 版权说明写明：权利属于原作版权方，个人学习使用、不商用，版权方或配音演员认为不该公开就删。
+- **补充（上传后发现）**：发布流程触发条件原来是 `v*`，声音模型的标签 `voice-chiaki-v1` 也以 v 开头，推送时 Release 流程被误触发；它在第一步「标签必须和程序版本一致」就失败了，没构建、没发布，模型发布页没被动过。已改成 `v[0-9]*`（只认 v 加数字）。以后给非版本的东西起标签，名字别以 v 加数字开头。
