@@ -2,6 +2,16 @@
 
 > 最新条目在最上面。超过 300 行时把旧条目压缩成摘要移到 `docs/progress-archive/`。
 
+## 2026-10-29 12:40（用户要关电脑，在这里停下）
+- 停在：本机测试环境下载中被中断（PyTorch 2.9.1 cu126 没装完；Whisper large-v3 模型下到约 2.3 / 3.1 GB，放在本次会话的临时文件夹，下次大概率要重下）。
+- 已经在硬盘上、下次直接用：`chiaki-voice/dataset/wavs/`（711 条原声）、`chiaki-voice/GPT-SoVITS/`（b4570b8 源码）、`chiaki-voice/GPT-SoVITS/GPT_SoVITS/pretrained_models/`（训练用的 1.4 GB 预训练模型）。
+- 下次接着做：
+  1. 建 venv（Python 3.11：`C:\Users\京东\AppData\Local\Programs\Python\Python311\python.exe`；建议放 `D:\dev\chiaki-gsv-venv`，以后本机推理服务也能用）→ `pip install torch==2.9.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/cu126` → `pip install -r chiaki-voice/GPT-SoVITS/extra-req.txt --no-deps` 和 `requirements.txt`（Windows 上 opencc / jieba_fast 可能要编译，装不上就跳过，只影响中文）。
+  2. 下 Whisper 模型：`https://hf-mirror.com/Systran/faster-whisper-large-v3/resolve/main/{config.json,preprocessor_config.json,tokenizer.json,vocabulary.json,model.bin}` → `WHISPER_MODEL=<文件夹> python scripts/voice-train/transcribe.py chiaki-voice` → 抽查 `dataset/asr.json`。
+  3. 挑 3 条 3~10 秒、语气平稳的放 `chiaki-voice/ref/`（附日语原文）。
+  4. 本机 4060：`python chiaki-voice/train.py --quick`（先 `python scripts/voice-train/pack.py chiaki-voice` 把脚本复制进去）跑通。
+  5. `pack.py` 打包 → 把 README 里的命令告诉用户。
+
 ## 2026-10-29 12:35（进行中）
 - 背景：用户要用自己的 4090 服务器训练千秋的声音，没用过 GPT-SoVITS，要我把游戏原声和训练代码打包好、给命令（DECISIONS #56）。
 - 完成：
