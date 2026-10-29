@@ -481,6 +481,7 @@ pub async fn model_say(st: &AppState, instruction: &str, max_tokens: u32) -> Opt
         notes: std::slice::from_ref(&note),
         user_text: "（……）",
         now: &now_text,
+        voice_ja: crate::voice::proactive_wants_ja(&s.voice),
         ..Default::default()
     };
     let req = crate::prompt::build(
@@ -504,7 +505,7 @@ pub async fn model_say(st: &AppState, instruction: &str, max_tokens: u32) -> Opt
     .ok()?
     .ok()?;
     let banned = crate::filter::BannedWords::new(&prefs.banned_words);
-    let (text, _) = crate::markers::strip(&banned.apply(&out.text));
+    let text = crate::voice::visible_remember(st, &banned.apply(&out.text));
     (!text.trim().is_empty()).then_some(text)
 }
 

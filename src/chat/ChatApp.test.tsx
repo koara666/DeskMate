@@ -113,6 +113,20 @@ afterEach(() => {
 });
 
 describe('ChatApp 流式显示', () => {
+  it('联网搜索：回复下面写明查了什么（思考时就出现），回复完成后还在', async () => {
+    const f = await mount();
+    await sendText('今天有什么新闻');
+    f.emit({ type: 'note', text: '上网查了「今天有什么新闻」· 5 条结果' });
+    expect(screen.getByText('上网查了「今天有什么新闻」· 5 条结果')).toBeTruthy();
+    f.emit({ type: 'delta', text: '刚查到的～' });
+    f.emit({ type: 'done', text: '刚查到的～', finish: 'stop' });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(assistantText()).toContain('刚查到的～');
+    expect(screen.getByText('上网查了「今天有什么新闻」· 5 条结果')).toBeTruthy();
+  });
+
   it('逐字显示增量，结束后显示完整内容和操作按钮', async () => {
     const f = await mount();
     await sendText('你好');

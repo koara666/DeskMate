@@ -91,13 +91,14 @@ pub async fn pet_click(app: AppHandle) -> CmdResult<()> {
         .unwrap_or(false);
     desktop::toggle_chat(&app).map_err(err)?;
     // 点身体打开聊天时，偶尔说一句小反应（不记进聊天记录）
-    if opening && let Some(text) = crate::companion::touch(&app, "body") {
+    if opening && let Some((text, scene)) = crate::companion::touch(&app, "body") {
         let mut item = crate::proactive::Item::new(
             crate::proactive::Kind::Random,
             text,
             crate::memory::now_secs() + 60,
         );
         item.ephemeral = true;
+        item.mood = crate::companion::reaction_mood(scene);
         crate::proactive::say_now(&app, item);
     }
     Ok(())
@@ -353,7 +354,7 @@ pub async fn pet_touch(app: AppHandle, part: String) -> CmdResult<()> {
         return Err("不认识的部位".into());
     }
     crate::daily::interact(&app);
-    let Some(text) = crate::companion::touch(&app, &part) else {
+    let Some((text, scene)) = crate::companion::touch(&app, &part) else {
         return Ok(());
     };
     let mut item = crate::proactive::Item::new(
@@ -362,6 +363,7 @@ pub async fn pet_touch(app: AppHandle, part: String) -> CmdResult<()> {
         crate::memory::now_secs() + 60,
     );
     item.ephemeral = true;
+    item.mood = crate::companion::reaction_mood(scene);
     crate::proactive::say_now(&app, item);
     Ok(())
 }
@@ -458,9 +460,9 @@ pub fn fortune_draw(app: AppHandle) -> crate::games::Fortune {
 
 /// 需要模型的小游戏：开始一局（没有可用模型时返回原因）
 #[tauri::command]
-pub fn llm_game_start(app: AppHandle, game: String) -> CmdResult<crate::games_llm::Start> {
+pub async fn llm_game_start(app: AppHandle, game: String) -> CmdResult<crate::games_llm::Start> {
     crate::daily::interact(&app);
-    crate::games_llm::start(&app, &game)
+    crate::games_llm::start(&app, &game).await
 }
 
 /// 一步：kind = ask（提问）/ guess（猜）/ idiom（接龙）
@@ -475,12 +477,16 @@ pub async fn llm_game_turn(
         return Err("参数不对".into());
     }
     crate::daily::interact(&app);
-    crate::games_llm::turn(&app, &session, &kind, &input).await
+    let t = crate::games_llm::turn(&app, &session, &kind, &input).await?;
+    crate::games_llm::speak(&app, &t);
+    Ok(t)
 }
 
 #[tauri::command]
 pub fn llm_game_give_up(app: AppHandle, session: String) -> CmdResult<crate::games_llm::Turn> {
-    crate::games_llm::give_up(&app, &session)
+    let t = crate::games_llm::give_up(&app, &session)?;
+    crate::games_llm::speak(&app, &t);
+    Ok(t)
 }
 
 /// 前端上报主动发言的结果：用户理会了（engaged）或气泡无人理会自动收起了

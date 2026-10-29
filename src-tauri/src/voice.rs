@@ -322,18 +322,72 @@ pub fn chat_wants_ja(v: &VoiceSettings) -> bool {
     v.enabled && !v.engine.is_empty() && v.lang == "ja" && v.scenes.chat
 }
 
+/// 她主动说的话（播报、打招呼、关怀、胜负反应）要不要让模型顺带写日语版：开着声音、说日语、这类场合会念。
+/// 以前这些话只能事后再翻译一次（多一次请求，没有聊天模型时退回念中文）。
+pub fn proactive_wants_ja(v: &VoiceSettings) -> bool {
+    v.enabled
+        && !v.engine.is_empty()
+        && v.lang == "ja"
+        && (v.scenes.proactive || v.scenes.reactions || v.scenes.games)
+}
+
+/// 模型回复里的标记去掉后的文字；回复附带的日语版本记下来，念的时候按这段中文原文查
+pub fn visible_remember(st: &AppState, raw: &str) -> String {
+    let (text, found) = crate::markers::strip(raw);
+    if let Some(ja) = crate::markers::ja_text(&found) {
+        remember_ja(st, &text, ja);
+    }
+    text
+}
+
 /// 记下一句话的日语版本，念的时候按中文原文查
 pub fn remember_ja(st: &AppState, zh: &str, ja: &str) {
     let (zh, ja) = (zh.trim(), ja.trim());
     if zh.is_empty() || ja.is_empty() {
         return;
     }
-    let mut g = st.voice.ja.lock().unwrap_or_else(|e| e.into_inner());
-    g.retain(|(z, _)| z != zh);
-    g.push_back((zh.to_string(), ja.to_string()));
-    while g.len() > JA_KEEP {
-        g.pop_front();
+    {
+        let mut g = st.voice.ja.lock().unwrap_or_else(|e| e.into_inner());
+        g.retain(|(z, _)| z != zh);
+        g.push_back((zh.to_string(), ja.to_string()));
+        while g.len() > JA_KEEP {
+            g.pop_front();
+        }
     }
+    // 落盘：重启后提醒到点、翻译过的话还能直接用。用户暂停了记忆就只放内存
+    if !st.settings().memory_paused {
+        let _ = save_ja(&st.db(), zh, ja, crate::memory::now_secs());
+    }
+}
+
+/// 数据库里最多留多少条 / 多少天
+const JA_DB_KEEP: i64 = 400;
+const JA_DB_DAYS: i64 = 30;
+
+fn save_ja(db: &rusqlite::Connection, zh: &str, ja: &str, now: i64) -> rusqlite::Result<()> {
+    db.execute(
+        "INSERT OR REPLACE INTO voice_ja (zh, ja, ts) VALUES (?1, ?2, ?3)",
+        rusqlite::params![zh, ja, now],
+    )?;
+    db.execute(
+        "DELETE FROM voice_ja WHERE ts < ?1 OR zh NOT IN (SELECT zh FROM voice_ja ORDER BY ts DESC LIMIT ?2)",
+        rusqlite::params![now - JA_DB_DAYS * 86_400, JA_DB_KEEP],
+    )?;
+    Ok(())
+}
+
+/// 内存里没有时到数据库里找（最近的几百条，按时间从旧到新，和内存表同样的查法）
+fn load_ja(db: &rusqlite::Connection) -> VecDeque<(String, String)> {
+    let Ok(mut stmt) = db.prepare(
+        "SELECT zh, ja FROM (SELECT zh, ja, ts FROM voice_ja ORDER BY ts DESC LIMIT ?1) ORDER BY ts ASC",
+    ) else {
+        return VecDeque::new();
+    };
+    stmt.query_map([JA_DB_KEEP], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
 }
 
 /// 查日语（纯函数）：原文一样的优先；否则找原文以它开头的那句（播报会把几句拼起来，念第一句就够了）
@@ -446,7 +500,9 @@ fn plan(st: &AppState, v: &VoiceSettings, text: &str) -> Plan {
     let found = {
         let g = st.voice.ja.lock().unwrap_or_else(|e| e.into_inner());
         find_ja(&g, text)
-    };
+    }
+    // 重启前记下的（比如昨天设的提醒今天到点）
+    .or_else(|| find_ja(&load_ja(&st.db()), text));
     match found.map(|ja| condense(&ja, ja_max(v.max_chars))) {
         Some(ja) if !ja.is_empty() => Plan::Speak {
             text: ja,
@@ -968,6 +1024,63 @@ mod tests {
         v.engine = "openai".into();
         assert_eq!(request_body(&v, "你好", "zh")["input"], "你好");
         assert!(!VoiceSettings::default().metered() || VoiceSettings::default().engine.is_empty());
+    }
+
+    #[test]
+    fn japanese_survives_a_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = crate::state::test_state(dir.path());
+        let v = VoiceSettings {
+            lang: "ja".into(),
+            ..Default::default()
+        };
+        remember_ja(&st, "时间到啦：买菜。", "時間だよ、買い物。");
+        // 模拟重启：内存里的表没了，数据库里还在（以前昨天设的提醒今天到点时查不到日语）
+        st.voice.ja.lock().unwrap().clear();
+        match plan(&st, &v, "时间到啦：买菜。") {
+            Plan::Speak { text, lang, .. } => {
+                assert_eq!((lang, text.as_str()), ("ja", "時間だよ、買い物。"))
+            }
+            p => panic!("{p:?}"),
+        }
+        // 用户暂停了记忆：只放内存，不落盘
+        st.update_settings(|s| s.memory_paused = true);
+        remember_ja(&st, "另一句话。", "別の話。");
+        st.voice.ja.lock().unwrap().clear();
+        assert!(matches!(plan(&st, &v, "另一句话。"), Plan::Translate(_)));
+        // 清除所有记忆时一起清掉
+        crate::memory::clear_all(&st.db()).unwrap();
+        st.voice.ja.lock().unwrap().clear();
+        assert!(matches!(
+            plan(&st, &v, "时间到啦：买菜。"),
+            Plan::Translate(_)
+        ));
+    }
+
+    #[test]
+    fn japanese_table_in_db_is_pruned() {
+        let db = crate::db::open_in_memory().unwrap();
+        for i in 0..(JA_DB_KEEP + 50) {
+            save_ja(&db, &format!("第{i}句"), "ja", 1_000_000 + i).unwrap();
+        }
+        let n: i64 = db
+            .query_row("SELECT COUNT(*) FROM voice_ja", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, JA_DB_KEEP);
+        let t = load_ja(&db);
+        assert_eq!(t.len() as i64, JA_DB_KEEP);
+        assert_eq!(
+            t.back().unwrap().0,
+            format!("第{}句", JA_DB_KEEP + 49),
+            "最新的在最后"
+        );
+        assert!(find_ja(&t, "第0句").is_none(), "最旧的被修剪了");
+        // 超过 30 天的也清掉
+        save_ja(&db, "很久以后", "ja", 1_000_000 + 40 * 86_400).unwrap();
+        let n: i64 = db
+            .query_row("SELECT COUNT(*) FROM voice_ja", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
     }
 
     #[test]

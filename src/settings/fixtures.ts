@@ -58,6 +58,7 @@ const view: SettingsView = {
     mask_text: true,
   },
   update: { auto_check: true, skipped: '', last_check: 0 },
+  web: { enabled: true },
   voice: {
     enabled: false,
     engine: '',

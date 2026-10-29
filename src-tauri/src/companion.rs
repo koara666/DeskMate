@@ -11,6 +11,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// 各级需要的积分
@@ -297,6 +298,8 @@ pub struct TouchState {
     last_reaction: Mutex<HashMap<&'static str, i64>>,
     /// 等用户选择的小事件：消息 id → （问题，选项，回应）
     pub choices: Mutex<HashMap<u64, Choice>>,
+    /// 正在拖她：「惊讶」图要撑到松手（松手时 `end_drag_pose` 清掉）
+    dragging: AtomicBool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -321,9 +324,9 @@ pub fn pat_scene(recent: &[i64], now: i64, rub: bool) -> &'static str {
     }
 }
 
-/// 摸头（点头顶 / 在头上来回蹭）、戳身体、拖动、按住不放、连戳：返回要说的话（不存进聊天记录）。
+/// 摸头（点头顶 / 在头上来回蹭）、戳身体、拖动、按住不放、连戳：返回（要说的话，台词场景），话不存进聊天记录。
 /// 拖动、戳有冷却，不是每次都说。
-pub fn touch(app: &AppHandle, part: &str) -> Option<String> {
+pub fn touch(app: &AppHandle, part: &str) -> Option<(String, &'static str)> {
     let st = app.state::<AppState>();
     let now = crate::memory::now_secs();
     let (scene, cooldown, interaction): (&'static str, i64, Interaction) = match part {
@@ -343,6 +346,9 @@ pub fn touch(app: &AppHandle, part: &str) -> Option<String> {
         _ => ("touch.body", 120, Interaction::Poke),
     };
     interact(app, interaction);
+    if part == "drag" {
+        st.companion.dragging.store(true, Ordering::SeqCst);
+    }
     emit_pose(app, scene);
     if cooldown > 0 {
         let mut last = st
@@ -359,7 +365,7 @@ pub fn touch(app: &AppHandle, part: &str) -> Option<String> {
         }
         last.insert(scene, now);
     }
-    st.line(scene, &[])
+    st.line(scene, &[]).map(|t| (t, scene))
 }
 
 /// 反应时桌宠短暂换上的图（纯函数）：台词场景 → （图名，显示多久毫秒）。没画这张图的角色保持原样。
@@ -369,7 +375,8 @@ pub fn pose_for(scene: &str) -> Option<(&'static str, u32)> {
         "touch.head_lots" => ("shy", 2600),
         "touch.hold" | "menu.repeat" | "menu.indecisive" | "menu.hold_long" => ("confused", 2400),
         "touch.poke_many" | "menu.dnd_spam" => ("pout", 2600),
-        "touch.drag" => ("surprised", 1600),
+        // 拖着不放就一直是这张，松手时 `end_drag_pose` 清掉；30 秒是保险（松手的事件万一丢了也会自己换回来）
+        "touch.drag" => ("surprised", 30_000),
         "touch.shake" => ("dizzy", 3200),
         "touch.carry" | "menu.secret" => ("wink", 2400),
         "touch.wake" => ("wake", 2600),
@@ -380,6 +387,26 @@ pub fn pose_for(scene: &str) -> Option<(&'static str, u32)> {
         "game.lose" => ("win", 3500),
         _ => return None,
     })
+}
+
+/// 说完这句反应的话以后桌宠的心情图：有专属反应图的（惊讶、生气、晕……）图本身已经表达了情绪，
+/// 播完回到平常，不要再盖一层笑脸（以前所有主动说的话一律置成 happy，拖她、戳她时她会笑）；
+/// 摸头是舒服的，保留笑；没有专属图的（点身体）照旧。
+pub fn reaction_mood(scene: &str) -> crate::chat::PetState {
+    use crate::chat::PetState;
+    match scene {
+        "touch.head" | "touch.rub" | "touch.head_many" => PetState::Happy,
+        s if pose_for(s).is_some() => PetState::Idle,
+        _ => PetState::Happy,
+    }
+}
+
+/// 拖完松手：把「惊讶」图换回来（`pose` 为空 = 清掉反应图）
+pub fn end_drag_pose(app: &AppHandle) {
+    let st = app.state::<AppState>();
+    if st.companion.dragging.swap(false, Ordering::SeqCst) {
+        let _ = app.emit_to("pet", "pet-pose", PoseEvent { pose: "", ms: 0 });
+    }
 }
 
 /// 让桌宠按场景短暂换一张反应图
@@ -403,6 +430,7 @@ pub fn say_reaction(app: &AppHandle, scene: &str, vars: &[(&str, String)]) {
     };
     let mut item = Item::new(Kind::Random, text, crate::memory::now_secs() + 60);
     item.ephemeral = true;
+    item.mood = reaction_mood(scene);
     proactive::say_now(app, item);
 }
 
@@ -693,6 +721,29 @@ mod tests {
         }
         assert_eq!(pose_for("game.win").unwrap().0, "lose", "用户赢了 = 她输了");
         assert_eq!(pose_for("touch.body"), None, "点身体是开聊天，不换图");
+    }
+
+    #[test]
+    fn reaction_mood_follows_the_pose() {
+        use crate::chat::PetState;
+        // 有专属图的反应：播完回平常，不再盖一层笑脸（以前拖她、戳她时她会笑）
+        for scene in [
+            "touch.drag",
+            "touch.hold",
+            "touch.poke_many",
+            "touch.shake",
+            "touch.head_lots",
+            "touch.wake",
+            "menu.hide",
+        ] {
+            assert_eq!(reaction_mood(scene), PetState::Idle, "{scene}");
+        }
+        // 摸头是舒服的，保留笑；没有专属图的（点身体）照旧
+        for scene in ["touch.head", "touch.rub", "touch.head_many", "touch.body"] {
+            assert_eq!(reaction_mood(scene), PetState::Happy, "{scene}");
+        }
+        // 拖动的图撑到松手（比前端最长的普通反应图还久）
+        assert!(pose_for("touch.drag").unwrap().1 >= 10_000);
     }
 
     #[test]

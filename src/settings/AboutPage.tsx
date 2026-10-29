@@ -68,7 +68,8 @@ export function AboutPage({ api, view, updateApi }: { api: Api; view: SettingsVi
           <li>API Key 只保存在 Windows 凭据管理器里，不写进任何文件。</li>
           <li>
             DeskMate 不收集任何使用数据，也不会悄悄更新。会连接的只有：你在「模型」里配置的服务；选了城市后查天气时的
-            Open-Meteo（只发送城市的经纬度）；你打开的新闻源；检查更新时的 GitHub（只查版本号，可以关）；你打开语音后选的语音服务。
+            Open-Meteo（只发送城市的经纬度）；你打开的新闻源；检查更新时的 GitHub（只查版本号，可以关）；你打开语音后选的语音服务；
+            她上网搜索时的 DuckDuckGo / Google 新闻 / 维基百科（只发搜索关键词，可以关）。
           </li>
           <li>
             天气数据来自 <span class="mono">Open-Meteo.com</span>（CC BY 4.0）；城市坐标来自 GeoNames（CC BY 4.0）。

@@ -255,6 +255,8 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     const onEvent = (e: ChatEvent) => {
       if (e.type === 'delta') {
         w.push(e.text);
+      } else if (e.type === 'note') {
+        update(msgId, { note: e.text });
       } else if (e.type === 'done') {
         if (e.finish === 'cancelled') w.flush();
         const actions = e.actions?.length ? e.actions : undefined;

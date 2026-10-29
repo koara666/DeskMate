@@ -269,7 +269,7 @@ pub fn touch(conn: &Connection, id: i64, importance: i64, now: i64) -> Result<()
 
 pub fn clear_all(conn: &Connection) -> Result<(), MemoryError> {
     conn.execute_batch(
-        "DELETE FROM memory_fts; DELETE FROM memories; DELETE FROM messages; DELETE FROM conversations;",
+        "DELETE FROM memory_fts; DELETE FROM memories; DELETE FROM messages; DELETE FROM conversations; DELETE FROM voice_ja;",
     )?;
     Ok(())
 }

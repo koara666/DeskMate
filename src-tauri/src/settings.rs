@@ -122,6 +122,8 @@ pub struct Settings {
     pub update: crate::update::UpdateSettings,
     /// 语音（默认关闭）
     pub voice: crate::voice::VoiceSettings,
+    /// 联网搜索（默认开，只发搜索关键词，可关）
+    pub web: crate::websearch::WebSettings,
 }
 
 impl Default for Settings {
@@ -155,6 +157,7 @@ impl Default for Settings {
             vision: Default::default(),
             update: Default::default(),
             voice: Default::default(),
+            web: Default::default(),
         }
     }
 }

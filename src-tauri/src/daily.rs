@@ -531,8 +531,9 @@ async fn greeting_text(st: &AppState) -> String {
         now: &now_text,
         delegation: false,
         relation: "",
-        // 主动打招呼不要求附日语：念的时候走兜底翻译（DECISIONS #58）
-        voice_ja: false,
+        // 开着日语语音时让模型顺带写日语版，念的时候直接用（不用再翻译一次）
+        voice_ja: crate::voice::proactive_wants_ja(&s.voice),
+        web: false,
     };
     let budget = crate::prompt::PromptBudget {
         max_output_tokens: 120,
@@ -553,7 +554,7 @@ async fn greeting_text(st: &AppState) -> String {
     {
         Ok(Ok(out)) => {
             let banned = crate::filter::BannedWords::new(&prefs.banned_words);
-            let (text, _) = crate::markers::strip(&banned.apply(&out.text));
+            let text = crate::voice::visible_remember(st, &banned.apply(&out.text));
             if text.trim().is_empty() {
                 fallback
             } else {

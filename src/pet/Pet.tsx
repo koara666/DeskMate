@@ -56,8 +56,13 @@ export function Pet({ api, voice, random = Math.random }: Props) {
     let t: ReturnType<typeof setTimeout> | null = null;
     const off = api.onPose(({ pose, ms }) => {
       if (t) clearTimeout(t);
+      // 空的 = 清掉反应图（拖完松手）
+      if (!pose) {
+        setReact(null);
+        return;
+      }
       setReact(pose);
-      t = setTimeout(() => setReact(null), Math.min(Math.max(ms, 500), 8000));
+      t = setTimeout(() => setReact(null), Math.min(Math.max(ms, 500), 30000));
     });
     return () => {
       if (t) clearTimeout(t);

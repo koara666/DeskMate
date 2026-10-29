@@ -203,4 +203,38 @@ describe('Pet 反应图', () => {
     act(() => poseCb!({ pose: 'dizzy', ms: 2000 }));
     expect(img()).toBe('data:idle');
   });
+
+  it('拖着不放时「惊讶」撑到松手：松手的空事件马上换回来', async () => {
+    let poseCb: ((p: { pose: string; ms: number }) => void) | null = null;
+    const api = {
+      init: async () => ({
+        character: { id: 't', name: '测试酱', color: '' },
+        appearance: { images: { idle: 'data:idle', surprised: 'data:surprised' }, placeholder: false },
+        idle_animation: false,
+        dnd: false,
+      }),
+      click: vi.fn(async () => {}),
+      touch: vi.fn(async () => {}),
+      menu: vi.fn(async () => {}),
+      menuOpen: vi.fn(async () => {}),
+      startDrag: vi.fn(async () => {}),
+      onState: async () => () => {},
+      onChanged: async () => [],
+      onPose: async (cb: (p: { pose: string; ms: number }) => void) => {
+        poseCb = cb;
+        return () => {};
+      },
+    };
+    render(<Pet api={api as never} />);
+    await act(async () => {});
+    const img = () => screen.getByAltText('测试酱').getAttribute('src');
+    act(() => poseCb!({ pose: 'surprised', ms: 30000 }));
+    // 以前最多撑 8 秒、拖动的图 1.6 秒就没了
+    act(() => {
+      vi.advanceTimersByTime(20000);
+    });
+    expect(img()).toBe('data:surprised');
+    act(() => poseCb!({ pose: '', ms: 0 }));
+    expect(img()).toBe('data:idle');
+  });
 });

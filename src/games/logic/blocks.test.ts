@@ -12,8 +12,10 @@ import {
   garbageFor,
   lock,
   makeBag,
+  AI,
   plan,
   rotate,
+  secondsPerPiece,
   spawn,
   type Board,
 } from './blocks';
@@ -68,6 +70,18 @@ describe('方块对战逻辑', () => {
     const full = emptyBoard();
     full[0][0] = 1;
     expect(addGarbage(full, 1, seq(0)).topOut).toBe(true);
+  });
+
+  it('公平：她放一块的速度在人手能做到的范围（困难也不快过 1 秒），三档逐级变快', () => {
+    // 玩家同样有「直接落下」。她想好以后一步步挪，所以一块的时间 = 想的时间 + 挪转的步数 × 间隔
+    for (const d of ['easy', 'normal', 'hard'] as const) {
+      const cfg = AI[d];
+      expect(cfg.think + cfg.step * 3, `${d} 最快的一块`).toBeGreaterThanOrEqual(750);
+      expect(cfg.step, `${d} 每一步`).toBeGreaterThanOrEqual(100);
+    }
+    expect(secondsPerPiece('easy')).toBeGreaterThan(secondsPerPiece('normal'));
+    expect(secondsPerPiece('normal')).toBeGreaterThan(secondsPerPiece('hard'));
+    expect(secondsPerPiece('hard')).toBeGreaterThanOrEqual(1);
   });
 
   it('一袋里每种方块各一个', () => {

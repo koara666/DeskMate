@@ -65,6 +65,8 @@ pub struct PromptParts<'a> {
     pub relation: &'a str,
     /// 用户开着日语语音（DECISIONS #58）：要模型在回复最后附一行 `[[日语：…]]`
     pub voice_ja: bool,
+    /// 允许联网搜索（DECISIONS #59）：「看不到实时信息、不能上网」那条规则换成联网的说法
+    pub web: bool,
 }
 
 const BASE_RULES: &str = "\
@@ -86,6 +88,18 @@ const BASE_RULES: &str = "\
 const DELEGATION_RULE: &str = "\
 - 用户在设置里允许了把事情交给执行工具（外部 agent）：用户明确想让你把一件事交给执行工具做（整理文件、写代码、上网查资料）时，先用角色口吻确认要做什么（涉及文件的再确认在哪个文件夹做）；用户同意后，在回复最后单独写一行 [[任务：用一句话写清楚要做的事（涉及文件的写上文件夹）]]，程序会弹出确认卡片，用户确认后交给执行工具。用户没同意前不要写这一行，也不要假装自己已经做完。";
 
+/// 允许联网搜索时，换掉基础规则里「你看不到实时信息、聊天时也不能上网」那一条（DECISIONS #59）
+const WEB_RULE: &str = "- 你可以上网查资料：用户问新闻、最新消息、比分、股价这类实时信息，或明确说「搜一下 / 查一下」时，程序会先帮你搜好，结果放在背景资料的【联网查到的资料】里：用里面的内容回答，用自己的话简短转述，并说一下是刚在网上查到的，数字和日期别编。背景资料里没有联网资料，说明这句话没触发搜索：你不确定的实时信息就坦率说不确定，并告诉用户可以说「搜一下……」让你去查；背景资料写了没查到 / 没连上，就如实说。";
+
+/// 把基础规则里的「不能上网」那一行换成联网的说法
+fn with_web_rule(rules: &str) -> String {
+    let Some(i) = rules.find("- 你看不到实时信息") else {
+        return rules.to_string();
+    };
+    let end = rules[i..].find('\n').map_or(rules.len(), |e| i + e);
+    format!("{}{}{}", &rules[..i], WEB_RULE, &rules[end..])
+}
+
 /// 日语语音：气泡显示中文，声音念日语（DECISIONS #58）
 const VOICE_JA_RULE: &str = "- 用户开着日语语音：你的声音会用日语念出回复的开头。每次回复的最后单独写一行 [[日语：把这条回复最前面一两句话译成你平时会说的自然日语口语，60 字以内，不要注音、罗马字和括号里的动作]]，这一行不会显示在气泡里。";
 
@@ -96,7 +110,11 @@ pub fn build(parts: &PromptParts<'_>, budget: PromptBudget) -> ChatRequest {
     let mut system = Vec::new();
 
     // 1. 基础规则 + 角色设定 + 自定义要求 + 禁词
-    let mut core = String::from(BASE_RULES);
+    let mut core = if parts.web {
+        with_web_rule(BASE_RULES)
+    } else {
+        String::from(BASE_RULES)
+    };
     if parts.delegation {
         core.push('\n');
         core.push_str(DELEGATION_RULE);
@@ -400,6 +418,26 @@ mod tests {
         };
         let rules = &build(&ja, PromptBudget::default()).system[0].text;
         assert!(rules.contains("[[日语："));
+    }
+
+    #[test]
+    fn web_rule_replaces_the_cannot_go_online_rule() {
+        // 以前基础规则写着「聊天时也不能上网」，联网开着她也说不能联网
+        let off = &build(&base(), PromptBudget::default()).system[0].text;
+        assert!(off.contains("也不能上网") && !off.contains("联网查到的资料"));
+        let on = &build(
+            &PromptParts {
+                web: true,
+                ..base()
+            },
+            PromptBudget::default(),
+        )
+        .system[0]
+            .text;
+        assert!(!on.contains("也不能上网"), "联网开着就不能再说不能上网");
+        assert!(on.contains("联网查到的资料") && on.contains("搜一下"));
+        // 换掉的只是那一行：前后的规则都在
+        assert!(on.contains("不要编造关于用户的事实") && on.contains("[[提醒："));
     }
 
     #[test]

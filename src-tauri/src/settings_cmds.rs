@@ -63,6 +63,7 @@ pub struct SettingsView {
     pub care: crate::care::CareSettings,
     pub vision: crate::vision::VisionSettings,
     pub update: crate::update::UpdateSettings,
+    pub web: crate::websearch::WebSettings,
     pub voice: crate::voice::VoiceSettings,
     /// 语音服务 Key 的末尾 4 位（没填是 None）：（Fish Audio，OpenAI 兼容）
     pub voice_keys: (Option<String>, Option<String>),
@@ -132,6 +133,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         care: s.care.clone(),
         vision: s.vision.clone(),
         update: s.update.clone(),
+        web: s.web.clone(),
         voice: s.voice.clone(),
         voice_keys: (
             voice_key_hint(&state, crate::voice::FISH_KEY_ID),
@@ -653,6 +655,18 @@ pub fn update_save(
     let saved = state
         .update_settings(|s| s.update.auto_check = auto_check)
         .update;
+    desktop::broadcast_settings_changed(&app);
+    Ok(saved)
+}
+
+/// 联网搜索的开关
+#[tauri::command]
+pub fn web_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> CmdResult<crate::websearch::WebSettings> {
+    let saved = state.update_settings(|s| s.web.enabled = enabled).web;
     desktop::broadcast_settings_changed(&app);
     Ok(saved)
 }

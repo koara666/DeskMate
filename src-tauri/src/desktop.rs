@@ -341,6 +341,8 @@ pub fn on_pet_moved(app: &AppHandle) {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner()),
         );
+        // 松手：先把拖动时的「惊讶」图换回来，再看有没有甩晕 / 搬家的反应（它们自己会换图）
+        crate::companion::end_drag_pose(&app);
         if let Some(g) = geometry::drag_gesture(&path) {
             crate::companion::drag_gesture(&app, g);
         }

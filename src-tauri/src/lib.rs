@@ -45,6 +45,7 @@ pub mod update;
 pub mod usage;
 pub mod vision;
 pub mod voice;
+pub mod websearch;
 pub mod worker;
 
 use paths::DataPaths;
@@ -275,6 +276,7 @@ pub fn run() {
             settings_cmds::vision_records,
             settings_cmds::update_check,
             settings_cmds::update_save,
+            settings_cmds::web_save,
             commands::update_install,
             commands::menu_open,
             commands::voice_audio,

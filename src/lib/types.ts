@@ -188,6 +188,8 @@ export interface ErrorInfo {
 
 export type ChatEvent =
   | { type: 'delta'; text: string }
+  /** 回复下面的一行小字（比如「上网查了……」） */
+  | { type: 'note'; text: string }
   | {
       type: 'done';
       text: string;
@@ -264,6 +266,7 @@ export interface SettingsView {
   care: CareSettings;
   vision: VisionSettings;
   update: UpdateSettings;
+  web: WebSettings;
   voice: VoiceSettings;
   /** 语音服务 Key 的末尾 4 位：[Fish Audio, OpenAI 兼容] */
   voice_keys: [string | null, string | null];
@@ -293,6 +296,11 @@ export interface VoiceSettings {
   openai_url: string;
   openai_model: string;
   openai_voice: string;
+}
+
+/** 联网搜索：开了以后问新闻、最新消息或说「搜一下」，她会先上网查 */
+export interface WebSettings {
+  enabled: boolean;
 }
 
 export interface UpdateSettings {

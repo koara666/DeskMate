@@ -22,6 +22,7 @@ import {
   plan,
   rotate,
   scoreFor,
+  secondsPerPiece,
   spawn,
   type Board,
   type Difficulty,
@@ -414,12 +415,21 @@ export function Blocks({ say, finish, name = '她', random = Math.random }: Game
               ['hard', '困难'],
             ] as const
           ).map(([id, label]) => (
-            <button type="button" key={id} role="radio" aria-checked={diff === id} class={diff === id ? 'on' : ''} onClick={() => setDiff(id)}>
+            <button
+              type="button"
+              key={id}
+              role="radio"
+              aria-checked={diff === id}
+              class={diff === id ? 'on' : ''}
+              title={`她大约 ${secondsPerPiece(id)} 秒放一块`}
+              onClick={() => setDiff(id)}
+            >
               {label}
+              <small> · 约 {secondsPerPiece(id)} 秒一块</small>
             </button>
           ))}
         </div>
-        <p class="muted small blocks-keys">← → 移动 · ↑ / X 旋转 · Z 反转 · ↓ 加速 · 空格 直接落下</p>
+        <p class="muted small blocks-keys">← → 移动 · ↑ / X 旋转 · Z 反转 · ↓ 加速 · 空格 直接落下（她也一样）</p>
         <button type="button" class="btn btn-small blocks-start" onClick={start}>
           PRESS START
         </button>
@@ -478,6 +488,7 @@ export function Blocks({ say, finish, name = '她', random = Math.random }: Game
         </div>
         {phase === 'countdown' && <div class="blocks-count">{Math.max(1, hud.count)}</div>}
       </div>
+      {phase !== 'over' && <p class="muted small blocks-keys">← → 移动 · ↑ / X 旋转 · Z 反转 · ↓ 加速 · 空格 直接落下</p>}
       {phase === 'over' && result && (
         <div class="blocks-over">
           <ResultBanner result={result} />

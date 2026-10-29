@@ -154,6 +154,16 @@ pub const MIGRATIONS: &[&str] = &[
     CREATE INDEX game_records_char ON game_records(character_id, game);
     CREATE INDEX game_records_ts ON game_records(ts);
     "#,
+    // v10：她说过的话的日语版本（中文原文 → 日语）。以前只存在内存里（重启就没了）：
+    // 昨天设的提醒今天到点时查不到日语，只能再翻译一次。只存她自己的台词；记忆暂停时不存；清除记忆时一起清掉
+    r#"
+    CREATE TABLE voice_ja (
+        zh TEXT PRIMARY KEY,
+        ja TEXT NOT NULL,
+        ts INTEGER NOT NULL
+    );
+    CREATE INDEX voice_ja_ts ON voice_ja(ts);
+    "#,
 ];
 
 pub fn latest_version() -> i64 {

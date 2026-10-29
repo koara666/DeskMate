@@ -657,6 +657,7 @@ async fn compose_model(st: &AppState, f: &Facts) -> Option<String> {
         notes: &[note],
         user_text: "（打开了电脑）",
         now: &now_text,
+        voice_ja: crate::voice::proactive_wants_ja(&s.voice),
         ..Default::default()
     };
     let budget = crate::prompt::PromptBudget {
@@ -678,7 +679,7 @@ async fn compose_model(st: &AppState, f: &Facts) -> Option<String> {
     .ok()?
     .ok()?;
     let banned = crate::filter::BannedWords::new(&prefs.banned_words);
-    let (text, _) = crate::markers::strip(&banned.apply(&out.text));
+    let text = crate::voice::visible_remember(st, &banned.apply(&out.text));
     (!text.trim().is_empty()).then_some(text)
 }
 

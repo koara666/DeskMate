@@ -28,6 +28,10 @@ pub enum ChatEvent {
     Delta {
         text: String,
     },
+    /// 回复下面的一行小字（比如「上网查了……」）
+    Note {
+        text: String,
+    },
     Done {
         text: String,
         finish: FinishReason,
@@ -461,6 +465,12 @@ pub async fn run_turn_with_notes(
         emit_pet_state(&app, PetState::Thinking);
         notes.push(n);
     }
+    // 问新闻 / 最新消息 / 比分，或说了「搜一下」：上网查好放进背景资料，并在气泡下写明查了什么
+    if let Some(w) = crate::websearch::web_note(&state, &user_text).await {
+        emit_pet_state(&app, PetState::Thinking);
+        notes.push(w.note);
+        let _ = channel.send(ChatEvent::Note { text: w.display });
+    }
     let character = state.current_character();
     let character_id = character
         .as_ref()
@@ -523,6 +533,7 @@ pub async fn run_turn_with_notes(
             delegation: advanced.allow_delegation,
             relation: &relation,
             voice_ja: crate::voice::chat_wants_ja(&settings.voice),
+            web: settings.web.enabled,
         };
         prompt::build(&parts, PromptBudget::default())
     };

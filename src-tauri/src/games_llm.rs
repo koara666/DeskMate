@@ -29,6 +29,8 @@ pub struct Soup {
     pub title: String,
     pub surface: String,
     pub truth: String,
+    /// 本地写好的「是：…… 不是：……」事实清单：回答用户提问的依据（模型不能和它矛盾）
+    pub facts: String,
 }
 
 pub fn soups() -> Vec<Soup> {
@@ -38,11 +40,14 @@ pub fn soups() -> Vec<Soup> {
         let title = lines.next().unwrap_or("").trim().to_string();
         let mut surface = String::new();
         let mut truth = String::new();
+        let mut facts = String::new();
         for l in lines {
             if let Some(x) = l.strip_prefix("汤面：") {
                 surface = x.trim().into();
             } else if let Some(x) = l.strip_prefix("汤底：") {
                 truth = x.trim().into();
+            } else if let Some(x) = l.strip_prefix("事实：") {
+                facts = x.trim().into();
             }
         }
         if !title.is_empty() && !surface.is_empty() && !truth.is_empty() {
@@ -50,6 +55,7 @@ pub fn soups() -> Vec<Soup> {
                 title,
                 surface,
                 truth,
+                facts,
             });
         }
     }
@@ -70,6 +76,114 @@ pub fn twenty_words() -> Vec<(String, String)> {
                 .collect::<Vec<_>>()
         })
         .collect()
+}
+
+/// 二十问谜底的几条本地事实：`None` = 说不准（不拿它去纠正模型）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Facts {
+    /// 是不是电子产品（要用电 / 有屏幕）
+    pub electronic: Option<bool>,
+    /// 是不是活的（动物）
+    pub alive: Option<bool>,
+    /// 能不能吃 / 喝
+    pub edible: Option<bool>,
+}
+
+/// 按类别给默认事实，再按词调整例外（以前只把类别名告诉模型：谜底是跳绳、类别是「游戏和娱乐」，
+/// 问「是不是电脑或手机上的游戏」她答了「是」）
+pub fn facts_of(category: &str, word: &str) -> Facts {
+    let mut f = match category {
+        "动物" => Facts {
+            electronic: Some(false),
+            alive: Some(true),
+            edible: None,
+        },
+        "食物" => Facts {
+            electronic: Some(false),
+            alive: None,
+            edible: Some(true),
+        },
+        "日常用品" | "游戏和娱乐" | "自然" => Facts {
+            electronic: Some(false),
+            alive: Some(false),
+            edible: Some(false),
+        },
+        "交通工具" => Facts {
+            electronic: None,
+            alive: Some(false),
+            edible: Some(false),
+        },
+        // 地点里可以有动物、有吃的、有电脑：只说「地点本身不是活的」
+        "地点" => Facts {
+            electronic: None,
+            alive: Some(false),
+            edible: None,
+        },
+        _ => Facts::default(),
+    };
+    match word {
+        "手机" | "耳机" | "台灯" | "遥控器" | "游戏机" => f.electronic = Some(true),
+        // 钟表有机械的也有电子的
+        "钟表" => f.electronic = None,
+        _ => {}
+    }
+    f
+}
+
+fn yes_no(v: Option<bool>) -> Option<&'static str> {
+    v.map(|b| if b { "是" } else { "不是" })
+}
+
+/// 写进提示词的事实表
+fn facts_text(f: Facts) -> String {
+    [
+        ("电子产品（要用电 / 有屏幕）", f.electronic),
+        ("活的 / 是动物", f.alive),
+        ("能吃 / 能喝", f.edible),
+    ]
+    .iter()
+    .filter_map(|(k, v)| yes_no(*v).map(|a| format!("{k}：{a}")))
+    .collect::<Vec<_>>()
+    .join("；")
+}
+
+/// 本地校验：模型的回答和事实表明显矛盾时以事实表为准（只管「电子产品 / 活的 / 能吃」这三类，
+/// 问题带「能 / 可以 / 里面 / 不」这类会换意思的说法时不管，宁可相信模型）
+pub fn check_twenty(f: Facts, question: &str, answer: &str) -> String {
+    let q = question.replace("是不是", "是").replace("是否", "是");
+    let has = |keys: &[&str]| keys.iter().any(|k| q.contains(k));
+    if has(&["不", "没", "无"]) {
+        return answer.to_string();
+    }
+    let truth = if has(&[
+        "电脑", "手机", "电子", "用电", "插电", "电池", "充电", "联网", "屏幕", "数码",
+    ]) {
+        // 「手机上能玩吗」「里面有电脑吗」问的不是它本身是不是电子产品
+        if has(&["能", "可以", "会", "里", "带", "有"]) {
+            None
+        } else {
+            f.electronic
+        }
+    } else if has(&["是活的", "是生物", "是动物", "有生命", "会呼吸", "是活物"]) {
+        f.alive
+    } else if has(&[
+        "能吃",
+        "可以吃",
+        "是吃的",
+        "能喝",
+        "是喝的",
+        "食物",
+        "可食用",
+    ]) {
+        f.edible
+    } else {
+        None
+    };
+    match (truth, answer) {
+        (Some(true), "不是" | "不确定") => "是".into(),
+        (Some(false), "是" | "不确定") => "不是".into(),
+        _ => answer.to_string(),
+    }
 }
 
 fn is_cjk(c: char) -> bool {
@@ -98,6 +212,8 @@ enum Session {
     Twenty {
         category: String,
         secret: String,
+        /// 本地事实表：内置词按类别查，现场出的题由模型随题给出
+        facts: Facts,
         asked: usize,
     },
 }
@@ -105,6 +221,8 @@ enum Session {
 #[derive(Default)]
 pub struct LlmGames {
     sessions: Mutex<HashMap<String, Session>>,
+    /// 最近出过的题名 / 谜底（现场出题时告诉模型别重复；只在内存里）
+    recent: Mutex<std::collections::VecDeque<String>>,
 }
 
 /// 给界面的回应
@@ -141,6 +259,18 @@ fn new_id() -> String {
 // ---------------- 调用模型 ----------------
 
 async fn ask(st: &AppState, task: &str, input: &str, max_tokens: u32) -> Result<String, String> {
+    ask_with(st, task, input, max_tokens, None, 40).await
+}
+
+/// `temperature`：出题要有变化，用高一点的；`secs`：出题要写一大段，给的时间长一些
+async fn ask_with(
+    st: &AppState,
+    task: &str,
+    input: &str,
+    max_tokens: u32,
+    temperature: Option<f32>,
+    secs: u64,
+) -> Result<String, String> {
     let s = st.settings();
     let c = st.current_character();
     let (name, persona) = c
@@ -165,10 +295,10 @@ async fn ask(st: &AppState, task: &str, input: &str, max_tokens: u32) -> Result<
         messages: vec![ChatMessage::user(input)],
         context: None,
         max_tokens,
-        temperature: None,
+        temperature,
     };
     let out = tokio::time::timeout(
-        std::time::Duration::from_secs(40),
+        std::time::Duration::from_secs(secs),
         crate::chat::complete(
             st,
             &s.chat_backend,
@@ -226,14 +356,47 @@ fn answer_of(v: &serde_json::Value) -> Option<String> {
 
 // ---------------- 开始 ----------------
 
-pub fn start(app: &AppHandle, game: &str) -> Result<Start, String> {
-    start_with(&app.state::<AppState>(), game)
+pub async fn start(app: &AppHandle, game: &str) -> Result<Start, String> {
+    start_live_with(&app.state::<AppState>(), game).await
 }
 
-pub fn start_with(st: &AppState, game: &str) -> Result<Start, String> {
+fn check_backend(st: &AppState) -> Result<(), String> {
     if crate::chat::select_backend(st, &st.settings().chat_backend).is_err() {
         return Err("这个游戏需要连上模型才能玩：先到「设置 → 模型」配置一个吧。".into());
     }
+    Ok(())
+}
+
+/// 开一局：海龟汤、二十问每局让模型现场出一道新题（内置题库只有几十个，早晚玩完），
+/// 出题失败 / 超时 / 用的是 mock 就退回内置题库
+pub async fn start_live_with(st: &AppState, game: &str) -> Result<Start, String> {
+    check_backend(st)?;
+    let live = st.settings().chat_backend != "mock";
+    match game {
+        "turtle" if live => {
+            let soup = gen_soup(st).await;
+            start_inner(st, game, soup, None)
+        }
+        "twenty" if live => {
+            let secret = gen_twenty(st).await;
+            start_inner(st, game, None, secret)
+        }
+        _ => start_inner(st, game, None, None),
+    }
+}
+
+/// 只用内置题库（测试、离线兜底）
+pub fn start_with(st: &AppState, game: &str) -> Result<Start, String> {
+    check_backend(st)?;
+    start_inner(st, game, None, None)
+}
+
+fn start_inner(
+    st: &AppState,
+    game: &str,
+    soup: Option<Soup>,
+    secret: Option<(String, String, Facts)>,
+) -> Result<Start, String> {
     let id = new_id();
     let seed = crate::lines::seed();
     let (session, intro, puzzle, limit) = match game {
@@ -244,8 +407,11 @@ pub fn start_with(st: &AppState, game: &str) -> Result<Start, String> {
             0,
         ),
         "turtle" => {
-            let list = soups();
-            let soup = list[(seed % list.len() as u64) as usize].clone();
+            let soup = soup.unwrap_or_else(|| {
+                let list = soups();
+                list[(seed % list.len() as u64) as usize].clone()
+            });
+            remember_recent(st, &soup.title);
             let surface = format!("「{}」{}", soup.title, soup.surface);
             (
                 Session::Turtle { soup, asked: 0 },
@@ -255,12 +421,18 @@ pub fn start_with(st: &AppState, game: &str) -> Result<Start, String> {
             )
         }
         "twenty" => {
-            let words = twenty_words();
-            let (cat, w) = words[(seed % words.len() as u64) as usize].clone();
+            let (cat, w, facts) = secret.unwrap_or_else(|| {
+                let words = twenty_words();
+                let (cat, w) = words[(seed % words.len() as u64) as usize].clone();
+                let facts = facts_of(&cat, &w);
+                (cat, w, facts)
+            });
+            remember_recent(st, &w);
             (
                 Session::Twenty {
                     category: cat.clone(),
                     secret: w,
+                    facts,
                     asked: 0,
                 },
                 "二十问：我心里想了一个东西，你最多问我 20 个是非题，然后猜猜是什么。".into(),
@@ -285,6 +457,162 @@ pub fn start_with(st: &AppState, game: &str) -> Result<Start, String> {
         puzzle,
         limit,
     })
+}
+
+// ---------------- 现场出题 ----------------
+
+const RECENT_KEEP: usize = 40;
+
+fn recent_list(st: &AppState) -> Vec<String> {
+    let g = st
+        .llm_games
+        .recent
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    g.iter().cloned().collect()
+}
+
+fn remember_recent(st: &AppState, name: &str) {
+    let mut g = st
+        .llm_games
+        .recent
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    g.retain(|x| x != name);
+    g.push_back(name.to_string());
+    while g.len() > RECENT_KEEP {
+        g.pop_front();
+    }
+}
+
+/// 海龟汤的主题方向（每局随机一个，免得模型总出同一类）
+const SOUP_THEMES: &[&str] = &[
+    "校园和教室",
+    "下雨天或季节变化",
+    "厨房和一顿饭",
+    "邻居和楼道",
+    "深夜的城市",
+    "旅行和车站",
+    "手机、电脑和网络",
+    "老物件和旧东西",
+    "宠物或小动物",
+    "节日和礼物",
+    "图书馆或书店",
+    "游戏、玩具和童年",
+    "家人和家里的一件小事",
+    "公园、河边或海边",
+];
+
+fn strings(v: &serde_json::Value, k: &str) -> Vec<String> {
+    v.get(k)
+        .and_then(|x| x.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|i| i.as_str())
+                .map(|t| {
+                    t.trim()
+                        .trim_end_matches(['。', '；', ';', '.'])
+                        .trim()
+                        .to_string()
+                })
+                .filter(|t| !t.is_empty() && t.chars().count() <= 60)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// 检查模型现场出的海龟汤：长度合理、有事实清单、汤面没把汤底抄出来、没和最近的重复
+pub fn parse_soup(v: &serde_json::Value, recent: &[String]) -> Option<Soup> {
+    let (title, surface, truth) = (s(v, "title"), s(v, "surface"), s(v, "truth"));
+    let (yes, no) = (strings(v, "yes"), strings(v, "no"));
+    let n = |t: &str| t.chars().count();
+    if !(1..=12).contains(&n(&title))
+        || !(20..=240).contains(&n(&surface))
+        || !(40..=600).contains(&n(&truth))
+        || yes.len() < 4
+        || no.len() < 3
+        || recent.contains(&title)
+    {
+        return None;
+    }
+    // 汤面不能把汤底的开头抄出来
+    let head: String = truth.chars().take(14).collect();
+    if surface.contains(&head) {
+        return None;
+    }
+    let facts = format!(
+        "是：{}。不是：{}。",
+        yes.iter().take(10).cloned().collect::<Vec<_>>().join("；"),
+        no.iter().take(8).cloned().collect::<Vec<_>>().join("；")
+    );
+    Some(Soup {
+        title,
+        surface,
+        truth,
+        facts,
+    })
+}
+
+async fn gen_soup(st: &AppState) -> Option<Soup> {
+    let recent = recent_list(st);
+    let builtin: Vec<String> = soups().into_iter().map(|x| x.title).collect();
+    let theme = SOUP_THEMES[(crate::lines::seed() % SOUP_THEMES.len() as u64) as usize];
+    let avoid: Vec<String> = recent.iter().chain(builtin.iter()).cloned().collect();
+    let task = format!(
+        "现在轮到你给用户出一道原创的海龟汤（不要用网上流传的经典题）。主题方向：{theme}。\n\
+         要求：title 是不超过 8 个字的题目名；surface（汤面）1~2 句话、40~100 字，描述一个看起来奇怪、让人想问「为什么」的场景；\
+         truth（汤底）60~220 字，合情合理、有点温度、能被一连串「是 / 不是」的问题慢慢问出来，不要血腥暴力、不要真实的犯罪细节；\
+         yes 是 6~8 条和汤底一致的事实短句（每条 20 字以内，之后用来回答用户的提问）；no 是 4~6 条「看起来可能、其实不是」的短句。\
+         surface 里不能直接写出 truth 里的关键答案。\n已经出过的题，不要重复也不要换个说法再出：{}\n\
+         格式：{{\"title\": \"……\", \"surface\": \"……\", \"truth\": \"……\", \"yes\": [\"……\"], \"no\": [\"……\"]}}",
+        avoid.join("、")
+    );
+    let text = ask_with(st, &task, "出题", 1200, Some(1.0), 60)
+        .await
+        .ok()?;
+    let soup = parse_soup(&json(&text), &avoid);
+    if soup.is_none() {
+        log::info!("海龟汤现场出题没通过检查，用内置题库");
+    }
+    soup
+}
+
+/// 检查模型现场想的二十问谜底
+pub fn parse_twenty(v: &serde_json::Value, recent: &[String]) -> Option<(String, String, Facts)> {
+    let (category, secret) = (s(v, "category"), s(v, "secret"));
+    let n = |t: &str| t.chars().count();
+    if !(1..=8).contains(&n(&category))
+        || !(1..=8).contains(&n(&secret))
+        || !secret.chars().all(|c| c.is_alphanumeric())
+        || recent.contains(&secret)
+    {
+        return None;
+    }
+    let b = |k: &str| v.get(k).and_then(|x| x.as_bool());
+    let facts = Facts {
+        electronic: b("electronic"),
+        alive: b("alive"),
+        edible: b("edible"),
+    };
+    Some((category, secret, facts))
+}
+
+async fn gen_twenty(st: &AppState) -> Option<(String, String, Facts)> {
+    let recent = recent_list(st);
+    let builtin: Vec<String> = twenty_words().into_iter().map(|(_, w)| w).collect();
+    let avoid: Vec<String> = recent.iter().chain(builtin.iter()).cloned().collect();
+    let task = format!(
+        "现在轮到你想一个东西，给用户玩二十问。要求：secret 是一个常见的东西（小学生也认识），名称 2~6 个字，能用「是 / 不是」问题一步步猜出来；\
+         category 是它的类别名（比如 动物、食物、日常用品、地点、自然、交通工具、游戏和娱乐、乐器、植物、职业、天体，2~6 个字）；\
+         再如实回答三个事实：electronic（是不是电子产品，要用电或有屏幕）、alive（是不是活的）、edible（能不能吃或喝），拿不准就写 null。\n\
+         已经出过的，不要重复：{}\n\
+         格式：{{\"category\": \"……\", \"secret\": \"……\", \"electronic\": false, \"alive\": false, \"edible\": false}}",
+        avoid.join("、")
+    );
+    let text = ask_with(st, &task, "想一个", 150, Some(1.0), 40)
+        .await
+        .ok()?;
+    parse_twenty(&json(&text), &avoid)
 }
 
 fn take(st: &AppState, id: &str) -> Result<Session, String> {
@@ -431,8 +759,16 @@ pub async fn turn_with(st: &AppState, id: &str, kind: &str, input: &str) -> Resu
             if asked >= MAX_QUESTIONS {
                 return Err("问题已经问完了，猜猜看真相吧（或者点「揭晓」）".into());
             }
+            let facts = if soup.facts.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "\n事实清单（本地写好的，回答必须和它一致：用户问的意思只要在清单「是」里就答「是」，在「不是」里就答「不是」；清单里没有的，再严格按汤底推理，别凭空编）：{}",
+                    soup.facts
+                )
+            };
             let task = format!(
-                "海龟汤。汤面：{}\n汤底（真相，只能你知道，绝对不要说出来）：{}\n用户问了一个问题。按汤底判断，answer 只能是「是」「不是」「无关」「很接近」之一（问到了关键时用「很接近」）；问题不是是非题时 answer 用「无关」，并在 line 里提醒他用是非题问。line 是你用口吻说的一句很短的话，不能透露汤底。\n格式：{{\"answer\": \"是\", \"line\": \"……\"}}",
+                "海龟汤。汤面：{}\n汤底（真相，只能你知道，绝对不要说出来）：{}{facts}\n用户问了一个问题。按汤底和事实清单判断，answer 只能是「是」「不是」「无关」「很接近」之一（问到了关键时用「很接近」）；问题不是是非题时 answer 用「无关」，并在 line 里提醒他用是非题问。line 是你用口吻说的一句很短的话，不能透露汤底。\n格式：{{\"answer\": \"是\", \"line\": \"……\"}}",
                 soup.surface, soup.truth
             );
             let v = json(&ask(st, &task, &input, 120).await?);
@@ -449,6 +785,7 @@ pub async fn turn_with(st: &AppState, id: &str, kind: &str, input: &str) -> Resu
         Session::Twenty {
             category,
             secret,
+            facts,
             asked,
         } => {
             if kind == "guess" {
@@ -493,6 +830,7 @@ pub async fn turn_with(st: &AppState, id: &str, kind: &str, input: &str) -> Resu
                     Some(Session::Twenty {
                         category,
                         secret,
+                        facts,
                         asked,
                     }),
                 );
@@ -506,11 +844,23 @@ pub async fn turn_with(st: &AppState, id: &str, kind: &str, input: &str) -> Resu
             if asked >= TWENTY_LIMIT {
                 return Err("20 个问题用完了，直接猜吧".into());
             }
+            let sheet = facts_text(facts);
+            let sheet = if sheet.is_empty() {
+                String::new()
+            } else {
+                format!("\n本地事实表（必须照它答，不许和它矛盾）：{sheet}。")
+            };
             let task = format!(
-                "二十问。你心里想的东西是「{secret}」（类别：{category}），绝对不要说出来，也不要用谐音、拆字暗示。用户问了一个是非题，按常识如实回答：answer 只能是「是」「不是」「不确定」之一；问题不是是非题时 answer 用「不确定」，在 line 里提醒他用是非题问。line 用你的口吻，很短。\n格式：{{\"answer\": \"是\", \"line\": \"……\"}}"
+                "二十问。你心里想的东西是「{secret}」（类别：{category}，类别只是分类名，请只按「{secret}」这个东西本身回答，比如类别叫「游戏和娱乐」不代表它是电脑游戏），绝对不要说出来，也不要用谐音、拆字暗示。{sheet}\n用户问了一个是非题，按事实表和常识如实回答：answer 只能是「是」「不是」「不确定」之一；问题不是是非题时 answer 用「不确定」，在 line 里提醒他用是非题问。line 用你的口吻，很短，也不能和你的 answer 矛盾。\n格式：{{\"answer\": \"是\", \"line\": \"……\"}}"
             );
             let v = json(&ask(st, &task, &input, 100).await?);
             let mut line = banned(st, &s(&v, "line"));
+            let model_answer = answer_of(&v).unwrap_or_else(|| "不确定".into());
+            let answer = check_twenty(facts, &input, &model_answer);
+            if answer != model_answer {
+                // 模型答反了，它顺口说的那句话也就不能用了
+                line = String::new();
+            }
             // 防止她不小心把答案说出来
             if line.contains(&secret) {
                 line = String::new();
@@ -522,17 +872,44 @@ pub async fn turn_with(st: &AppState, id: &str, kind: &str, input: &str) -> Resu
                 Some(Session::Twenty {
                     category,
                     secret,
+                    facts,
                     asked,
                 }),
             );
             Ok(Turn {
                 line,
-                answer: Some(answer_of(&v).unwrap_or_else(|| "不确定".into())),
+                answer: Some(answer),
                 asked,
                 limit: TWENTY_LIMIT,
                 ..Default::default()
             })
         }
+    }
+}
+
+/// 主持人的固定回答的日语（本地写好，不用再问模型 / 翻译）
+pub fn answer_ja(answer: &str) -> Option<&'static str> {
+    Some(match answer {
+        "是" => "うん、そうだよ。",
+        "不是" => "ううん、違うよ。",
+        "无关" => "それは関係ないかな。",
+        "很接近" => "おっ、すごく近いよ。",
+        "不确定" => "うーん、どうだろう。",
+        _ => return None,
+    })
+}
+
+/// 把这一步的回应念出来（游戏场合）：固定的回答用上面的日语；一局结束时的台词来自台词池，本来就有日语。
+/// 每一问中间模型现编的那句话不念（不然每问一次都要多翻译一次）。
+pub fn speak(app: &AppHandle, t: &Turn) {
+    let st = app.state::<AppState>();
+    if let Some(a) = &t.answer
+        && let Some(ja) = answer_ja(a)
+    {
+        crate::voice::remember_ja(&st, a, ja);
+        crate::voice::on_line(app, a, crate::voice::Scene::Game);
+    } else if t.ended.is_some() && !t.line.is_empty() {
+        crate::voice::on_line(app, &t.line, crate::voice::Scene::Game);
     }
 }
 
@@ -581,6 +958,126 @@ mod tests {
         let w = twenty_words();
         assert!(w.len() >= 80);
         assert!(w.iter().any(|(c, x)| c == "动物" && x == "猫"));
+    }
+
+    #[test]
+    fn live_soup_is_checked_before_use() {
+        let good = serde_json::json!({
+            "title": "雨后的鞋印",
+            "surface": "他在雨停后特意绕远路走了一遍泥地，回家时却比出门时更开心。",
+            "truth": "他的小狗走丢了很久，今天有人说在泥地边见过它。他沿着泥地找，发现了熟悉的小爪印，一路跟到邻居家的院子，小狗正躺在那里。",
+            "yes": ["和一只小狗有关", "他在找东西", "泥地上有爪印", "最后找到了", "下雨是线索"],
+            "no": ["有人受伤", "他是为了散步", "犯罪"]
+        });
+        let soup = parse_soup(&good, &[]).expect("合格的题");
+        assert!(soup.facts.starts_with("是：和一只小狗有关；"));
+        assert!(soup.facts.contains("不是：有人受伤；"));
+        // 和最近出过的重复
+        assert!(parse_soup(&good, &["雨后的鞋印".into()]).is_none());
+        // 汤面把汤底抄出来了
+        let mut leak = good.clone();
+        leak["surface"] =
+            serde_json::json!("他的小狗走丢了很久，今天有人说在泥地边见过它。他为什么开心？");
+        assert!(parse_soup(&leak, &[]).is_none());
+        // 事实清单太少 / 汤底太短
+        let mut few = good.clone();
+        few["yes"] = serde_json::json!(["一条"]);
+        assert!(parse_soup(&few, &[]).is_none());
+        let mut short = good.clone();
+        short["truth"] = serde_json::json!("太短了");
+        assert!(parse_soup(&short, &[]).is_none());
+        assert!(parse_soup(&json("不是 JSON"), &[]).is_none());
+    }
+
+    #[test]
+    fn live_twenty_secret_is_checked_before_use() {
+        let v = serde_json::json!({"category": "乐器", "secret": "二胡", "electronic": false, "alive": false, "edible": null});
+        let (c, w, f) = parse_twenty(&v, &[]).unwrap();
+        assert_eq!((c.as_str(), w.as_str()), ("乐器", "二胡"));
+        assert_eq!(
+            f,
+            Facts {
+                electronic: Some(false),
+                alive: Some(false),
+                edible: None
+            }
+        );
+        assert!(parse_twenty(&v, &["二胡".into()]).is_none(), "重复");
+        let bad = serde_json::json!({"category": "乐器", "secret": "一种很长很长的东西，带逗号"});
+        assert!(parse_twenty(&bad, &[]).is_none());
+    }
+
+    #[tokio::test]
+    async fn mock_backend_uses_the_builtin_puzzles() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = crate::state::test_state(dir.path());
+        // mock 不现场出题（保持测试和界面检查可重复），也不会把题名记成「最近出过」以外的东西
+        let g = start_live_with(&st, "turtle").await.unwrap();
+        assert!(g.puzzle.unwrap().starts_with('「'));
+        assert_eq!(recent_list(&st).len(), 1);
+        let g = start_live_with(&st, "twenty").await.unwrap();
+        assert!(g.puzzle.unwrap().starts_with("提示："));
+    }
+
+    #[test]
+    fn every_host_answer_has_japanese() {
+        // answer_of 认得的回答，都要有日语（不然那一句会退回去翻译或念中文）
+        for a in ["是", "不是", "无关", "很接近", "不确定"] {
+            assert!(answer_ja(a).is_some(), "{a}");
+        }
+        assert!(answer_ja("也许吧").is_none());
+    }
+
+    #[test]
+    fn every_soup_has_facts() {
+        for x in soups() {
+            assert!(
+                x.facts.contains("是：") && x.facts.contains("不是："),
+                "{} 缺事实清单",
+                x.title
+            );
+            assert!(x.facts.len() > 40, "{}", x.title);
+        }
+    }
+
+    #[test]
+    fn twenty_regression_skipping_rope_is_not_an_electronic_game() {
+        // 用户实测：谜底是跳绳，问「是不是电脑上或手机上的游戏」她答了「是」
+        let f = facts_of("游戏和娱乐", "跳绳");
+        assert_eq!(f.electronic, Some(false));
+        assert_eq!(check_twenty(f, "是不是电脑上或手机上的游戏", "是"), "不是");
+        assert_eq!(check_twenty(f, "是不是电子产品？", "不确定"), "不是");
+        // 游戏机才是
+        let g = facts_of("游戏和娱乐", "游戏机");
+        assert_eq!(check_twenty(g, "是不是电子产品", "不是"), "是");
+    }
+
+    #[test]
+    fn twenty_guard_only_corrects_clear_conflicts() {
+        let cat = facts_of("动物", "猫");
+        assert_eq!(check_twenty(cat, "是不是动物", "不确定"), "是");
+        assert_eq!(check_twenty(cat, "是活的吗", "不是"), "是");
+        let melon = facts_of("食物", "西瓜");
+        assert_eq!(check_twenty(melon, "能吃吗", "不是"), "是");
+        assert_eq!(
+            check_twenty(facts_of("日常用品", "雨伞"), "能吃吗", "是"),
+            "不是"
+        );
+        // 地点里可以有动物、有吃的：不纠正
+        let zoo = facts_of("地点", "动物园");
+        assert_eq!(check_twenty(zoo, "里面能吃东西吗", "是"), "是");
+        assert_eq!(check_twenty(zoo, "里面有电脑吗", "是"), "是");
+        // 换了意思的说法 / 否定句：相信模型
+        let cards = facts_of("游戏和娱乐", "扑克牌");
+        assert_eq!(check_twenty(cards, "手机上能玩吗", "是"), "是");
+        let phone = facts_of("日常用品", "手机");
+        assert_eq!(check_twenty(phone, "是不是不用电的", "是"), "是");
+        // 和问题无关的问题原样放过
+        assert_eq!(check_twenty(cat, "是不是比人小", "是"), "是");
+        assert_eq!(
+            facts_text(phone),
+            "电子产品（要用电 / 有屏幕）：是；活的 / 是动物：不是；能吃 / 能喝：不是"
+        );
     }
 
     #[test]

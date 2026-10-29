@@ -5,6 +5,7 @@ import type { SettingsApi } from '../lib/ipc';
 import type { BackendConfig, BackendView, SettingsView, TestResult } from '../lib/types';
 import { copyText } from '../lib/clipboard';
 import { StatusLine, useStatus } from './SettingsApp';
+import { WebSection } from './WebSection';
 
 interface Props {
   api: SettingsApi;
@@ -62,6 +63,8 @@ export function ModelsPage({ api, view, onChanged }: Props) {
         </div>
         <StatusLine status={status} />
       </div>
+
+      <WebSection api={api} initial={view.web.enabled} />
 
       {view.backends.map((b) => (
         <BackendCard

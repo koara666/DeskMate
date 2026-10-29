@@ -176,12 +176,21 @@ export function scoreFor(cleared: number): number {
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
-/** 难度：每块想多久（毫秒）、每一步操作的间隔、多大概率不选最好的那个 */
+/**
+ * 难度：每块想多久（毫秒）、每一步操作（挪一格 / 转一下）的间隔、多大概率不选最好的那个。
+ * 公平：她的速度要在人手能做到的范围里——玩家同样有「直接落下」，所以她想好以后一步步挪，
+ * 一块从出现到落下大约：简单 2.5 秒、普通 1.6 秒、困难 1.0 秒（以前困难档只要 0.5 秒，人跟不上）。
+ */
 export const AI: Record<Difficulty, { think: number; step: number; mistake: number }> = {
-  easy: { think: 900, step: 160, mistake: 0.3 },
-  normal: { think: 520, step: 100, mistake: 0.12 },
-  hard: { think: 260, step: 55, mistake: 0.03 },
+  easy: { think: 1200, step: 260, mistake: 0.3 },
+  normal: { think: 800, step: 170, mistake: 0.12 },
+  hard: { think: 450, step: 110, mistake: 0.03 },
 };
+
+/** 她大约多久放一块（秒）：想的时间 + 平均要挪转 4 步 + 最后一下直接落下，写在难度按钮上让玩家心里有数 */
+export function secondsPerPiece(d: Difficulty): number {
+  return Math.round(((AI[d].think + AI[d].step * 5) / 1000) * 2) / 2;
+}
 
 /** 给一个棋盘打分（越大越好）：越平、越矮、洞越少越好 */
 export function evaluate(b: Board, cleared: number): number {
