@@ -77,9 +77,19 @@ CU="$(echo "$CUDA_VER" | tr 'A-Z' 'a-z')"
 if [ "$SOURCE" = HF ]; then
     python -m pip install torch==2.9.1 torchaudio==2.9.1 --index-url "https://download.pytorch.org/whl/$CU"
 else
-    # 国内：PyTorch 从阿里云的 PyTorch 镜像、NVIDIA 的库从阿里云 PyPI（官方源的 NVIDIA 库在 pypi.nvidia.com，实测国内经常读超时）
-    python -m pip install "torch==2.9.1+$CU" "torchaudio==2.9.1+$CU" \
-        -f "https://mirrors.aliyun.com/pytorch-wheels/$CU/" -i https://mirrors.aliyun.com/pypi/simple/
+    # 国内：torch 本体从官方源下（实测 20 MB/s；阿里云的 PyTorch 镜像只有几百 KB/s），但不带依赖——
+    # 依赖里的 NVIDIA 库在官方源指向 pypi.nvidia.com，国内读超时、几乎下不动，改从阿里云 PyPI 装（实测 26 MB/s）
+    python -m pip install torch==2.9.1 torchaudio==2.9.1 --no-deps --index-url "https://download.pytorch.org/whl/$CU"
+    python - > "$TMPDIR/torch-deps.txt" <<'PY'
+import importlib.metadata as md
+from pip._vendor.packaging.requirements import Requirement
+for name in ("torch", "torchaudio"):
+    for r in md.requires(name) or []:
+        req = Requirement(r)
+        if req.marker is None or req.marker.evaluate({"extra": ""}):
+            print(str(req).split(";")[0].strip())
+PY
+    python -m pip install -r "$TMPDIR/torch-deps.txt" -i https://mirrors.aliyun.com/pypi/simple/
 fi
 python -m pip install torchcodec==0.8.1
 
