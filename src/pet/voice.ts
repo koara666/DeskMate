@@ -1,11 +1,15 @@
 // 桌宠窗口里的语音播放（v2.1 P14）：新的一句会打断上一句；说话时告诉桌宠「在说话」（嘴动）。
+// 两句几乎同时到时只播最后一句（取音频是异步的，先到的那句取回来时发现已经过期就丢掉，不会叠在一起）。
 // 系统语音用浏览器自带的 Web Speech（Windows 的语音，离线、免费）；别的引擎由后端合成好，这里只播放。
 import type { VoiceApi } from '../lib/ipc';
 
 export function startVoice(api: VoiceApi, onSpeaking: (on: boolean) => void): () => void {
   let audio: HTMLAudioElement | null = null;
   let url = '';
+  // 每次停止 / 每来一句新的就加一：取回音频时和它对不上，说明这一句已经过期
+  let seq = 0;
   const stopAll = () => {
+    seq++;
     if (audio) {
       audio.pause();
       audio = null;
@@ -51,8 +55,10 @@ export function startVoice(api: VoiceApi, onSpeaking: (on: boolean) => void): ()
     }),
     api.onPlay(async (e) => {
       stopAll();
+      const mine = seq;
       try {
         const buf = await api.audio(e.id);
+        if (mine !== seq) return;
         url = URL.createObjectURL(new Blob([buf]));
         const a = new Audio(url);
         audio = a;
@@ -66,7 +72,7 @@ export function startVoice(api: VoiceApi, onSpeaking: (on: boolean) => void): ()
         };
         await a.play();
       } catch {
-        stopAll();
+        if (mine === seq) stopAll();
       }
     }),
     api.onStop(stopAll),

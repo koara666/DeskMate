@@ -401,6 +401,12 @@ pub async fn game_say(
     let st = app.state::<AppState>();
     crate::companion::emit_pose(&app, &format!("game.{event}"));
     let pool = games::line(&st, &game, &event, &vars);
+    // 一局的胜负要念；开局、每一轮、领先落后只是随口一句，玩得快的时候不念（DECISIONS #65）
+    let scene = if matches!(event.as_str(), "win" | "lose" | "draw") {
+        crate::voice::Scene::Game
+    } else {
+        crate::voice::Scene::GameMoment
+    };
     if matches!(event.as_str(), "win" | "lose") && crate::lines::seed() % 5 == 0 {
         let style = st
             .current_character()
@@ -421,12 +427,12 @@ pub async fn game_say(
             }
         );
         if let Some(t) = crate::proactive::model_say(&st, &hint, 80).await {
-            crate::voice::on_line(&app, &t, crate::voice::Scene::Game);
+            crate::voice::on_line(&app, &t, scene);
             return Ok(Some(t));
         }
     }
     if let Some(t) = &pool {
-        crate::voice::on_line(&app, t, crate::voice::Scene::Game);
+        crate::voice::on_line(&app, t, scene);
     }
     Ok(pool)
 }

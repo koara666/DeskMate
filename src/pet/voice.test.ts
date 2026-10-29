@@ -68,3 +68,52 @@ describe('系统语音按语言挑声音', () => {
     expect(spoken.at(-1)).toEqual({ text: '你好', voice: 'Huihui', lang: 'zh-CN' });
   });
 });
+
+describe('两句几乎同时到', () => {
+  it('取音频慢的那句过期了就不播，不会叠在一起', async () => {
+    const played: string[] = [];
+    class FakeAudio {
+      volume = 1;
+      onplay: (() => void) | null = null;
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(public src: string) {}
+      play() {
+        played.push(this.src);
+        return Promise.resolve();
+      }
+      pause() {}
+    }
+    vi.stubGlobal('Audio', FakeAudio);
+    const realCreate = URL.createObjectURL;
+    const realRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = (b: Blob | MediaSource) => 'blob:' + (b as Blob).size;
+    URL.revokeObjectURL = () => {};
+    try {
+      let play: ((e: { id: string; volume: number }) => void) | null = null;
+      const resolvers: Record<string, (b: ArrayBuffer) => void> = {};
+      const api = {
+        onSay: () => Promise.resolve(() => {}),
+        onPlay: (cb: (e: { id: string; volume: number }) => void) => {
+          play = cb;
+          return Promise.resolve(() => {});
+        },
+        onStop: () => Promise.resolve(() => {}),
+        audio: (id: string) => new Promise<ArrayBuffer>((r) => (resolvers[id] = r)),
+      } as unknown as VoiceApi;
+      startVoice(api, () => {});
+      play!({ id: 'a', volume: 1 });
+      play!({ id: 'b', volume: 1 });
+      // 后一句的音频先取回来，前一句的才到
+      resolvers.b(new ArrayBuffer(2));
+      await Promise.resolve();
+      await Promise.resolve();
+      resolvers.a(new ArrayBuffer(1));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(played).toEqual(['blob:2']);
+    } finally {
+      URL.createObjectURL = realCreate;
+      URL.revokeObjectURL = realRevoke;
+    }
+  });
+});

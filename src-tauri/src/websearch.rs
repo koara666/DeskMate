@@ -182,6 +182,84 @@ fn clean(q: &str) -> String {
     t.chars().take(60).collect()
 }
 
+const WEATHER_KEYS: &[&str] = &["天气", "气温", "温度", "下雨", "下雪", "降温", "降雨"];
+/// 问天气时夹在地名旁边的时间词
+const TIME_WORDS: &[&str] = &[
+    "大后天",
+    "后天",
+    "明天",
+    "今天",
+    "昨天",
+    "今晚",
+    "今早",
+    "明早",
+    "这几天",
+    "这两天",
+    "接下来",
+    "未来",
+    "最近",
+    "目前",
+    "现在",
+    "本周",
+    "这周",
+    "下周",
+    "周末",
+    "一周",
+    "待会",
+    "一会儿",
+];
+/// 地名后面可能跟的口语
+const PLACE_TAIL: &[&str] = &[
+    "的", "那边", "那里", "这边", "地区", "一带", "会", "要", "是", "还", "又", "真",
+];
+/// 带这些字的不是地名（「你那边天气」「附近天气」「外面天气」）
+const NOT_PLACE: &[&str] = &[
+    "你", "我", "这", "那", "哪", "咱", "家", "本地", "当地", "附近", "外面", "外头", "室外",
+    "什么", "怎么", "吗", "呢", "吧", "啊",
+    // 问句的碎片：「会不会下雨」「要不要带伞」「有没有」「能不能」
+    "会", "不", "要", "能", "有", "没", "是", "想", "带", "穿", "伞", "冷", "热", "出门",
+];
+
+/// 问的是某个地方的天气，而且内置城市表里没有它（比如「联网搜一下抚顺的天气怎么样呢」→「抚顺」）。
+/// 表里有的城市、没提地方的（问她那边 / 本地）返回 None，由内置天气回答。
+pub fn weather_place(text: &str) -> Option<String> {
+    let t = text.trim();
+    if crate::briefing::city::mentioned(t).is_some() {
+        return None;
+    }
+    let i = WEATHER_KEYS.iter().filter_map(|k| t.find(k)).min()?;
+    let mut p = t[..i].to_string();
+    // 「联网搜一下」「帮我查查」之类：只留动词后面的
+    for v in VERBS {
+        if let Some(j) = p.rfind(v) {
+            p = p[j + v.len()..].to_string();
+        }
+    }
+    for w in TIME_WORDS {
+        p = p.replace(w, "");
+    }
+    let mut p = clean(&p);
+    loop {
+        let before = p.clone();
+        for tail in PLACE_TAIL {
+            if let Some(rest) = p.strip_suffix(tail) {
+                p = rest.trim().to_string();
+            }
+        }
+        p = clean(&p);
+        if p == before {
+            break;
+        }
+    }
+    let n = p.chars().count();
+    // 中文地名最长 6 个字（「巴音郭楞」「乌鲁木齐」），英文地名放宽些
+    let max = if p.is_ascii() { 24 } else { 6 };
+    let ok = (2..=max).contains(&n)
+        && p.chars().all(|c| c.is_alphabetic() || c == ' ')
+        && !NOT_PLACE.iter().any(|w| p.contains(w));
+    ok.then_some(p)
+}
+
 /// 里面有不该发给搜索服务的东西：邮箱、手机号 / 长数字、密钥样子的长串、密码之类的词
 pub fn sensitive(q: &str) -> bool {
     if q.contains('@') && q.contains('.') {
@@ -232,6 +310,10 @@ pub fn query_for(text: &str) -> Option<Query> {
         return None;
     }
     let has = |ws: &[&str]| ws.iter().any(|w| t.contains(w));
+    // 0. 问某个地方的天气，而且内置的城市表里没有这个地方（表里有的、没提地方的由内置天气回答）
+    if let Some(p) = weather_place(t) {
+        return finish(format!("{p} 天气"), false);
+    }
     // 1. 明确说了搜 / 查
     if let Some((i, v)) = VERBS.iter().find_map(|v| t.find(v).map(|i| (i, *v))) {
         let after = clean(&t[i + v.len()..]);
@@ -622,12 +704,23 @@ pub async fn web_note(st: &AppState, text: &str) -> Option<WebNote> {
     if !st.settings().web.enabled {
         return None;
     }
-    let q = query_for(text)?;
-    let r = tokio::time::timeout(Duration::from_secs(15), search(&st.http, &q)).await;
-    Some(match r {
+    Some(run(st, &query_for(text)?).await)
+}
+
+/// 她自己觉得要查（回复里写了 `[[搜索：关键词]]`）：关键词过一遍和用户说的话一样的隐私检查
+pub fn query_from_marker(keywords: &str) -> Option<Query> {
+    let q = clean(keywords);
+    let news = NEWS_WORDS.iter().any(|w| q.contains(w));
+    finish(q, news)
+}
+
+/// 搜，并整理成给模型的资料 + 气泡下面的小字（搜不到 / 连不上也如实写进去）
+pub async fn run(st: &AppState, q: &Query) -> WebNote {
+    let r = tokio::time::timeout(Duration::from_secs(15), search(&st.http, q)).await;
+    match r {
         Ok(Ok(hits)) if !hits.is_empty() => WebNote {
             display: format!("上网查了「{}」· {} 条结果", q.text, hits.len()),
-            note: note_for(&q, &hits),
+            note: note_for(q, &hits),
         },
         Ok(Ok(_)) => WebNote {
             display: format!("上网查了「{}」· 没查到", q.text),
@@ -651,7 +744,7 @@ pub async fn web_note(st: &AppState, text: &str) -> Option<WebNote> {
             display: "想上网查，但等太久了".into(),
             note: "刚才上网搜东西，等了太久没有结果。坦率告诉用户这次没查成，不要编造。".into(),
         },
-    })
+    }
 }
 
 #[cfg(test)]
@@ -679,6 +772,55 @@ mod tests {
             q("弹丸论破2什么时候发售的？查一下").map(|x| x.0),
             Some("弹丸论破2什么时候发售的".into())
         );
+    }
+
+    #[test]
+    fn weather_of_unknown_places_goes_to_web() {
+        // 用户 2026-10-29 的原话：内置城市表里没有抚顺，以前回「没办法搜到」
+        assert_eq!(
+            weather_place("联网搜一下抚顺的天气怎么样呢").as_deref(),
+            Some("抚顺")
+        );
+        assert_eq!(weather_place("抚顺明天天气怎么样").as_deref(), Some("抚顺"));
+        assert_eq!(
+            weather_place("你知道鞍山今天会下雨吗").as_deref(),
+            Some("鞍山")
+        );
+        assert_eq!(
+            weather_place("帮我查查 Fushun 的天气").as_deref(),
+            Some("Fushun")
+        );
+        assert_eq!(
+            q("联网搜一下抚顺的天气怎么样呢"),
+            Some(("抚顺 天气".into(), false))
+        );
+        // 内置表里有的城市、没说地方、问她那边：仍然由内置天气回答
+        assert_eq!(weather_place("东京天气怎么样"), None);
+        assert_eq!(weather_place("今天天气怎么样"), None);
+        assert_eq!(weather_place("你那边天气怎么样"), None);
+        assert_eq!(weather_place("外面天气好吗"), None);
+        assert_eq!(weather_place("附近今天会下雨吗"), None);
+        assert_eq!(weather_place("天气真好"), None);
+        // 问句碎片不是地名
+        assert_eq!(weather_place("我想知道明天会不会下雨"), None);
+        assert_eq!(weather_place("最近会下雨吗"), None);
+        assert_eq!(weather_place("出门要带伞吗，今天会下雨吗"), None);
+        assert_eq!(weather_place("好冷，不知道明天会不会下雪"), None);
+        assert_eq!(weather_place("今天天气不错啊"), None);
+        assert_eq!(q("我想知道明天会不会下雨"), None);
+        assert_eq!(q("今天天气不错"), None);
+    }
+
+    #[test]
+    fn marker_queries_are_filtered_like_user_text() {
+        assert_eq!(
+            query_from_marker("抚顺 房价 2026").map(|x| x.text),
+            Some("抚顺 房价 2026".into())
+        );
+        assert!(query_from_marker("今天的新闻").unwrap().news);
+        assert!(query_from_marker("我的密码是什么").is_none());
+        assert!(query_from_marker("13812345678 是谁").is_none());
+        assert!(query_from_marker("").is_none());
     }
 
     #[test]

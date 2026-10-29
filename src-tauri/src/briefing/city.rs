@@ -182,6 +182,25 @@ pub async fn search_online(http: &reqwest::Client, q: &str) -> Result<Vec<City>,
         .collect())
 }
 
+/// 聊天里提到的地名（内置表里没有的）：用地理编码查坐标。两个字的中文地名只认带「市」的写法，所以先试「抚顺市」再试「抚顺」。
+/// 查不到 / 网络不通返回 None（调用方再退回联网搜索）
+pub async fn resolve_online(http: &reqwest::Client, place: &str) -> Option<City> {
+    let place = place.trim();
+    let mut tries = Vec::new();
+    if place.chars().all(|c| !c.is_ascii()) && !place.ends_with(['市', '县', '区', '縣']) {
+        tries.push(format!("{place}市"));
+    }
+    tries.push(place.to_string());
+    for q in tries {
+        if let Ok(found) = search_online(http, &q).await
+            && let Some(c) = found.into_iter().next()
+        {
+            return Some(c);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +235,16 @@ mod tests {
         assert!(c.valid());
         c.lat = 200.0;
         assert!(!c.valid());
+    }
+
+    /// 真的联网：中文地名（表里没有的）能查到坐标。`cargo test -- --ignored resolve_live`
+    #[tokio::test]
+    #[ignore = "联网"]
+    async fn resolve_live() {
+        let http = reqwest::Client::new();
+        let c = resolve_online(&http, "抚顺").await.expect("查到抚顺");
+        assert_eq!(c.country, "CN");
+        assert!((c.lat - 41.9).abs() < 0.5 && (c.lon - 123.9).abs() < 0.5);
+        assert!(resolve_online(&http, "不存在的地方啦啦啦").await.is_none());
     }
 }

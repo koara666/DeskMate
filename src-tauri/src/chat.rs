@@ -15,7 +15,8 @@ use crate::quotes;
 use crate::state::AppState;
 use crate::usage;
 use serde::Serialize;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio_util::sync::CancellationToken;
@@ -124,6 +125,18 @@ impl ChatState {
             _ => false,
         }
     }
+}
+
+/// 搜完再答一次时放在资料前面：别又写一遍搜索标记
+const AFTER_SEARCH: &str = "（你刚才要求上网查，程序已经搜好了，结果在下面。这次直接用资料回答，不要再写 [[搜索：…]]。）\n";
+
+/// 回复里只有一个 `[[搜索：关键词]]`、没有别的话：她要上网查，返回要搜的内容（过隐私检查）
+fn search_request(reply: &str) -> Option<crate::websearch::Query> {
+    let (visible, found) = markers::strip(reply);
+    if !visible.trim().is_empty() {
+        return None;
+    }
+    markers::search_query(&found).and_then(crate::websearch::query_from_marker)
 }
 
 /// 调用后端并实时过滤禁词。`on_delta` 收到的是过滤后的文本。
@@ -468,6 +481,10 @@ pub async fn run_turn_with_notes(
 ) {
     let state = app.state::<AppState>();
     let cancel = state.chat.begin(&request_id);
+    // 用户开口了：她正在说的话停下来，排着队没念的也作废
+    if state.settings().voice.enabled {
+        crate::voice::interrupt(&app);
+    }
     let mut notes = notes;
     // 用户说了生日 / 纪念日：记下来，告诉角色
     if let Some(n) = crate::companion::remember_special_date(&app, &user_text) {
@@ -478,18 +495,26 @@ pub async fn run_turn_with_notes(
     }
     crate::companion::interact(&app, crate::companion::Interaction::Chat);
     // 问天气：查好放进背景资料（问的是别的城市就查那个城市；失败就告诉角色没查到）
-    if let Some(n) = crate::briefing::weather_note(&state, &user_text).await {
-        emit_pet_state(&app, PetState::Thinking);
-        notes.push(n);
-    }
-    // 问新闻 / 最新消息 / 比分，或说了「搜一下」：上网查好放进背景资料，并在气泡下写明查了什么
-    if state.settings().web.enabled && crate::websearch::query_for(&user_text).is_some() {
-        // 搜索要等几秒（网络不通时最多 15 秒），先让桌宠显示在想
-        emit_pet_state(&app, PetState::Thinking);
-    }
-    if let Some(w) = crate::websearch::web_note(&state, &user_text).await {
-        notes.push(w.note);
-        let _ = channel.send(ChatEvent::Note { text: w.display });
+    let weather_answered = match crate::briefing::weather_note(&state, &user_text).await {
+        Some(n) => {
+            emit_pet_state(&app, PetState::Thinking);
+            notes.push(n);
+            true
+        }
+        None => false,
+    };
+    // 问新闻 / 最新消息 / 比分 / 别处的天气，或说了「搜一下」：上网查好放进背景资料，并在气泡下写明查了什么
+    let mut searched = weather_answered;
+    if !weather_answered {
+        if state.settings().web.enabled && crate::websearch::query_for(&user_text).is_some() {
+            // 搜索要等几秒（网络不通时最多 15 秒），先让桌宠显示在想
+            emit_pet_state(&app, PetState::Thinking);
+        }
+        if let Some(w) = crate::websearch::web_note(&state, &user_text).await {
+            notes.push(w.note);
+            let _ = channel.send(ChatEvent::Note { text: w.display });
+            searched = true;
+        }
     }
     let character = state.current_character();
     let character_id = character
@@ -566,48 +591,96 @@ pub async fn run_turn_with_notes(
     emit_pet_state(&app, PetState::Thinking);
 
     let chat_id = state.settings().chat_backend;
-    let req_tokens = request_tokens(&req);
     let selected = select_backend(&state, &chat_id).and_then(|sel| {
         check_budget(&state, &sel.cfg)?;
         Ok(sel)
     });
+    let may_search = settings.web.enabled && !searched;
+    // 声音已经在回复写到一半时开口了：写完后不再念一遍
+    let early_voice = Arc::new(AtomicBool::new(false));
     let result = match selected {
         Ok(sel) => {
-            let mut talking = false;
-            let ch = channel.clone();
-            let app2 = app.clone();
-            // 动作标记 [[任务/打开/读取：…]] 不显示给用户
-            let mut marker = MarkerFilter::default();
-            let r = {
-                let marker = &mut marker;
-                let mut on_delta = move |s: &str| {
-                    let visible = marker.push(s);
-                    if visible.is_empty() {
-                        return;
-                    }
-                    if !talking {
-                        talking = true;
-                        emit_pet_state(&app2, PetState::Talking);
-                    }
-                    let _ = ch.send(ChatEvent::Delta { text: visible });
+            let mut req = req;
+            let mut again = false;
+            loop {
+                // 她可能会自己要求上网查：先留一份原样的请求
+                let backup = (may_search && !again).then(|| req.clone());
+                let req_tokens = request_tokens(&req);
+                let mut talking = false;
+                let ch = channel.clone();
+                let app2 = app.clone();
+                // 动作标记 [[任务/打开/读取：…]] 不显示给用户
+                let mut marker = MarkerFilter::default();
+                // 声音不等整条写完：日语的 [[日语：]] 一写完、或者中文的第一句一写完就开口
+                let early = early_voice.clone();
+                let voice_max = settings.voice.max_chars as usize;
+                let (mut tried_ja, mut tried_zh, mut shown) = (false, false, String::new());
+                let r = {
+                    let marker = &mut marker;
+                    let mut on_delta = move |s: &str| {
+                        let mut visible = marker.push(s);
+                        if !tried_ja && let Some(ja) = markers::ja_text(&marker.found) {
+                            tried_ja = true;
+                            if crate::voice::on_chat_stream(&app2, ja, true) {
+                                early.store(true, Ordering::SeqCst);
+                            }
+                        }
+                        // 日语标记写在最前面，后面会跟一个换行：回复开头的空白不显示
+                        if shown.is_empty() {
+                            visible = visible.trim_start().to_string();
+                        }
+                        if visible.is_empty() {
+                            return;
+                        }
+                        shown.push_str(&visible);
+                        if !tried_zh && !early.load(Ordering::SeqCst) {
+                            if let Some(first) = crate::voice::first_sentence(&shown, voice_max) {
+                                tried_zh = true;
+                                if crate::voice::on_chat_stream(&app2, &first, false) {
+                                    early.store(true, Ordering::SeqCst);
+                                }
+                            }
+                        }
+                        if !talking {
+                            talking = true;
+                            emit_pet_state(&app2, PetState::Talking);
+                        }
+                        let _ = ch.send(ChatEvent::Delta { text: visible });
+                    };
+                    generate(
+                        sel.backend.as_ref(),
+                        req,
+                        BannedWords::new(&prefs.banned_words),
+                        cancel.clone(),
+                        &mut on_delta,
+                    )
+                    .await
                 };
-                generate(
-                    sel.backend.as_ref(),
-                    req,
-                    BannedWords::new(&prefs.banned_words),
-                    cancel,
-                    &mut on_delta,
-                )
-                .await
-            };
-            let rest = marker.finish();
-            if !rest.is_empty() {
-                let _ = channel.send(ChatEvent::Delta { text: rest });
+                let rest = marker.finish();
+                if !rest.is_empty() {
+                    let _ = channel.send(ChatEvent::Delta { text: rest });
+                }
+                if let Ok(out) = &r {
+                    record_usage(&state, &sel.cfg, usage::purpose::CHAT, req_tokens, out);
+                }
+                // 整条回复只有 [[搜索：关键词]]（没说别的话）：搜完把资料给她，再答一次
+                if let (Ok(out), Some(mut next)) = (&r, backup)
+                    && out.finish != FinishReason::Cancelled
+                    && let Some(q) = search_request(&out.text)
+                {
+                    emit_pet_state(&app, PetState::Thinking);
+                    let w = crate::websearch::run(&state, &q).await;
+                    let _ = channel.send(ChatEvent::Note { text: w.display });
+                    next.context = Some(match next.context.take() {
+                        Some(c) => format!("{c}\n\n{AFTER_SEARCH}{}", w.note),
+                        None => format!("{AFTER_SEARCH}{}", w.note),
+                    });
+                    req = next;
+                    again = true;
+                    continue;
+                }
+                break r;
             }
-            if let Ok(out) = &r {
-                record_usage(&state, &sel.cfg, usage::purpose::CHAT, req_tokens, out);
-            }
-            r
         }
         Err(e) => Err(e),
     };
@@ -666,7 +739,9 @@ pub async fn run_turn_with_notes(
                     PetState::Happy
                 },
             );
-            if out.finish != FinishReason::Cancelled {
+            if out.finish == FinishReason::Cancelled {
+                crate::voice::interrupt(&app);
+            } else if !early_voice.load(Ordering::SeqCst) {
                 crate::voice::on_line(&app, &out.text, crate::voice::Scene::Chat);
             }
             let _ = channel.send(ChatEvent::Done {
@@ -728,6 +803,18 @@ mod tests {
         assert!(!shown.contains("mock") && !shown.contains("测试"));
         assert!(shown.contains("****"));
         assert_eq!(out.text, shown);
+    }
+
+    #[test]
+    fn search_request_only_when_reply_is_just_the_marker() {
+        let q = search_request("[[搜索：抚顺 房价]]").unwrap();
+        assert_eq!(q.text, "抚顺 房价");
+        // 已经说了别的话：当成普通回复，不再搜
+        assert!(search_request("我想想……[[搜索：抚顺 房价]]").is_none());
+        assert!(search_request("你好呀").is_none());
+        // 关键词里有隐私内容：不搜
+        assert!(search_request("[[搜索：我的密码]]").is_none());
+        assert!(search_request("[[搜索：]]").is_none());
     }
 
     #[test]

@@ -6,6 +6,7 @@
 //! - `[[玩：游戏名]]`：用户想玩游戏时，直接打开那个游戏（v2.1，DECISIONS #49）。
 //! - `[[提醒：一句吩咐]]`：用户要她记着某个时间提醒，本地解析后在气泡里确认（v2.1）。
 //! - `[[日语：……]]`：开着日语语音时，回复开头一两句的日语版本，只用来念（DECISIONS #58）。
+//! - `[[搜索：关键词]]`：她觉得要上网查才答得上来时，整条回复只写这个；程序搜完再让她回答（DECISIONS #65）。
 //!
 //! 标记本身不显示给用户，也不存进聊天记录。模型只能「提议」，真正动手必须用户点确认。
 
@@ -20,15 +21,17 @@ pub enum MarkerKind {
     Game,
     Remind,
     Ja,
+    Search,
 }
 
-const TAGS: [(&str, MarkerKind); 6] = [
+const TAGS: [(&str, MarkerKind); 7] = [
     ("[[任务", MarkerKind::Task),
     ("[[打开", MarkerKind::Open),
     ("[[读取", MarkerKind::Read),
     ("[[玩", MarkerKind::Game),
     ("[[提醒", MarkerKind::Remind),
     ("[[日语", MarkerKind::Ja),
+    ("[[搜索", MarkerKind::Search),
 ];
 const CLOSE: &str = "]]";
 const MAX_MARKER_CHARS: usize = 500;
@@ -149,7 +152,8 @@ pub fn strip(text: &str) -> (String, Vec<Marker>) {
     let mut f = MarkerFilter::default();
     let mut out = f.push(text);
     out.push_str(&f.finish());
-    (out.trim_end().to_string(), f.found)
+    // 日语标记写在回复最前面（DECISIONS #65），它后面的换行不留
+    (out.trim().to_string(), f.found)
 }
 
 /// 标记列表里的日语版本（念给用户听的）
@@ -157,6 +161,14 @@ pub fn ja_text(markers: &[Marker]) -> Option<&str> {
     markers
         .iter()
         .find(|m| m.kind == MarkerKind::Ja && !m.text.is_empty())
+        .map(|m| m.text.as_str())
+}
+
+/// 标记列表里的联网搜索请求（关键词）
+pub fn search_query(markers: &[Marker]) -> Option<&str> {
+    markers
+        .iter()
+        .find(|m| m.kind == MarkerKind::Search && !m.text.is_empty())
         .map(|m| m.text.as_str())
 }
 
@@ -247,6 +259,16 @@ mod tests {
         let (_, m) = strip("来吧[[玩：]]");
         assert_eq!((m[0].kind, m[0].text.as_str()), (MarkerKind::Game, ""));
         assert_eq!(strip("[[好]]").1, vec![]);
+    }
+
+    #[test]
+    fn search_marker_is_hidden_and_readable() {
+        let (out, m) = stream(&["[[搜索：抚顺 ", "天气]]"]);
+        assert_eq!(out, "");
+        assert_eq!(search_query(&m), Some("抚顺 天气"));
+        let (out, m) = stream(&["我查查～[[搜索："]);
+        assert_eq!(out, "我查查～");
+        assert_eq!(search_query(&m), None, "没写完的不算");
     }
 
     #[test]

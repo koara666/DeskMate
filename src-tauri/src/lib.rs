@@ -129,6 +129,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     activity::spawn(handle.clone());
     // 检查更新：1 分钟后查一次 GitHub（每天最多一次，可关）
     update::spawn_startup_check(&handle);
+    // 语音：用本机 GPT-SoVITS 时先热一下模型，第一句话才不会晚到
+    voice::warm_up(&handle);
     if upgraded_from.is_some() {
         update::spawn_whats_new(&handle);
     }

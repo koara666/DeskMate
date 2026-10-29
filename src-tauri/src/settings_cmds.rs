@@ -9,7 +9,7 @@ use crate::state::AppState;
 use crate::usage::{self, Budget};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 use tokio_util::sync::CancellationToken;
 
 type CmdResult<T> = Result<T, String>;
@@ -690,7 +690,7 @@ pub fn voice_save(
 ) -> CmdResult<crate::voice::VoiceSettings> {
     let saved = state.update_settings(|s| s.voice = voice.sanitize()).voice;
     if !saved.enabled {
-        let _ = app.emit_to("pet", "voice-stop", ());
+        crate::voice::interrupt(&app);
     }
     desktop::broadcast_settings_changed(&app);
     Ok(saved)

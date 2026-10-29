@@ -803,7 +803,23 @@ pub async fn weather_note(st: &AppState, text: &str) -> Option<String> {
     if !s.weather_in_chat || !WEATHER_WORDS.iter().any(|w| text.contains(w)) {
         return None;
     }
-    let target = city::mentioned(text).or(s.city.clone());
+    let target = match city::mentioned(text) {
+        Some(c) => Some(c),
+        // 问的是内置城市表里没有的地方（比如抚顺）：先查坐标；查不到就交给联网搜索，
+        // 联网也关着时如实说查不了，不拿设置里那个城市的天气顶替
+        None => match crate::websearch::weather_place(text) {
+            Some(place) => match city::resolve_online(&st.http, &place).await {
+                Some(c) => Some(c),
+                None if st.settings().web.enabled => return None,
+                None => {
+                    return Some(format!(
+                        "用户问的是「{place}」的天气，但内置天气查不到这个地方，也没开联网搜索。坦率告诉用户查不了，不要拿别的地方的天气顶替，更不要编。"
+                    ));
+                }
+            },
+            None => s.city.clone(),
+        },
+    };
     let Some(c) = target else {
         return Some("用户还没在设置里填所在城市，所以你不知道他那里的天气；可以请他到「设置 → 陪伴 → 每日播报」里填一下城市，以后就能直接告诉他。".into());
     };

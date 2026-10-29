@@ -206,10 +206,23 @@ impl VoiceSettings {
 /// 什么场合说的
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scene {
+    /// 摸头、戳一下这类小反应
     Reaction,
     Proactive,
     Chat,
+    /// 游戏里的关键结果（一局的胜负、主持人的回答）
     Game,
+    /// 游戏进行中的随口一句（开局、每一轮的输赢、领先 / 落后）：玩得快的时候不念，免得连着念一串
+    GameMoment,
+}
+
+/// 重要程度：新的一句只会顶掉同级或更低的，高的正在说时低的直接不念
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum Prio {
+    #[default]
+    Low,
+    Normal,
+    High,
 }
 
 impl Scene {
@@ -218,8 +231,99 @@ impl Scene {
             Scene::Reaction => s.reactions,
             Scene::Proactive => s.proactive,
             Scene::Chat => s.chat,
-            Scene::Game => s.games,
+            Scene::Game | Scene::GameMoment => s.games,
         }
+    }
+
+    fn prio(self) -> Prio {
+        match self {
+            Scene::Reaction | Scene::GameMoment => Prio::Low,
+            Scene::Proactive => Prio::Normal,
+            Scene::Chat | Scene::Game => Prio::High,
+        }
+    }
+
+    /// 从「要说」到「合成好」超过这么久（毫秒）就不念了：文字早就看完了，这时候再出声只会对不上
+    fn max_age_ms(self) -> i64 {
+        match self {
+            Scene::Reaction | Scene::GameMoment => 4_000,
+            Scene::Proactive | Scene::Game => 8_000,
+            Scene::Chat => 20_000,
+        }
+    }
+
+    /// 离上一句开口至少隔多久（毫秒）：小插话不要连着说
+    fn min_gap_ms(self) -> i64 {
+        match self {
+            Scene::Reaction => 1_500,
+            Scene::GameMoment => 12_000,
+            _ => 0,
+        }
+    }
+}
+
+/// 出声的调度（纯数据，时间由调用方传入，方便测试）。DECISIONS #65：
+/// 同一时间只有「最新的一句」有效——新的一句出现，没念完 / 没合成完的旧句子作废；
+/// 正在念高优先级的话时，低优先级的不插嘴。
+#[derive(Debug, Default)]
+pub struct Slot {
+    ticket: u64,
+    prio: Prio,
+    /// 最新一句还在翻译 / 合成
+    pending: bool,
+    /// 估计的念完时间（毫秒）
+    until: i64,
+    /// 最新一句开口（排上号）的时间
+    started: i64,
+}
+
+impl Slot {
+    /// 排号。返回 None = 这句不念（太密了，或者有更重要的话正在说）
+    fn accept(&mut self, scene: Scene, now: i64) -> Option<u64> {
+        let prio = scene.prio();
+        let busy = self.pending || now < self.until;
+        if busy && prio < self.prio {
+            return None;
+        }
+        if now - self.started < scene.min_gap_ms() {
+            return None;
+        }
+        self.ticket += 1;
+        self.prio = prio;
+        self.pending = true;
+        self.started = now;
+        Some(self.ticket)
+    }
+
+    fn is_current(&self, ticket: u64) -> bool {
+        self.ticket == ticket
+    }
+
+    /// 这一句没念成（作废、过期、合成失败）
+    fn release(&mut self, ticket: u64) {
+        if self.ticket == ticket {
+            self.pending = false;
+        }
+    }
+
+    /// 这一句开始念了，估计 `ms` 毫秒后念完
+    fn playing(&mut self, ticket: u64, now: i64, ms: i64) {
+        if self.ticket == ticket {
+            self.pending = false;
+            self.until = now + ms;
+        }
+    }
+
+    /// 全部作废（用户说话了、关了声音）
+    fn cancel_all(&mut self) {
+        self.ticket += 1;
+        self.pending = false;
+        self.until = 0;
+    }
+
+    /// 上一句还要念多久（毫秒，念完了是 0）
+    fn remaining(&self, now: i64) -> i64 {
+        (self.until - now).max(0)
     }
 }
 
@@ -311,10 +415,18 @@ pub fn condense(text: &str, max: usize) -> String {
 pub struct VoiceState {
     /// （日期，今天合成了多少字）
     chars: Mutex<(String, u32)>,
-    /// 上一句小反应的时间（毫秒），小反应 1.5 秒内只说一句
-    last_reaction: Mutex<i64>,
+    /// 出声调度：谁是最新一句、有没有在念
+    slot: Mutex<Slot>,
+    /// 同一时间只向引擎要一句（本机模型一次只能做一句，多发只会越排越长）
+    gate: tokio::sync::Mutex<()>,
     /// 最近的「中文 → 日语」（预写台词、聊天回复附带的日语）
     ja: Mutex<VecDeque<(String, String)>>,
+}
+
+impl VoiceState {
+    fn slot(&self) -> std::sync::MutexGuard<'_, Slot> {
+        self.slot.lock().unwrap_or_else(|e| e.into_inner())
+    }
 }
 
 /// 聊天回复要不要附日语：开着声音、说日语、聊天回复会念
@@ -543,7 +655,7 @@ pub fn toggle(app: &AppHandle) -> bool {
     let on = !st.settings().voice.enabled;
     let saved = st.update_settings(|s| s.voice.enabled = on).voice.enabled;
     if !saved {
-        let _ = app.emit_to("pet", "voice-stop", ());
+        interrupt(app);
     }
     crate::desktop::broadcast_settings_changed(app);
     saved
@@ -586,63 +698,220 @@ pub fn on_line(app: &AppHandle, text: &str, scene: Scene) {
     if !should_speak(&s.voice, scene, s.dnd, st.daily.is_fullscreen()) {
         return;
     }
-    if scene == Scene::Reaction {
-        let now = crate::desktop::now_ms();
-        let mut last = st
-            .voice
-            .last_reaction
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if now - *last < 1500 {
-            return;
-        }
-        *last = now;
-    }
     let v = s.voice;
-    match plan(&st, &v, text) {
+    let p = plan(&st, &v, text);
+    if p == Plan::Silent {
+        return;
+    }
+    let now = crate::desktop::now_ms();
+    // 排号：太密的小插话、有更重要的话正在说时，这句不念
+    let Some(ticket) = st.voice.slot().accept(scene, now) else {
+        return;
+    };
+    match p {
         Plan::Silent => {}
-        Plan::Speak { text, lang, zh } => speak(app, v, text, lang, zh),
+        Plan::Speak { text, lang, zh } => speak(app, v, text, lang, zh, scene, ticket, now),
         p @ Plan::Translate(_) => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 let st = app.state::<AppState>();
-                if let Some((text, lang, zh)) = resolve(&st, &v, p).await
-                    && !text.is_empty()
-                {
-                    speak(&app, v, text, lang, zh);
+                match resolve(&st, &v, p).await {
+                    Some((text, lang, zh)) if !text.is_empty() => {
+                        speak(&app, v, text, lang, zh, scene, ticket, now)
+                    }
+                    _ => st.voice.slot().release(ticket),
                 }
             });
         }
     }
 }
 
-/// 读一句（已经精简过的）。`zh` 是对应的中文：系统语音在没有日语声音的电脑上念它
-pub fn speak(app: &AppHandle, v: VoiceSettings, text: String, lang: &'static str, zh: String) {
-    let volume = v.volume as f32 / 100.0;
-    if v.engine == "system" {
-        let _ = app.emit_to(
-            "pet",
-            "voice-say",
-            SayEvent {
-                text,
-                lang: lang.into(),
-                fallback: zh,
-                voice: v.system_voice.clone(),
-                rate: v.speed,
-                pitch: v.system_pitch,
-                volume,
-            },
-        );
-        return;
+/// 聊天回复还在写的时候就开口，不等整条写完（DECISIONS #65）：
+/// `ja = true`：`line` 是回复开头的 `[[日语：…]]`（日语语音）；否则 `line` 是中文回复的第一句。
+/// 返回 true = 已经安排了（念或者有意不念），回复写完后不用再念一遍；false = 这条路走不了，等写完再说。
+pub fn on_chat_stream(app: &AppHandle, line: &str, ja: bool) -> bool {
+    let st = app.state::<AppState>();
+    let s = st.settings();
+    let scene = Scene::Chat;
+    if !should_speak(&s.voice, scene, s.dnd, st.daily.is_fullscreen()) {
+        return false;
     }
+    let v = s.voice;
+    let (text, lang) = if ja {
+        // 系统语音可能没有日语声音，要靠对应的中文兜底，这里拿不到：等写完再念
+        if v.lang != "ja" || v.engine == "system" {
+            return false;
+        }
+        (condense(line, ja_max(v.max_chars)), "ja")
+    } else {
+        if v.lang == "ja" {
+            return false;
+        }
+        (condense(line, v.max_chars as usize), "zh")
+    };
+    if text.is_empty() {
+        return false;
+    }
+    let now = crate::desktop::now_ms();
+    if let Some(ticket) = st.voice.slot().accept(scene, now) {
+        let zh = if ja { String::new() } else { text.clone() };
+        speak(app, v, text, lang, zh, scene, ticket, now);
+    }
+    true
+}
+
+/// 流式输出到一半时，取已经写完的第一句（中文语音用）；还没写够返回 None。
+/// 光是「嗯……」这种不够一句，继续等；一直没有句号但已经写满上限也取。
+pub fn first_sentence(acc: &str, max: usize) -> Option<String> {
+    for (i, c) in acc.char_indices() {
+        if matches!(c, '。' | '！' | '？' | '!' | '?' | '…' | '～' | '~' | '\n') {
+            let cand = condense(&acc[..i + c.len_utf8()], max);
+            if cand.chars().filter(|c| c.is_alphanumeric()).count() >= 4 {
+                return Some(cand);
+            }
+        }
+    }
+    if acc.chars().count() >= max {
+        return Some(condense(acc, max)).filter(|c| !c.is_empty());
+    }
+    None
+}
+
+/// 马上闭嘴：用户说话了、点了停止、关了声音。还没念的旧句子也作废
+pub fn interrupt(app: &AppHandle) {
+    let st = app.state::<AppState>();
+    st.voice.slot().cancel_all();
+    let _ = app.emit_to("pet", "voice-stop", ());
+}
+
+/// 估计一段音频念多久（毫秒）：wav 看头部的字节率，mp3 按 64 kbps 估
+fn audio_ms(bytes: &[u8]) -> i64 {
+    if bytes.len() > 44 && &bytes[..4] == b"RIFF" {
+        let rate = u32::from_le_bytes([bytes[28], bytes[29], bytes[30], bytes[31]]) as i64;
+        if rate > 0 {
+            return (bytes.len() as i64 - 44) * 1000 / rate;
+        }
+    }
+    bytes.len() as i64 / 8
+}
+
+/// 系统语音没法提前知道多长：按字数估
+fn say_ms(text: &str, lang: &str) -> i64 {
+    text.chars().count() as i64 * if lang == "ja" { 170 } else { 220 }
+}
+
+/// 上一句快念完了（不超过这么久）就等它念完再开口，不硬切
+const WAIT_PREV_MS: i64 = 2_500;
+/// 两句之间留一小口气
+const BREATH_MS: u64 = 350;
+
+/// 读一句（已经精简过的）。`zh` 是对应的中文：系统语音在没有日语声音的电脑上念它。
+/// `ticket` 是 `Slot::accept` 排的号，`born` 是这句话出现的时间（毫秒）。
+#[allow(clippy::too_many_arguments)]
+fn speak(
+    app: &AppHandle,
+    v: VoiceSettings,
+    text: String,
+    lang: &'static str,
+    zh: String,
+    scene: Scene,
+    ticket: u64,
+    born: i64,
+) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let st = app.state::<AppState>();
-        match synth_cached(&st, &v, &text, lang).await {
-            Ok(id) => {
+        let volume = v.volume as f32 / 100.0;
+        let (id, ms) = if v.engine == "system" {
+            (None, say_ms(&text, lang))
+        } else {
+            // 同一时间只向引擎要一句；轮到我时如果已经被更新的一句顶掉，就不合成了
+            let _gate = st.voice.gate.lock().await;
+            if !st.voice.slot().is_current(ticket) {
+                return;
+            }
+            match synth_cached(&st, &v, &text, lang).await {
+                Ok(id) => {
+                    let ms = cached_ms(&st, &id).unwrap_or_else(|| say_ms(&text, lang));
+                    (Some(id), ms)
+                }
+                Err(e) => {
+                    log::info!("语音合成失败：{e}");
+                    st.voice.slot().release(ticket);
+                    return;
+                }
+            }
+        };
+        // 合成期间被新的一句顶掉了 / 等太久文字早就看完了：不念
+        let stale = |st: &AppState| {
+            !st.voice.slot().is_current(ticket)
+                || crate::desktop::now_ms() - born > scene.max_age_ms()
+        };
+        if stale(&st) {
+            st.voice.slot().release(ticket);
+            return;
+        }
+        // 上一句快念完了：等它念完、喘一口气再开口，不硬切（太急促）
+        let wait = st.voice.slot().remaining(crate::desktop::now_ms());
+        if wait > 0 && wait <= WAIT_PREV_MS {
+            tokio::time::sleep(std::time::Duration::from_millis(wait as u64 + BREATH_MS)).await;
+            if stale(&st) {
+                st.voice.slot().release(ticket);
+                return;
+            }
+        }
+        st.voice
+            .slot()
+            .playing(ticket, crate::desktop::now_ms(), ms);
+        match id {
+            Some(id) => {
                 let _ = app.emit_to("pet", "voice-play", PlayEvent { id, volume });
             }
-            Err(e) => log::info!("语音合成失败：{e}"),
+            None => {
+                let _ = app.emit_to(
+                    "pet",
+                    "voice-say",
+                    SayEvent {
+                        text,
+                        lang: lang.into(),
+                        fallback: zh,
+                        voice: v.system_voice.clone(),
+                        rate: v.speed,
+                        pitch: v.system_pitch,
+                        volume,
+                    },
+                );
+            }
+        }
+    });
+}
+
+/// 缓存里这段音频念多久
+fn cached_ms(st: &AppState, id: &str) -> Option<i64> {
+    let bytes = std::fs::read(cache_dir(st).join(format!("{id}.audio"))).ok()?;
+    Some(audio_ms(&bytes))
+}
+
+/// 启动后预热本机的 GPT-SoVITS：第一句要等模型加载（实测约 20 秒），先合成一小句，之后第一句话就不会晚到。
+/// 只在用 GPT-SoVITS、总开关开着时做；合成的结果也进缓存。
+pub fn warm_up(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+        let st = app.state::<AppState>();
+        let v = st.settings().voice;
+        if !v.enabled || v.engine != "sovits" || v.sovits_ref_audio.is_empty() {
+            return;
+        }
+        let (text, lang) = if v.lang == "ja" {
+            ("うん。", "ja")
+        } else {
+            ("嗯。", "zh")
+        };
+        let _gate = st.voice.gate.lock().await;
+        match synth_cached(&st, &v, text, lang).await {
+            Ok(_) => log::info!("语音预热完成"),
+            Err(e) => log::info!("语音预热没成功：{e}"),
         }
     });
 }
@@ -880,7 +1149,19 @@ pub async fn test(app: &AppHandle) -> Result<(), String> {
         return Err("没有要念的内容".into());
     };
     if v.engine == "system" {
-        speak(app, v, text, lang, zh);
+        let _ = app.emit_to(
+            "pet",
+            "voice-say",
+            SayEvent {
+                text,
+                lang: lang.into(),
+                fallback: zh,
+                voice: v.system_voice.clone(),
+                rate: v.speed,
+                pitch: v.system_pitch,
+                volume: v.volume as f32 / 100.0,
+            },
+        );
         return Ok(());
     }
     let id = synth_cached(&st, &v, &text, lang).await?;
@@ -1190,5 +1471,134 @@ mod tests {
         assert!(read_cached(&st, "../../etc/passwd").is_err());
         assert!(clear_cache(&st) > 0);
         assert!(read_cached(&st, &id).is_err());
+    }
+
+    // ---------------- 出声调度（DECISIONS #65） ----------------
+
+    #[test]
+    fn newest_line_replaces_older_pending_ones() {
+        let mut s = Slot::default();
+        let a = s.accept(Scene::Chat, 100_000).unwrap();
+        let b = s.accept(Scene::Chat, 100_500).unwrap();
+        // 第二句排上以后，第一句就作废了：合成完也不念
+        assert!(!s.is_current(a));
+        assert!(s.is_current(b));
+        s.release(a);
+        assert!(s.pending, "作废的那句释放不影响新的一句");
+    }
+
+    #[test]
+    fn low_priority_never_interrupts_a_high_one() {
+        let mut s = Slot::default();
+        let chat = s.accept(Scene::Chat, 100_000).unwrap();
+        // 聊天回复还在合成：摸头的小反应、主动说话都不插嘴
+        assert!(s.accept(Scene::Reaction, 103_000).is_none());
+        assert!(s.accept(Scene::Proactive, 103_000).is_none());
+        s.playing(chat, 104_000, 5_000);
+        // 正在念（到 109 秒）
+        assert!(s.accept(Scene::GameMoment, 106_000).is_none());
+        assert!(s.accept(Scene::Proactive, 108_000).is_none());
+        // 念完以后可以说了
+        assert!(s.accept(Scene::Proactive, 110_000).is_some());
+    }
+
+    #[test]
+    fn fast_rps_does_not_queue_a_pile_of_lines() {
+        // 用户 2026-10-29 的原话：猜拳玩得快，开局 + 每一轮 + 胜负，五条语音紧挨着念
+        let mut s = Slot::default();
+        let t0 = 1_000_000;
+        let start = s.accept(Scene::GameMoment, t0).unwrap();
+        s.playing(start, t0 + 2_000, 2_000);
+        // 之后每隔一两秒出一轮：全部不念
+        for k in 1..=4 {
+            assert!(
+                s.accept(Scene::GameMoment, t0 + k * 1_500).is_none(),
+                "第 {k} 轮"
+            );
+        }
+        // 最后的胜负一定念，而且顶掉前面的
+        let end = s.accept(Scene::Game, t0 + 7_000).unwrap();
+        assert!(s.is_current(end) && !s.is_current(start));
+        // 玩得慢的时候，每一轮的随口一句隔 12 秒以上还是会念
+        s.playing(end, t0 + 8_000, 2_000);
+        assert!(s.accept(Scene::GameMoment, t0 + 25_000).is_some());
+    }
+
+    #[test]
+    fn reactions_keep_their_spacing() {
+        let mut s = Slot::default();
+        let a = s.accept(Scene::Reaction, 100_000).unwrap();
+        s.playing(a, 100_300, 800);
+        assert!(
+            s.accept(Scene::Reaction, 100_900).is_none(),
+            "1.5 秒内只说一句"
+        );
+        assert!(s.accept(Scene::Reaction, 101_700).is_some());
+    }
+
+    #[test]
+    fn cancel_all_drops_everything() {
+        let mut s = Slot::default();
+        let a = s.accept(Scene::Chat, 100_000).unwrap();
+        s.playing(a, 100_500, 8_000);
+        s.cancel_all();
+        assert!(!s.is_current(a));
+        assert_eq!(s.remaining(101_000), 0);
+        // 用户说话打断以后，别的话可以马上说
+        assert!(s.accept(Scene::Proactive, 101_000).is_some());
+    }
+
+    #[test]
+    fn remaining_and_release() {
+        let mut s = Slot::default();
+        let a = s.accept(Scene::Proactive, 100_000).unwrap();
+        s.playing(a, 100_000, 3_000);
+        assert_eq!(s.remaining(101_000), 2_000);
+        assert_eq!(s.remaining(104_000), 0);
+        // 合成失败：释放以后不再算「忙」
+        let b = s.accept(Scene::Proactive, 110_000).unwrap();
+        s.release(b);
+        assert!(s.accept(Scene::Reaction, 112_000).is_some());
+    }
+
+    #[test]
+    fn stale_ages_by_scene() {
+        // 聊天回复可以等久一点，随口一句晚了就不念
+        assert!(Scene::Chat.max_age_ms() > Scene::Proactive.max_age_ms());
+        assert!(Scene::Proactive.max_age_ms() > Scene::GameMoment.max_age_ms());
+        assert_eq!(Scene::Game.prio(), Prio::High);
+        assert_eq!(Scene::GameMoment.prio(), Prio::Low);
+    }
+
+    #[test]
+    fn first_sentence_while_streaming() {
+        // 还没写完一句
+        assert_eq!(first_sentence("嗯……", 40), None);
+        assert_eq!(first_sentence("你来了", 40), None);
+        // 「嗯……」不算一句，要等到真正的一句
+        assert_eq!(
+            first_sentence("嗯……你来了。我刚刚差点", 40).as_deref(),
+            Some("嗯……你来了。")
+        );
+        assert_eq!(
+            first_sentence("（揉揉眼睛）早上好呀！今天", 40).as_deref(),
+            Some("早上好呀！")
+        );
+        // 一直不停顿、写满了上限
+        let long = "这一关其实不难只要先把左边的敌人引过来再绕到后面打它的弱点就能过去了";
+        assert!(first_sentence(long, 10).is_some());
+    }
+
+    #[test]
+    fn audio_length_from_wav_header_or_size() {
+        // 16 kHz 单声道 16 位 = 32000 字节/秒；3.2 秒
+        let mut wav = vec![0u8; 44];
+        wav[..4].copy_from_slice(b"RIFF");
+        wav[28..32].copy_from_slice(&32_000u32.to_le_bytes());
+        wav.extend(std::iter::repeat_n(0u8, 102_400));
+        assert_eq!(audio_ms(&wav), 3_200);
+        // mp3 按 64 kbps（8000 字节/秒）估
+        assert_eq!(audio_ms(&vec![0u8; 16_000]), 2_000);
+        assert!(say_ms("こんにちは", "ja") > 0);
     }
 }
