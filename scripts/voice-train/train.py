@@ -32,8 +32,28 @@ PRETRAINED = {
 }
 
 
+MIN_KEEP = 0.9  # 每一步至少要有上一步 90% 的产出（个别音量异常的条目会被 GPT-SoVITS 自己过滤掉）
+
+
 def log(msg):
     print("\n==== " + msg, flush=True)
+
+
+def count_lines(path):
+    if not os.path.exists(path):
+        return 0
+    return sum(1 for line in open(path, encoding="utf8") if line.strip())
+
+
+def count_files(opt_dir, sub):
+    d = os.path.join(opt_dir, sub)
+    return len(os.listdir(d)) if os.path.isdir(d) else 0
+
+
+def check(step, got, want, hint=""):
+    print("  %s：%d / %d" % (step, got, want), flush=True)
+    if got < want * MIN_KEEP:
+        sys.exit("出错了：%s 只产出了 %d 条（应该接近 %d 条）。往上翻看看报错。%s" % (step, got, want, hint))
 
 
 def run(script, env, *args):
@@ -84,6 +104,8 @@ def main():
         open(list_path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
         a.sovits_epochs = a.gpt_epochs = 1
         a.sovits_save_every = a.gpt_save_every = 1
+    n_list = count_lines(list_path)
+    print("训练清单：%d 条" % n_list)
     opt_dir = os.path.join(GSV, "logs", exp)
     tmp = os.path.join(GSV, "TEMP")
     os.makedirs(opt_dir, exist_ok=True)
@@ -130,21 +152,29 @@ def main():
             sys.exit("1A 没有产出任何文字，检查 dataset/chiaki.list。")
         open(text_path, "w", encoding="utf8").write(body + "\n")
         os.remove(part)
+    n_text = count_lines(text_path)
+    check("1A 文字", n_text, n_list)
     # ---------- 1B 音频特征 + 声纹 ----------
-    if not os.path.exists(os.path.join(opt_dir, "7-sv_cn")) or not os.listdir(os.path.join(opt_dir, "7-sv_cn")):
+    # GPT-SoVITS 的预处理脚本遇到单条出错只打印、不退出，所以每一步都数一下产出（太少就停下，别白训练）
+    if count_files(opt_dir, "4-cnhubert") < n_text * MIN_KEEP or count_files(opt_dir, "5-wav32k") < n_text * MIN_KEEP:
         log("1B 音频特征（HuBERT、32k）")
         run("GPT_SoVITS/prepare_datasets/2-get-hubert-wav32k.py", env)
+    n_hubert = count_files(opt_dir, "4-cnhubert")
+    check("1B 音频特征", n_hubert, n_text)
+    if count_files(opt_dir, "7-sv_cn") < n_hubert * MIN_KEEP:
         log("1B 声纹（v2Pro 系列需要）")
         run("GPT_SoVITS/prepare_datasets/2-get-sv.py", env)
+    check("1B 声纹", count_files(opt_dir, "7-sv_cn"), n_hubert, "常见原因：缺 torchcodec 或 FFmpeg（setup.sh 会装）")
     # ---------- 1C 语义 ----------
     sem_path = os.path.join(opt_dir, "6-name2semantic.tsv")
-    if not (os.path.exists(sem_path) and os.path.getsize(sem_path) >= 31):
+    if count_lines(sem_path) - 1 < n_hubert * MIN_KEEP:
         log("1C 语义编码")
         run("GPT_SoVITS/prepare_datasets/3-get-semantic.py", env)
         part = os.path.join(opt_dir, "6-name2semantic-0.tsv")
         body = open(part, encoding="utf8").read().strip("\n")
         open(sem_path, "w", encoding="utf8").write("item_name\tsemantic_audio\n" + body + "\n")
         os.remove(part)
+    check("1C 语义", count_lines(sem_path) - 1, n_hubert)
 
     # ---------- SoVITS ----------
     log("SoVITS 训练（%d 轮）" % a.sovits_epochs)

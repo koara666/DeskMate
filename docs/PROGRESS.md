@@ -2,6 +2,18 @@
 
 > 最新条目在最上面。超过 300 行时把旧条目压缩成摘要移到 `docs/progress-archive/`。
 
+## 2026-10-29 16:45
+- 完成：
+  - **Q 版形象**（DECISIONS #57）：用户自己生成的 23 格表情拼图 `nanami.png`（根目录，已 .gitignore）→ `scripts/chibi/slice_sheet.py` 切成 23 张透明背景 PNG（253×223，底边对齐），放进 `%APPDATA%\DeskMate\characters\nanami-chiaki\assets\`。23 个名字和 CHIAKI_PROMPTS 第四节完全对上，够用。第一次抠图把脸颊抠穿了（皮肤暖白被当成背景、腮红被当成标签），已修好。
+  - **声音训练包**（DECISIONS #56）：Whisper large-v3（`D:\dev\models\faster-whisper-large-v3`）识别 711 条 → 去掉幻听（「ご視聴ありがとうございました」）、太短、拖长音的 76 条 → 635 条 / 51.2 分钟；人名纠错（七道明→ななみちあき，七海→ななみ，日向→ひなた：pyopenjtalk 会把日向读成ひゅうが）。验证了序号对应：(1,1)「じゃあ、その謎からいってみよっか」= “Then...let's start with that mystery”，(99,101)「この教室には、私たちみたいな新入生が集められてる」= “freshmen like us have been gathered in this classroom”。4 条参考音频放 `ref/`。
+  - **本机实测**（`D:\dev\chiaki-gsv-venv`，Python 3.11 + torch 2.9.1 cu126 + GPT-SoVITS 依赖，pyopenjtalk 现场编译成功）：`train.py --quick` 预处理 1A / 1B / 声纹 / 1C 都是 40/40，SoVITS 训练出模型。发现并修了：声纹那步缺 torchcodec 时**每条都失败但脚本照样往下走**——`train.py` 现在每一步数产出，不到 90% 就停下并说明原因；服务器上 `setup.sh` 最后会实际读一条音频、`train.sh` 把 conda 环境的 FFmpeg 库加进 `LD_LIBRARY_PATH`。GPT 训练在 Windows 上卡在 gloo 分布式初始化（官方代码写死 `USE_LIBUV=0`、主机名解析失败），Linux 走 NCCL 不受影响，由用户在服务器上的 `--quick` 验证。
+  - 服务器上所有东西装在 `chiaki-voice-train/` 里（`env.sh`：conda 环境、需要时的 Miniforge、pip / HF / conda 缓存），只用 conda-forge，batch 按空闲显存算。
+  - 训练包 `chiaki-voice.tar.gz`（241 MB，1074 个文件，不含预训练模型）用 `safe_copy.py` 传到 `Q:\chiaki-voice-train\`（Q 盘 = 用户服务器主目录、科研项目目录；只新建这一个文件夹）。
+- 进行中：等用户在服务器上训练（NEEDS_USER #13）。
+- 下一步：用户说训练完 → `safe_copy.py` 从 `Q:\chiaki-voice-train\chiaki-voice\output\chiaki-model.tar.gz` 拷回 → 本机 `api_v2.py`（tts_infer.yaml 的 custom 段指向训练好的模型）→ DeskMate 声音页接上、试听；再做 ROADMAP v2.2 的「声音语言」（日语输出）。
+- 已知问题：本机的 FFmpeg 动态库在 `D:\dev\ffmpeg-shared`，靠 venv 里的 `zz_ffmpeg_dll.pth` 加载（只影响本机 venv）。
+- 本次决策：DECISIONS #56（补充）、#57
+
 ## 2026-10-29 12:40（用户要关电脑，在这里停下）
 - 停在：本机测试环境下载中被中断（PyTorch 2.9.1 cu126 没装完）。Whisper large-v3 模型已下完，放在 `D:\dev\models\faster-whisper-large-v3`（不用再下）。
 - 已经在硬盘上、下次直接用：`chiaki-voice/dataset/wavs/`（711 条原声）、`chiaki-voice/GPT-SoVITS/`（b4570b8 源码）、`chiaki-voice/GPT-SoVITS/GPT_SoVITS/pretrained_models/`（训练用的 1.4 GB 预训练模型）。

@@ -484,3 +484,4 @@
 - 用户按 `docs/art/CHIAKI_PROMPTS.md` 自己生成了一张 23 格的表情拼图（`nanami.png`，白底、每格下面有名字标签），比 #55 的代码画像得多。
 - `scripts/chibi/slice_sheet.py`：按粉色名字标签定位格子，人物和周围的小装饰按连通区域归到最近的标签；只把从边缘连通的「几乎纯白」（各通道差 < 6）当背景（她的皮肤是暖白、差 15 以上，第一次用宽阈值把脸颊抠穿了）；名字标签只在标签矩形里排除（腮红也是淡粉色）；边缘两圈去白边；23 张放在同样大小的画布上底边对齐（253×223），桌宠窗口 160×180、`object-fit: contain` 底对齐，正好留出头顶空间。
 - 切好的图放用户数据目录 `%APPDATA%\DeskMate\characters\nanami-chiaki\assets\`（用户图片优先于内置 SVG，不用改代码）；拼图本身 `.gitignore`。内置的代码画 SVG 留作没放图时的兜底。
+- **补充 2（本机实测后）**：GPT-SoVITS 的预处理脚本遇到单条出错只打印不退出（实测：缺 torchcodec 时声纹一步 40 条全失败，后面照样开始训练，最后除以零），所以 `train.py` 每一步都数产出，不到上一步的 90% 就停下并提示常见原因。人名在训练文字里改成假名（pyopenjtalk 把「日向」读成 hyuuga、「七海」读成 nanaumi）。GPT 训练在 Windows 上不能验证（官方 `s1_train.py` 写死 `USE_LIBUV=0`，新版 PyTorch 的 Windows gloo 必须用 libuv），不改官方源码，交给服务器上的 `--quick`。

@@ -10,11 +10,15 @@
 """
 import json
 import os
+import re
 import sys
 import wave
 
 # Whisper 在没声音或很短的片段上常见的「幻听」
 HALLUCINATIONS = ("ご視聴", "チャンネル登録", "字幕", "おやすみなさい。おやすみなさい", "ありがとうございました。ありがとう")
+# 人名纠错：Whisper 听错的、日语词典（pyopenjtalk）读错的，改成假名（读音不对会学错发音）
+# 七海 → 词典读「ななうみ」；日向 → 词典读「ひゅうが」，游戏里是日向创「ひなた」
+NAME_FIXES = {"七道明": "ななみちあき", "七海": "ななみ", "日向": "ひなた"}
 
 
 def duration(path):
@@ -40,23 +44,25 @@ def main():
     root = sys.argv[1]
     ds = os.path.join(root, "dataset")
     wav_dir = os.path.join(ds, "wavs")
-    add_torch_dlls()
-    from faster_whisper import WhisperModel
-
-    import ctranslate2
-
-    device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
-    # WHISPER_MODEL 可以指向已经下载好的模型文件夹
-    model = WhisperModel(
-        os.environ.get("WHISPER_MODEL", "large-v3"), device=device,
-        compute_type="float16" if device == "cuda" else "int8",
-    )
     out_json = os.path.join(ds, "asr.json")
     res = json.load(open(out_json, encoding="utf-8")) if os.path.exists(out_json) else {}
     names = sorted(n for n in os.listdir(wav_dir) if n.endswith(".wav"))
+    model = None
     for k, n in enumerate(names):
         if n in res:
             continue
+        if model is None:  # 全部识别过就不用加载模型，直接重新过滤
+            add_torch_dlls()
+            from faster_whisper import WhisperModel
+
+            import ctranslate2
+
+            device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
+            # WHISPER_MODEL 可以指向已经下载好的模型文件夹
+            model = WhisperModel(
+                os.environ.get("WHISPER_MODEL", "large-v3"), device=device,
+                compute_type="float16" if device == "cuda" else "int8",
+            )
         segs, _info = model.transcribe(
             os.path.join(wav_dir, n), language="ja", beam_size=5, temperature=0.0,
             condition_on_previous_text=False, vad_filter=False,
@@ -77,6 +83,8 @@ def main():
     for n in names:
         r = res[n]
         t = r["text"].replace("|", " ").replace("\n", " ").strip()
+        for wrong, right in NAME_FIXES.items():
+            t = t.replace(wrong, right)
         cps = len(t) / max(r["dur"], 0.1)
         why = None
         if not t:
@@ -87,6 +95,8 @@ def main():
             why = "置信度低"
         elif any(h in t for h in HALLUCINATIONS):
             why = "疑似幻听"
+        elif re.search(r"(.)\1{7,}", t):
+            why = "同一个字拖太长（呻吟）"
         elif cps < 1.0 or cps > 18:
             why = "语速对不上"
         (drop if why else keep).append((n, t, why))

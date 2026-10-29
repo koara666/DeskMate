@@ -8,4 +8,6 @@ cd "$(dirname "$0")"
 source ./env.sh
 find_conda || { echo "找不到 conda，先运行 bash setup.sh" >&2; exit 1; }
 conda activate "$ENV_DIR"
+# torchaudio 读音频要用 conda 环境里的 FFmpeg 动态库
+export LD_LIBRARY_PATH="$ENV_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 python train.py "$@"
