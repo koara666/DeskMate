@@ -67,7 +67,11 @@ pub fn validate_root(root: &Path, data_dir: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(root).map_err(|e| format!("无法创建任务文件夹：{e}"))?;
     let canon =
         simplify(&std::fs::canonicalize(root).map_err(|e| format!("无法访问任务文件夹：{e}"))?);
-    check_root_location(&canon, data_dir)?;
+    // 数据目录也换成完整路径（同一个文件夹可能有 8.3 短名等不同写法）
+    let data = std::fs::canonicalize(data_dir)
+        .map(|d| simplify(&d))
+        .unwrap_or_else(|_| data_dir.to_path_buf());
+    check_root_location(&canon, &data)?;
     Ok(canon)
 }
 

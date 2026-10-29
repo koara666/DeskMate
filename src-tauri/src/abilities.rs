@@ -307,7 +307,12 @@ pub fn validate_read_dir(dir: &str, data_dir: &Path) -> Result<String, String> {
     if !canon.is_dir() {
         return Err(format!("{dir} 不是文件夹"));
     }
-    if sandbox::is_within(data_dir, &canon) || sandbox::is_within(&canon, data_dir) {
+    // 数据目录也换成完整路径再比较：同一个文件夹可能有不同写法（8.3 短名、大小写、链接），
+    // 只换一边的话会对不上而被放行（GitHub 的测试机临时文件夹就是 RUNNER~1 这种短名）
+    let data = std::fs::canonicalize(data_dir)
+        .map(|d| sandbox::simplify(&d))
+        .unwrap_or_else(|_| data_dir.to_path_buf());
+    if sandbox::is_within(&data, &canon) || sandbox::is_within(&canon, &data) {
         return Err("不能允许读取 DeskMate 自己的数据文件夹".into());
     }
     Ok(canon.display().to_string())
@@ -491,6 +496,10 @@ mod tests {
         std::fs::create_dir_all(root.path().join("笔记")).unwrap();
         assert!(validate_read_dir(&root.path().join("笔记").display().to_string(), &data).is_ok());
         assert!(validate_read_dir(&data.display().to_string(), &data).is_err());
+        // 同一个数据目录换一种写法（带 ..）也要认出来
+        let alias = root.path().join("笔记").join("..").join("DeskMate");
+        assert!(validate_read_dir(&data.display().to_string(), &alias).is_err());
+        assert!(validate_read_dir(&alias.display().to_string(), &data).is_err());
         assert!(
             validate_read_dir(&root.path().display().to_string(), &data).is_err(),
             "包含数据目录"
