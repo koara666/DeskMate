@@ -73,8 +73,14 @@ done
 
 say "PyTorch 2.9.1（固定成本机测试过的版本）"
 # 官方 install.sh 装 torch 不写版本，会装到当时最新的；先装好固定版本，它看到已经装了就不会再换
-TORCH_INDEX="https://download.pytorch.org/whl/$(echo "$CUDA_VER" | tr 'A-Z' 'a-z')"
-python -m pip install torch==2.9.1 torchaudio==2.9.1 --index-url "$TORCH_INDEX"
+CU="$(echo "$CUDA_VER" | tr 'A-Z' 'a-z')"
+if [ "$SOURCE" = HF ]; then
+    python -m pip install torch==2.9.1 torchaudio==2.9.1 --index-url "https://download.pytorch.org/whl/$CU"
+else
+    # 国内：PyTorch 从阿里云的 PyTorch 镜像、NVIDIA 的库从阿里云 PyPI（官方源的 NVIDIA 库在 pypi.nvidia.com，实测国内经常读超时）
+    python -m pip install "torch==2.9.1+$CU" "torchaudio==2.9.1+$CU" \
+        -f "https://mirrors.aliyun.com/pytorch-wheels/$CU/" -i https://mirrors.aliyun.com/pypi/simple/
+fi
 python -m pip install torchcodec==0.8.1
 
 say "运行 GPT-SoVITS 官方安装脚本（依赖、日语词典）"
