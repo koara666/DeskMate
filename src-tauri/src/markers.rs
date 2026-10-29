@@ -5,6 +5,7 @@
 //! - `[[任务：要做的事]]`：委托外部 agent（高级选项，默认关闭，DECISIONS #33），弹出任务确认卡片。
 //! - `[[玩：游戏名]]`：用户想玩游戏时，直接打开那个游戏（v2.1，DECISIONS #49）。
 //! - `[[提醒：一句吩咐]]`：用户要她记着某个时间提醒，本地解析后在气泡里确认（v2.1）。
+//! - `[[日语：……]]`：开着日语语音时，回复开头一两句的日语版本，只用来念（DECISIONS #58）。
 //!
 //! 标记本身不显示给用户，也不存进聊天记录。模型只能「提议」，真正动手必须用户点确认。
 
@@ -18,14 +19,16 @@ pub enum MarkerKind {
     Read,
     Game,
     Remind,
+    Ja,
 }
 
-const TAGS: [(&str, MarkerKind); 5] = [
+const TAGS: [(&str, MarkerKind); 6] = [
     ("[[任务", MarkerKind::Task),
     ("[[打开", MarkerKind::Open),
     ("[[读取", MarkerKind::Read),
     ("[[玩", MarkerKind::Game),
     ("[[提醒", MarkerKind::Remind),
+    ("[[日语", MarkerKind::Ja),
 ];
 const CLOSE: &str = "]]";
 const MAX_MARKER_CHARS: usize = 500;
@@ -149,6 +152,14 @@ pub fn strip(text: &str) -> (String, Vec<Marker>) {
     (out.trim_end().to_string(), f.found)
 }
 
+/// 标记列表里的日语版本（念给用户听的）
+pub fn ja_text(markers: &[Marker]) -> Option<&str> {
+    markers
+        .iter()
+        .find(|m| m.kind == MarkerKind::Ja && !m.text.is_empty())
+        .map(|m| m.text.as_str())
+}
+
 /// 标记列表里的第一个任务提议
 pub fn first_task(markers: &[Marker]) -> Option<String> {
     markers
@@ -236,6 +247,14 @@ mod tests {
         let (_, m) = strip("来吧[[玩：]]");
         assert_eq!((m[0].kind, m[0].text.as_str()), (MarkerKind::Game, ""));
         assert_eq!(strip("[[好]]").1, vec![]);
+    }
+
+    #[test]
+    fn japanese_marker_is_hidden() {
+        let (out, m) = stream(&["好呀，一起玩吧。\n[[日", "语：うん、一緒に遊ぼう。]]"]);
+        assert_eq!(out.trim_end(), "好呀，一起玩吧。");
+        assert_eq!(ja_text(&m), Some("うん、一緒に遊ぼう。"));
+        assert_eq!(ja_text(&strip("没有日语").1), None);
     }
 
     #[test]

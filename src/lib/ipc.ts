@@ -194,14 +194,14 @@ export type TouchPart = 'head' | 'rub' | 'drag' | 'hold' | 'poke';
 
 /** 桌宠窗口里的语音播放（系统语音在这里合成；云端 / 本机服务合成的音频从后端取来播放） */
 export interface VoiceApi {
-  onSay(cb: (e: { text: string; voice: string; rate: number; pitch: number; volume: number }) => void): Promise<UnlistenFn>;
+  onSay(cb: (e: { text: string; lang: string; fallback: string; voice: string; rate: number; pitch: number; volume: number }) => void): Promise<UnlistenFn>;
   onPlay(cb: (e: { id: string; volume: number }) => void): Promise<UnlistenFn>;
   onStop(cb: () => void): Promise<UnlistenFn>;
   audio(id: string): Promise<ArrayBuffer>;
 }
 
 export const voiceApi: VoiceApi = {
-  onSay: (cb) => listen<{ text: string; voice: string; rate: number; pitch: number; volume: number }>('voice-say', (e) => cb(e.payload)),
+  onSay: (cb) => listen<{ text: string; lang: string; fallback: string; voice: string; rate: number; pitch: number; volume: number }>('voice-say', (e) => cb(e.payload)),
   onPlay: (cb) => listen<{ id: string; volume: number }>('voice-play', (e) => cb(e.payload)),
   onStop: (cb) => listen('voice-stop', () => cb()),
   audio: (id) => invoke<ArrayBuffer>('voice_audio', { id }),

@@ -47,5 +47,11 @@ describe('声音设置', () => {
     fireEvent.click(screen.getByText('让她出声').closest('label')!.querySelector('input')!);
     await flush();
     expect(saved.at(-1)?.enabled).toBe(true);
+    // 说话的语言：默认日语，可以换成中文
+    const ja = screen.getByText(/^日语（气泡照常显示中文/).closest('label')!.querySelector('input')!;
+    expect(ja.checked).toBe(true);
+    fireEvent.click(screen.getByText('中文').closest('label')!.querySelector('input')!);
+    await flush();
+    expect(saved.at(-1)?.lang).toBe('zh');
   });
 });

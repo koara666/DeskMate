@@ -173,14 +173,19 @@ impl AppState {
             hour: chrono::Local::now().hour(),
             vars: &all,
         };
-        lines::pick(
+        let (zh, ja) = lines::pick_ja(
             &own,
             &self.common_lines(),
             scene,
             &ctx,
             &self.recent_lines,
             lines::seed(),
-        )
+        )?;
+        // 这句有日语版本：记下来，声音说日语时念它（DECISIONS #58）
+        if let Some(ja) = ja {
+            crate::voice::remember_ja(self, &zh, &ja);
+        }
+        Some(zh)
     }
 
     /// 按 id 找角色

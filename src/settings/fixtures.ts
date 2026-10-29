@@ -76,6 +76,7 @@ const view: SettingsView = {
     sovits_ref_audio: '',
     sovits_ref_text: '',
     sovits_ref_lang: 'ja',
+    lang: 'ja',
     openai_url: 'https://api.openai.com/v1',
     openai_model: 'gpt-4o-mini-tts',
     openai_voice: 'nova',

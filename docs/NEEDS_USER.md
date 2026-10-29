@@ -118,7 +118,7 @@
 - **怎么做**（完整说明在训练包里的 `README.md`，Q 盘 `chiaki-voice-train` 里也放了一份，也就是 `scripts/voice-train/README.md`）：
   1. SSH 登录服务器，运行：
      ```
-     cd ~/chiaki-voice-train
+     cd ~/feng/chiaki-voice-train
      sha256sum -c chiaki-voice.tar.gz.sha256 chiaki-voice-scripts.tar.gz.sha256
      tar -xzf chiaki-voice.tar.gz
      tar -xzf chiaki-voice-scripts.tar.gz
@@ -128,7 +128,7 @@
   2. 试跑：`bash train.sh --quick`（约 5 分钟），看到「完成！」再继续。
   3. 正式训练：`nohup bash train.sh > train.log 2>&1 &`，`tail -f train.log` 看进度（大约 20~40 分钟）。默认自动用空闲显存最多的卡；想指定就加 `--gpu 卡号`（编号看 `nvidia-smi`）。
   4. 告诉 Claude「训练完了」——Claude 会从 Q 盘把最后一轮的模型（约 300 MB，Q 盘很慢，要 15~20 分钟）拷回来、在你电脑上配好语音服务。
-  5. 声音满意以后再在服务器上 `rm -rf ~/chiaki-voice-train`（所有东西都在这一个文件夹里；中间几轮的模型也在里面，最后一轮不好听时还要用）。
+  5. 声音满意以后再在服务器上 `rm -rf ~/feng/chiaki-voice-train`（所有东西都在这一个文件夹里；中间几轮的模型也在里面，最后一轮不好听时还要用）。
 
 ## 已完成
 

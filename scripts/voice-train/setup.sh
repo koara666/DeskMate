@@ -57,7 +57,13 @@ for f in \
     mkdir -p "$PM/$(dirname "$f")"
     if [ ! -s "$PM/$f" ]; then
         echo "  $f"
-        wget -c --tries=25 --wait=5 --read-timeout=40 -q --show-progress -O "$PM/$f" "$HF_BASE/lj1995/GPT-SoVITS/resolve/main/$f"
+        # 大文件会被跳转到 HF 的存储，偶尔临时返回错误（实测 wget 退出码 8），wget 遇到这种不会自己重试：失败就等几秒再来
+        for i in 1 2 3 4 5; do
+            wget -c --tries=25 --wait=5 --read-timeout=40 -q --show-progress -O "$PM/$f" "$HF_BASE/lj1995/GPT-SoVITS/resolve/main/$f" && break
+            [ "$i" = 5 ] && { echo "下载失败：$f（重新运行 bash setup.sh 会接着下）" >&2; exit 1; }
+            echo "  下载出错，5 秒后重试（第 $i 次）"
+            sleep 5
+        done
     fi
 done
 # install.sh 看到 pretrained_models/sv 已经存在，就不会再下载 4.5 GB 的全套模型包

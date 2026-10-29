@@ -10,14 +10,22 @@
 //!   音频由桌宠窗口播放（`voice-play` 事件 → `voice_audio` 取字节），系统语音直接在桌宠窗口里合成（`voice-say`）。
 //! - Key 只存系统凭据管理器（`backend:tts-fish` / `backend:tts-openai`），不进设置、不进日志、不给前端。
 //! - 什么时候说：小反应、主动说话、聊天回复、小游戏，各自可以关；勿扰时主动说话不出声；全屏时默认不出声（可选只用声音说）。
+//! - 说什么语言（DECISIONS #58）：默认日语，气泡照常显示中文。日语从三处来：预写台词的 ` || 日本語`、
+//!   聊天回复附带的 `[[日语：]]`（都先记进 `remember_ja` 的小表，按原文查），都没有时用聊天模型翻译要念的那一两句；
+//!   翻译不了就念中文。
 
 use crate::settings::Settings;
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
 pub const ENGINES: [&str; 4] = ["system", "fish", "sovits", "openai"];
+/// 她说话的语言：日语（气泡照常中文）/ 中文
+pub const LANGS: [&str; 2] = ["ja", "zh"];
+/// 「中文 → 日语」对照表最多记几句
+const JA_KEEP: usize = 64;
 /// Fish Audio 上现成的七海千秋声音（社区模型，模型页 https://fish.audio/m/<id>）
 pub const FISH_PRESETS: [(&str, &str); 2] = [
     (
@@ -70,6 +78,8 @@ pub struct VoiceSettings {
     pub max_chars: u32,
     /// 语速（0.5~2）
     pub speed: f32,
+    /// 她说话的语言：ja（默认，DECISIONS #58）/ zh；气泡总是中文
+    pub lang: String,
     pub scenes: VoiceScenes,
     /// 全屏时（比如在玩全屏游戏）只用声音说主动的话（默认不出声）
     pub fullscreen_voice: bool,
@@ -102,6 +112,7 @@ impl Default for VoiceSettings {
             volume: 80,
             max_chars: 40,
             speed: 1.0,
+            lang: "ja".into(),
             scenes: VoiceScenes::default(),
             fullscreen_voice: false,
             daily_chars: 5000,
@@ -147,6 +158,9 @@ impl VoiceSettings {
             self.speed = 1.0;
         }
         self.speed = self.speed.clamp(0.5, 2.0);
+        if !LANGS.contains(&self.lang.as_str()) {
+            self.lang = "ja".into();
+        }
         if !self.system_pitch.is_finite() {
             self.system_pitch = 1.25;
         }
@@ -299,6 +313,161 @@ pub struct VoiceState {
     chars: Mutex<(String, u32)>,
     /// 上一句小反应的时间（毫秒），小反应 1.5 秒内只说一句
     last_reaction: Mutex<i64>,
+    /// 最近的「中文 → 日语」（预写台词、聊天回复附带的日语）
+    ja: Mutex<VecDeque<(String, String)>>,
+}
+
+/// 聊天回复要不要附日语：开着声音、说日语、聊天回复会念
+pub fn chat_wants_ja(v: &VoiceSettings) -> bool {
+    v.enabled && !v.engine.is_empty() && v.lang == "ja" && v.scenes.chat
+}
+
+/// 记下一句话的日语版本，念的时候按中文原文查
+pub fn remember_ja(st: &AppState, zh: &str, ja: &str) {
+    let (zh, ja) = (zh.trim(), ja.trim());
+    if zh.is_empty() || ja.is_empty() {
+        return;
+    }
+    let mut g = st.voice.ja.lock().unwrap_or_else(|e| e.into_inner());
+    g.retain(|(z, _)| z != zh);
+    g.push_back((zh.to_string(), ja.to_string()));
+    while g.len() > JA_KEEP {
+        g.pop_front();
+    }
+}
+
+/// 查日语（纯函数）：原文一样的优先；否则找原文以它开头的那句（播报会把几句拼起来，念第一句就够了）
+pub fn find_ja(table: &VecDeque<(String, String)>, text: &str) -> Option<String> {
+    let text = text.trim();
+    if let Some((_, j)) = table.iter().rev().find(|(z, _)| z == text) {
+        return Some(j.clone());
+    }
+    table
+        .iter()
+        .rev()
+        .filter(|(z, _)| z.chars().count() >= 4 && text.starts_with(z.as_str()))
+        .max_by_key(|(z, _)| z.len())
+        .map(|(_, j)| j.clone())
+}
+
+/// 日语每次最多念几个字：同样的意思日语字数多，按中文上限的 1.5 倍
+pub fn ja_max(max_chars: u32) -> usize {
+    max_chars as usize * 3 / 2
+}
+
+/// 模型给的日语：去掉标记、引号、多余的行；没有假名的不算日语
+pub fn clean_ja(raw: &str) -> Option<String> {
+    let (t, _) = crate::markers::strip(raw);
+    let line = t.lines().map(str::trim).find(|l| !l.is_empty())?;
+    let line = line
+        .trim_matches(|c| matches!(c, '「' | '」' | '『' | '』' | '"' | '“' | '”'))
+        .trim();
+    // 平假名 + 片假名
+    let kana = line.chars().any(|c| matches!(c as u32, 0x3041..=0x30FF));
+    (kana && line.chars().count() <= 200).then(|| line.to_string())
+}
+
+/// 兜底：用聊天模型把要念的一两句中文翻成她会说的日语。mock、超出主动行为的预算、失败时返回 None
+async fn translate_ja(st: &AppState, zh: &str) -> Option<String> {
+    let s = st.settings();
+    if s.chat_backend.is_empty() || s.chat_backend == "mock" {
+        return None;
+    }
+    {
+        let (day, month) = crate::usage::today();
+        if !crate::proactive::model_allowed(&st.db(), &s.companion, &s.budget, &day, &month) {
+            return None;
+        }
+    }
+    let name = st
+        .current_character()
+        .map(|c| c.manifest.name)
+        .unwrap_or_default();
+    let req = crate::backends::ChatRequest {
+        system: vec![crate::backends::SystemBlock {
+            text: format!(
+                "把用户发来的中文台词翻译成日语。说这句话的是{name}，译成她平时会说的自然日语口语，保持她的语气。只输出译文一行，不要解释、引号、注音和罗马字。"
+            ),
+            cacheable: true,
+        }],
+        messages: vec![crate::backends::ChatMessage::user(zh)],
+        context: None,
+        max_tokens: 200,
+        temperature: Some(0.3),
+    };
+    let out = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        crate::chat::complete(
+            st,
+            &s.chat_backend,
+            req,
+            crate::usage::purpose::PROACTIVE,
+            tokio_util::sync::CancellationToken::new(),
+        ),
+    )
+    .await
+    .ok()?
+    .ok()?;
+    clean_ja(&out.text)
+}
+
+/// 要念什么
+#[derive(Debug, PartialEq)]
+enum Plan {
+    Silent,
+    /// `zh` 是对应的中文（系统语音没有日语声音时念它）
+    Speak {
+        text: String,
+        lang: &'static str,
+        zh: String,
+    },
+    /// 说日语，但这句没有现成的日语：先翻译这句（已精简的）中文
+    Translate(String),
+}
+
+fn plan(st: &AppState, v: &VoiceSettings, text: &str) -> Plan {
+    let zh = condense(text, v.max_chars as usize);
+    if zh.is_empty() {
+        return Plan::Silent;
+    }
+    if v.lang != "ja" {
+        return Plan::Speak {
+            text: zh.clone(),
+            lang: "zh",
+            zh,
+        };
+    }
+    let found = {
+        let g = st.voice.ja.lock().unwrap_or_else(|e| e.into_inner());
+        find_ja(&g, text)
+    };
+    match found.map(|ja| condense(&ja, ja_max(v.max_chars))) {
+        Some(ja) if !ja.is_empty() => Plan::Speak {
+            text: ja,
+            lang: "ja",
+            zh,
+        },
+        _ => Plan::Translate(zh),
+    }
+}
+
+/// 翻译（失败就念中文）
+async fn resolve(
+    st: &AppState,
+    v: &VoiceSettings,
+    plan: Plan,
+) -> Option<(String, &'static str, String)> {
+    match plan {
+        Plan::Silent => None,
+        Plan::Speak { text, lang, zh } => Some((text, lang, zh)),
+        Plan::Translate(zh) => match translate_ja(st, &zh).await {
+            Some(ja) => {
+                remember_ja(st, &zh, &ja);
+                Some((condense(&ja, ja_max(v.max_chars)), "ja", zh))
+            }
+            None => Some((zh.clone(), "zh", zh)),
+        },
+    }
 }
 
 /// 头顶气泡菜单里「声音」开关的状态：None = 还没选引擎，不显示这个气泡
@@ -322,6 +491,10 @@ pub fn toggle(app: &AppHandle) -> bool {
 #[derive(Debug, Clone, Serialize)]
 pub struct SayEvent {
     pub text: String,
+    /// ja / zh
+    pub lang: String,
+    /// 对应的中文：说日语但电脑上没有日语声音时念它
+    pub fallback: String,
     pub voice: String,
     pub rate: f32,
     pub pitch: f32,
@@ -363,15 +536,26 @@ pub fn on_line(app: &AppHandle, text: &str, scene: Scene) {
         }
         *last = now;
     }
-    let text = condense(text, s.voice.max_chars as usize);
-    if text.is_empty() {
-        return;
+    let v = s.voice;
+    match plan(&st, &v, text) {
+        Plan::Silent => {}
+        Plan::Speak { text, lang, zh } => speak(app, v, text, lang, zh),
+        p @ Plan::Translate(_) => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let st = app.state::<AppState>();
+                if let Some((text, lang, zh)) = resolve(&st, &v, p).await
+                    && !text.is_empty()
+                {
+                    speak(&app, v, text, lang, zh);
+                }
+            });
+        }
     }
-    speak(app, s.voice, text);
 }
 
-/// 读一句（已经精简过的）
-pub fn speak(app: &AppHandle, v: VoiceSettings, text: String) {
+/// 读一句（已经精简过的）。`zh` 是对应的中文：系统语音在没有日语声音的电脑上念它
+pub fn speak(app: &AppHandle, v: VoiceSettings, text: String, lang: &'static str, zh: String) {
     let volume = v.volume as f32 / 100.0;
     if v.engine == "system" {
         let _ = app.emit_to(
@@ -379,6 +563,8 @@ pub fn speak(app: &AppHandle, v: VoiceSettings, text: String) {
             "voice-say",
             SayEvent {
                 text,
+                lang: lang.into(),
+                fallback: zh,
                 voice: v.system_voice.clone(),
                 rate: v.speed,
                 pitch: v.system_pitch,
@@ -390,7 +576,7 @@ pub fn speak(app: &AppHandle, v: VoiceSettings, text: String) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let st = app.state::<AppState>();
-        match synth_cached(&st, &v, &text).await {
+        match synth_cached(&st, &v, &text, lang).await {
             Ok(id) => {
                 let _ = app.emit_to("pet", "voice-play", PlayEvent { id, volume });
             }
@@ -403,8 +589,8 @@ fn cache_dir(st: &AppState) -> std::path::PathBuf {
     st.paths.root().join("voice-cache")
 }
 
-/// 缓存文件名：引擎参数 + 文字的哈希（只含十六进制）
-pub fn cache_id(v: &VoiceSettings, text: &str) -> String {
+/// 缓存文件名：引擎参数 + 语言 + 文字的哈希（只含十六进制）
+pub fn cache_id(v: &VoiceSettings, text: &str, lang: &str) -> String {
     use sha2::Digest;
     let key = match v.engine.as_str() {
         "fish" => format!(
@@ -412,7 +598,7 @@ pub fn cache_id(v: &VoiceSettings, text: &str) -> String {
             v.fish_model, v.fish_engine, v.speed, text
         ),
         "sovits" => format!(
-            "sovits|{}|{}|{}|{}",
+            "sovits|{}|{}|{}|{lang}|{}",
             v.sovits_ref_audio, v.sovits_ref_lang, v.speed, text
         ),
         "openai" => format!(
@@ -426,8 +612,13 @@ pub fn cache_id(v: &VoiceSettings, text: &str) -> String {
 }
 
 /// 合成（有缓存就直接用），返回缓存 id
-async fn synth_cached(st: &AppState, v: &VoiceSettings, text: &str) -> Result<String, String> {
-    let id = cache_id(v, text);
+async fn synth_cached(
+    st: &AppState,
+    v: &VoiceSettings,
+    text: &str,
+    lang: &str,
+) -> Result<String, String> {
+    let id = cache_id(v, text, lang);
     let dir = cache_dir(st);
     let path = dir.join(format!("{id}.audio"));
     if path.is_file() {
@@ -450,7 +641,7 @@ async fn synth_cached(st: &AppState, v: &VoiceSettings, text: &str) -> Result<St
         }
         c.1 += n;
     }
-    let bytes = synth(st, v, text).await?;
+    let bytes = synth(st, v, text, lang).await?;
     if bytes.len() < 64 {
         return Err("合成出来的音频是空的".into());
     }
@@ -525,7 +716,7 @@ fn key(st: &AppState, id: &str) -> Result<String, String> {
 }
 
 /// 请求体（纯函数，方便测试）
-pub fn request_body(v: &VoiceSettings, text: &str) -> serde_json::Value {
+pub fn request_body(v: &VoiceSettings, text: &str, lang: &str) -> serde_json::Value {
     match v.engine.as_str() {
         "fish" => serde_json::json!({
             "text": text,
@@ -538,7 +729,7 @@ pub fn request_body(v: &VoiceSettings, text: &str) -> serde_json::Value {
         }),
         "sovits" => serde_json::json!({
             "text": text,
-            "text_lang": "zh",
+            "text_lang": lang,
             "ref_audio_path": v.sovits_ref_audio,
             "prompt_text": v.sovits_ref_text,
             "prompt_lang": v.sovits_ref_lang,
@@ -557,8 +748,13 @@ pub fn request_body(v: &VoiceSettings, text: &str) -> serde_json::Value {
 }
 
 /// 调用引擎合成
-async fn synth(st: &AppState, v: &VoiceSettings, text: &str) -> Result<Vec<u8>, String> {
-    let body = request_body(v, text);
+async fn synth(
+    st: &AppState,
+    v: &VoiceSettings,
+    text: &str,
+    lang: &str,
+) -> Result<Vec<u8>, String> {
+    let body = request_body(v, text, lang);
     let req = match v.engine.as_str() {
         "fish" => st
             .http
@@ -614,15 +810,18 @@ pub async fn test(app: &AppHandle) -> Result<(), String> {
     if v.engine.is_empty() {
         return Err("先选一个声音引擎".into());
     }
-    let text = st
+    let line = st
         .line("voice.test", &[])
         .unwrap_or_else(|| "你好，我是你的桌面伙伴。".into());
-    let text = condense(&text, v.max_chars as usize);
+    let p = plan(&st, &v, &line);
+    let Some((text, lang, zh)) = resolve(&st, &v, p).await else {
+        return Err("没有要念的内容".into());
+    };
     if v.engine == "system" {
-        speak(app, v, text);
+        speak(app, v, text, lang, zh);
         return Ok(());
     }
-    let id = synth_cached(&st, &v, &text).await?;
+    let id = synth_cached(&st, &v, &text, lang).await?;
     let _ = app.emit_to(
         "pet",
         "voice-play",
@@ -725,6 +924,13 @@ mod tests {
         assert_eq!(s.fish_url, "https://api.fish.audio", "只能 https 或本机");
         assert_eq!(s.fish_model, "abcx");
         assert_eq!((s.max_chars, s.speed), (10, 1.0));
+        assert_eq!(d.lang, "ja", "默认说日语（DECISIONS #58）");
+        let s = VoiceSettings {
+            lang: "fr".into(),
+            ..Default::default()
+        }
+        .sanitize();
+        assert_eq!(s.lang, "ja");
         assert!(url_ok("http://127.0.0.1:9880") && !url_ok("http://192.168.1.2"));
     }
 
@@ -734,22 +940,99 @@ mod tests {
             engine: "fish".into(),
             ..Default::default()
         };
-        let b = request_body(&v, "你好");
+        let b = request_body(&v, "你好", "zh");
         assert_eq!(b["reference_id"], FISH_PRESETS[0].0);
         assert_eq!(b["format"], "mp3");
-        let id1 = cache_id(&v, "你好");
+        let id1 = cache_id(&v, "你好", "zh");
         assert_eq!(id1.len(), 32);
-        assert_ne!(id1, cache_id(&v, "你好呀"));
+        assert_ne!(id1, cache_id(&v, "你好呀", "zh"));
         v.fish_model = FISH_PRESETS[1].0.into();
-        assert_ne!(id1, cache_id(&v, "你好"), "换了声音要重新合成");
+        assert_ne!(id1, cache_id(&v, "你好", "zh"), "换了声音要重新合成");
         v.engine = "sovits".into();
         v.sovits_ref_audio = "D:/ref.wav".into();
-        let b = request_body(&v, "你好");
+        let b = request_body(&v, "你好", "zh");
         assert_eq!(b["text_lang"], "zh");
         assert_eq!(b["ref_audio_path"], "D:/ref.wav");
+        assert_eq!(request_body(&v, "こんにちは", "ja")["text_lang"], "ja");
+        assert_ne!(
+            cache_id(&v, "漢字", "ja"),
+            cache_id(&v, "漢字", "zh"),
+            "同一段字按不同语言念，声音不一样"
+        );
         v.engine = "openai".into();
-        assert_eq!(request_body(&v, "你好")["input"], "你好");
+        assert_eq!(request_body(&v, "你好", "zh")["input"], "你好");
         assert!(!VoiceSettings::default().metered() || VoiceSettings::default().engine.is_empty());
+    }
+
+    #[test]
+    fn japanese_lookup_and_cleanup() {
+        let mut t = VecDeque::new();
+        t.push_back(("早上好呀。".to_string(), "おはよう。".to_string()));
+        t.push_back((
+            "今天下雨，记得带伞。".to_string(),
+            "今日は雨だから、傘を持っていってね。".to_string(),
+        ));
+        assert_eq!(find_ja(&t, "早上好呀。").as_deref(), Some("おはよう。"));
+        // 播报把几句拼在一起：念第一句的日语
+        assert_eq!(
+            find_ja(&t, "今天下雨，记得带伞。还有，今天是周五。").as_deref(),
+            Some("今日は雨だから、傘を持っていってね。")
+        );
+        assert_eq!(find_ja(&t, "没见过的话"), None);
+        // 太短的不按开头匹配（避免误配）
+        t.push_back(("好".to_string(), "うん".to_string()));
+        assert_eq!(find_ja(&t, "好久不见"), None);
+        assert_eq!(
+            clean_ja("「うん、一緒に遊ぼう。」\n(注释)").as_deref(),
+            Some("うん、一緒に遊ぼう。")
+        );
+        assert_eq!(clean_ja("好的，一起玩吧"), None, "没有假名不算日语");
+        assert_eq!(clean_ja(""), None);
+        assert_eq!(ja_max(40), 60);
+    }
+
+    #[test]
+    fn plan_uses_remembered_japanese_or_asks_to_translate() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = crate::state::test_state(dir.path());
+        let mut v = VoiceSettings {
+            enabled: true,
+            engine: "sovits".into(),
+            ..Default::default()
+        };
+        remember_ja(&st, "嗯……一起玩吧。", "うん……一緒に遊ぼう。");
+        assert_eq!(
+            plan(&st, &v, "嗯……一起玩吧。"),
+            Plan::Speak {
+                text: "うん……一緒に遊ぼう。".into(),
+                lang: "ja",
+                zh: "嗯……一起玩吧。".into()
+            }
+        );
+        assert_eq!(
+            plan(&st, &v, "（歪头）没记过的话。"),
+            Plan::Translate("没记过的话。".into())
+        );
+        assert_eq!(plan(&st, &v, "（只有动作）"), Plan::Silent);
+        v.lang = "zh".into();
+        assert_eq!(
+            plan(&st, &v, "嗯……一起玩吧。"),
+            Plan::Speak {
+                text: "嗯……一起玩吧。".into(),
+                lang: "zh",
+                zh: "嗯……一起玩吧。".into()
+            }
+        );
+        assert!(chat_wants_ja(&VoiceSettings {
+            enabled: true,
+            engine: "sovits".into(),
+            ..Default::default()
+        }));
+        assert!(!chat_wants_ja(&v), "说中文时不用附日语");
+        assert!(
+            !chat_wants_ja(&VoiceSettings::default()),
+            "声音关着不用附日语"
+        );
     }
 
     #[tokio::test]
@@ -766,7 +1049,7 @@ mod tests {
             fish_url: base,
             ..Default::default()
         };
-        let id = synth_cached(&st, &v, "你好").await.unwrap();
+        let id = synth_cached(&st, &v, "你好", "zh").await.unwrap();
         let req = rx.await.unwrap();
         let head = req.head.to_ascii_lowercase();
         assert!(head.starts_with("post /v1/tts"));
@@ -774,7 +1057,7 @@ mod tests {
         assert!(head.contains("model: s2.1-pro-free"));
         assert!(req.body.contains("\"reference_id\""));
         // 第二次直接用缓存（假服务器只回一次，再请求会失败）
-        assert_eq!(synth_cached(&st, &v, "你好").await.unwrap(), id);
+        assert_eq!(synth_cached(&st, &v, "你好", "zh").await.unwrap(), id);
         assert!(read_cached(&st, &id).unwrap().starts_with(b"ID3"));
         assert!(read_cached(&st, "../../etc/passwd").is_err());
         assert!(clear_cache(&st) > 0);

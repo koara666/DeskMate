@@ -68,6 +68,7 @@ def main():
     ap.add_argument("--stall", type=float, default=180, help="多少秒没有进展算卡住")
     ap.add_argument("--overwrite", action="store_true")
     ap.add_argument("--restart", action="store_true", help="不续传，从头重新写")
+    ap.add_argument("--trust-part", action="store_true", help="续传时不读回已写部分（上次已核对过；整个文件由服务器上的 sha256sum -c 核对）")
     a = ap.parse_args()
     threading.Thread(target=watchdog, args=(a.stall,), daemon=True).start()
 
@@ -87,20 +88,29 @@ def main():
     h = hashlib.sha256()  # 目标上实际内容的哈希：续传时 = 读回来核对过的前段 + 写完后读回来的后段
     if os.path.exists(part) and not a.restart:
         have = min(os.path.getsize(part) // CHUNK * CHUNK, size)
-        print("发现上次没传完的 %s（%.0f MB），先读回来核对……" % (os.path.basename(part), have / 1e6), flush=True)
-        t0, last = time.time(), time.time()
-        with open(a.src, "rb") as fi, open(part, "rb") as fp:
-            while start < have:
-                b = fp.read(CHUNK)
-                if not b or b != fi.read(len(b)):
-                    break
-                h.update(b)
-                start += len(b)
-                pace(start, a.mbps, t0)
-                if time.time() - last > 10:
-                    last = time.time()
-                    print("  已核对 %.0f / %.0f MB" % (start / 1e6, have / 1e6), flush=True)
-        print("  前 %.0f MB 没问题，从这里接着传" % (start / 1e6), flush=True)
+        if a.trust_part:
+            # 已写部分上次核对过、不再从慢速网络盘读回；哈希用本地源文件的这一段，整个文件由服务器上的 sha256sum -c 最终核对
+            print("发现上次没传完的 %s，不读回核对，从 %.0f MB 接着传" % (os.path.basename(part), have / 1e6), flush=True)
+            with open(a.src, "rb") as fi:
+                while start < have:
+                    b = fi.read(min(CHUNK, have - start))
+                    h.update(b)
+                    start += len(b)
+        else:
+            print("发现上次没传完的 %s（%.0f MB），先读回来核对……" % (os.path.basename(part), have / 1e6), flush=True)
+            t0, last = time.time(), time.time()
+            with open(a.src, "rb") as fi, open(part, "rb") as fp:
+                while start < have:
+                    b = fp.read(CHUNK)
+                    if not b or b != fi.read(len(b)):
+                        break
+                    h.update(b)
+                    start += len(b)
+                    pace(start, a.mbps, t0)
+                    if time.time() - last > 10:
+                        last = time.time()
+                        print("  已核对 %.0f / %.0f MB" % (start / 1e6, have / 1e6), flush=True)
+            print("  前 %.0f MB 没问题，从这里接着传" % (start / 1e6), flush=True)
 
     t0, done, last = time.time(), 0, 0
     with open(a.src, "rb") as fi, open(part, "r+b" if start else "wb") as fo:
@@ -142,6 +152,8 @@ def main():
     with open(dst + ".sha256", "w", encoding="utf-8", newline="\n") as f:
         f.write("%s  %s\n" % (want, name))
     print("完成：%s（SHA-256 %s）" % (dst, want), flush=True)
+    if a.trust_part:
+        print("注意：续传前已经写过去的部分没有读回核对，用之前在服务器上 sha256sum -c 核对一次。", flush=True)
 
 
 if __name__ == "__main__":

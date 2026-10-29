@@ -20,7 +20,7 @@ const ENGINES: { id: string; name: string; desc: string }[] = [
   {
     id: 'sovits',
     name: 'GPT-SoVITS（在你自己电脑上运行）',
-    desc: '免费、不联网、声音最像（用她的原声做参考）。但要先装好 GPT-SoVITS 并运行它的接口服务（api_v2.py），有显卡最好。步骤见 NEEDS_USER 第 11 项。',
+    desc: '免费、不联网、声音最像（用她的原声训练的模型）。要先在电脑上运行它的语音服务（api_v2.py，有显卡最好），步骤见 NEEDS_USER 第 13 项。',
   },
   {
     id: 'openai',
@@ -95,6 +95,26 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
         ))}
       </div>
 
+      {v.engine && (
+        <div class="card">
+          <h2>她说话的语言</h2>
+          {(
+            [
+              ['ja', '日语（气泡照常显示中文，像看番的字幕）', '她的原声是日语，日语最像她本人。预写的台词带日语版；聊天回复由模型顺便附上日语（不多花一次请求）；都没有时用聊天模型翻译要念的那一两句，翻译不了就念中文。'],
+              ['zh', '中文', '念气泡里的中文。'],
+            ] as const
+          ).map(([id, name, desc]) => (
+            <label class="row" key={id}>
+              <input type="radio" name="voice-lang" checked={v.lang === id} onChange={() => save({ ...v, lang: id })} />
+              <span>
+                {name}
+                <small>{desc}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+
       {v.engine === 'fish' && (
         <div class="card">
           <h2>Fish Audio</h2>
@@ -138,7 +158,7 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
           <div class="row">
             <span class="label">声音</span>
             <select aria-label="系统声音" value={v.system_voice} onChange={(e) => save({ ...v, system_voice: (e.currentTarget as HTMLSelectElement).value })}>
-              <option value="">自动（中文）</option>
+              <option value="">自动（按说话的语言挑）</option>
               {voices.map((n) => (
                 <option key={n} value={n}>
                   {n}
@@ -183,7 +203,7 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
               <option value="en">英语</option>
             </select>
           </div>
-          <p class="muted small">参考音频是一段 3~10 秒的她的原声（文件路径由 GPT-SoVITS 那边读取）。只能连本机地址。</p>
+          <p class="muted small">参考音频是一段 3~10 秒的她的原声（文件路径由 GPT-SoVITS 那边读取），「参考音频说的话」要一字不差。只能连本机地址。</p>
         </div>
       )}
 

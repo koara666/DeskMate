@@ -276,6 +276,8 @@ export interface VoiceSettings {
   volume: number;
   max_chars: number;
   speed: number;
+  /** 她说话的语言：ja（默认，气泡照常中文）/ zh */
+  lang: string;
   scenes: { reactions: boolean; proactive: boolean; chat: boolean; games: boolean };
   fullscreen_voice: boolean;
   daily_chars: number;

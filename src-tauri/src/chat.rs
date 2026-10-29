@@ -522,6 +522,7 @@ pub async fn run_turn_with_notes(
             now: &now_text,
             delegation: advanced.allow_delegation,
             relation: &relation,
+            voice_ja: crate::voice::chat_wants_ja(&settings.voice),
         };
         prompt::build(&parts, PromptBudget::default())
     };
@@ -585,6 +586,10 @@ pub async fn run_turn_with_notes(
         Ok(mut out) => {
             let (visible, found) = markers::strip(&out.text);
             out.text = visible;
+            // 回复附带的日语版本：记下来，念的时候用（DECISIONS #58）
+            if let Some(ja) = markers::ja_text(&found) {
+                crate::voice::remember_ja(&state, &out.text, ja);
+            }
             let task = if advanced.allow_delegation {
                 markers::first_task(&found)
             } else {

@@ -531,6 +531,8 @@ async fn greeting_text(st: &AppState) -> String {
         now: &now_text,
         delegation: false,
         relation: "",
+        // 主动打招呼不要求附日语：念的时候走兜底翻译（DECISIONS #58）
+        voice_ja: false,
     };
     let budget = crate::prompt::PromptBudget {
         max_output_tokens: 120,

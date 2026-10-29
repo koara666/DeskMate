@@ -12,6 +12,8 @@
 //!   `早上`(5~11 点) `中午`(11~14) `下午`(14~18) `晚上`(18~23) `深夜`(23~5)。不认识的条件 = 这句永远不选（宁可不说也不说错）。
 //! - `{占位符}` 由程序填入（每个场景能用哪些见 HOW_TO_ADD）；填不上的台词不会被选中。
 //! - 角色没写的场景，用程序内置的通用台词（`characters/_common/lines/`）。
+//! - 行尾 ` || 日本語` 可选：这句的日语版本（DECISIONS #58，声音说日语时读它，气泡照常显示中文）。
+//!   日语版尽量不用占位符（占位符的值是中文，日语读不好）；用了的话也要是这个场景允许的。
 //!
 //! 只读：角色包在运行时只读，台词只作为要显示的文字或提示词里的参考。
 
@@ -165,6 +167,8 @@ fn parse_tag(t: &str) -> Tag {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Line {
     pub text: String,
+    /// 日语版本（` || ` 后面的部分）
+    pub ja: Option<String>,
     tags: Vec<Tag>,
 }
 
@@ -242,11 +246,16 @@ impl Lines {
                 ),
                 None => (Vec::new(), item),
             };
+            let (text, ja) = match text.split_once("||") {
+                Some((zh, ja)) => (zh.trim(), Some(ja.trim()).filter(|j| !j.is_empty())),
+                None => (text, None),
+            };
             if text.is_empty() {
                 continue;
             }
             self.scenes.entry(s.clone()).or_default().push(Line {
                 text: text.chars().take(MAX_LINE_CHARS).collect(),
+                ja: ja.map(|j| j.chars().take(MAX_LINE_CHARS).collect()),
                 tags,
             });
         }
@@ -302,17 +311,19 @@ impl Lines {
                 if l.tags.contains(&Tag::Unknown) {
                     v.push(format!("{scene}：不认识的条件「{}」", l.text));
                 }
-                let mut rest = l.text.as_str();
-                while let Some(i) = rest.find('{') {
-                    let after = &rest[i + 1..];
-                    let Some(j) = after.find('}') else {
-                        v.push(format!("{scene}：括号没闭合「{}」", l.text));
-                        break;
-                    };
-                    if !allowed.contains(&&after[..j]) {
-                        v.push(format!("{scene}：不能用 {{{}}}「{}」", &after[..j], l.text));
+                for text in std::iter::once(&l.text).chain(l.ja.iter()) {
+                    let mut rest = text.as_str();
+                    while let Some(i) = rest.find('{') {
+                        let after = &rest[i + 1..];
+                        let Some(j) = after.find('}') else {
+                            v.push(format!("{scene}：括号没闭合「{text}」"));
+                            break;
+                        };
+                        if !allowed.contains(&&after[..j]) {
+                            v.push(format!("{scene}：不能用 {{{}}}「{text}」", &after[..j]));
+                        }
+                        rest = &after[j + 1..];
                     }
-                    rest = &after[j + 1..];
                 }
             }
         }
@@ -330,12 +341,23 @@ impl Lines {
 
     /// 这个场景里此刻能用的台词（已填好占位符），保持文件里的顺序
     pub fn eligible(&self, scene: &str, ctx: &LineCtx<'_>) -> Vec<String> {
+        self.eligible_ja(scene, ctx)
+            .into_iter()
+            .map(|(zh, _)| zh)
+            .collect()
+    }
+
+    /// 同 `eligible`，带上填好的日语版本（没有日语版、或日语版的占位符填不上时为 None）
+    pub fn eligible_ja(&self, scene: &str, ctx: &LineCtx<'_>) -> Vec<(String, Option<String>)> {
         self.scenes
             .get(scene)
             .map(|v| {
                 v.iter()
                     .filter(|l| l.tags.iter().all(|t| t.ok(ctx)))
-                    .filter_map(|l| fill(&l.text, ctx.vars))
+                    .filter_map(|l| {
+                        let ja = l.ja.as_deref().and_then(|j| fill(j, ctx.vars));
+                        fill(&l.text, ctx.vars).map(|zh| (zh, ja))
+                    })
                     .collect()
             })
             .unwrap_or_default()
@@ -382,11 +404,25 @@ pub fn pick(
     recent: &Recent,
     seed: u64,
 ) -> Option<String> {
-    let mut c = own.eligible(scene, ctx);
+    pick_ja(own, common, scene, ctx, recent, seed).map(|(zh, _)| zh)
+}
+
+/// 同 `pick`，带上这句的日语版本
+pub fn pick_ja(
+    own: &Lines,
+    common: &Lines,
+    scene: &str,
+    ctx: &LineCtx<'_>,
+    recent: &Recent,
+    seed: u64,
+) -> Option<(String, Option<String>)> {
+    let mut c = own.eligible_ja(scene, ctx);
     if c.is_empty() {
-        c = common.eligible(scene, ctx);
+        c = common.eligible_ja(scene, ctx);
     }
-    recent.choose(scene, c, seed)
+    let zh = recent.choose(scene, c.iter().map(|(z, _)| z.clone()).collect(), seed)?;
+    let ja = c.into_iter().find(|(z, _)| *z == zh).and_then(|(_, j)| j);
+    Some((zh, ja))
 }
 
 /// 随机种子（纳秒部分）
@@ -508,6 +544,40 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn japanese_versions() {
+        let l = Lines::parse(
+            "## g\n- 你好，{称呼} || こんにちは\n- [早上] 早上好 || おはよう、{称呼}\n- 只有中文\n- 空日语 ||  \n",
+        );
+        assert_eq!(l.line_count(), 4);
+        let c = ctx(8, &[("称呼", "小林".into())]);
+        assert_eq!(
+            l.eligible_ja("g", &c),
+            vec![
+                ("你好，小林".to_string(), Some("こんにちは".to_string())),
+                ("早上好".to_string(), Some("おはよう、小林".to_string())),
+                ("只有中文".to_string(), None),
+                ("空日语".to_string(), None),
+            ]
+        );
+        // 日语版的占位符填不上：中文照常能用，日语为 None
+        let c = ctx(8, &[]);
+        assert!(
+            l.eligible_ja("g", &c)
+                .contains(&("早上好".to_string(), None))
+        );
+        let r = Recent::default();
+        let empty = Lines::default();
+        let one = Lines::parse("## a\n- 一句 || 一言\n");
+        assert_eq!(
+            pick_ja(&one, &empty, "a", &ctx(12, &[]), &r, 0),
+            Some(("一句".to_string(), Some("一言".to_string())))
+        );
+        // 体检：日语版里用了不该用的占位符
+        let bad = Lines::parse("## reminder.fire\n- {内容}到了 || {城市}だよ\n");
+        assert_eq!(bad.problems().len(), 1, "{:?}", bad.problems());
     }
 
     #[test]

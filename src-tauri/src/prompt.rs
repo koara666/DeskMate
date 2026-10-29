@@ -63,6 +63,8 @@ pub struct PromptParts<'a> {
     pub delegation: bool,
     /// 你们的关系（亲密度、称呼），几乎不变，放可缓存的系统提示词
     pub relation: &'a str,
+    /// 用户开着日语语音（DECISIONS #58）：要模型在回复最后附一行 `[[日语：…]]`
+    pub voice_ja: bool,
 }
 
 const BASE_RULES: &str = "\
@@ -84,6 +86,9 @@ const BASE_RULES: &str = "\
 const DELEGATION_RULE: &str = "\
 - 用户在设置里允许了把事情交给执行工具（外部 agent）：用户明确想让你把一件事交给执行工具做（整理文件、写代码、上网查资料）时，先用角色口吻确认要做什么（涉及文件的再确认在哪个文件夹做）；用户同意后，在回复最后单独写一行 [[任务：用一句话写清楚要做的事（涉及文件的写上文件夹）]]，程序会弹出确认卡片，用户确认后交给执行工具。用户没同意前不要写这一行，也不要假装自己已经做完。";
 
+/// 日语语音：气泡显示中文，声音念日语（DECISIONS #58）
+const VOICE_JA_RULE: &str = "- 用户开着日语语音：你的声音会用日语念出回复的开头。每次回复的最后单独写一行 [[日语：把这条回复最前面一两句话译成你平时会说的自然日语口语，60 字以内，不要注音、罗马字和括号里的动作]]，这一行不会显示在气泡里。";
+
 /// 原作台词只用来找准语气：照搬原句或硬套原作场景，聊天会很怪
 const QUOTES_NOTE: &str = "（找准语气和反应方式用的参考：照这种感觉说新的话。口头禅可以自然地用，但不要整句照搬，也不要突然提起这些场景）";
 
@@ -95,6 +100,10 @@ pub fn build(parts: &PromptParts<'_>, budget: PromptBudget) -> ChatRequest {
     if parts.delegation {
         core.push('\n');
         core.push_str(DELEGATION_RULE);
+    }
+    if parts.voice_ja {
+        core.push('\n');
+        core.push_str(VOICE_JA_RULE);
     }
     core.push_str(&format!(
         "\n\n【角色设定：{}】\n{}",
@@ -383,6 +392,14 @@ mod tests {
         let rules = &build(&with, PromptBudget::default()).system[0].text;
         assert!(rules.contains("[[任务："));
         assert!(rules.find("[[任务：").unwrap() < rules.find("【角色设定").unwrap());
+        // 日语语音：只有打开时才要求附日语
+        assert!(!rules.contains("[[日语："));
+        let ja = PromptParts {
+            voice_ja: true,
+            ..base()
+        };
+        let rules = &build(&ja, PromptBudget::default()).system[0].text;
+        assert!(rules.contains("[[日语："));
     }
 
     #[test]

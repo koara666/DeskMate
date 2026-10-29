@@ -29,7 +29,7 @@
 
 ### 1. 上传
 
-Claude 已经把下面这些放进了 Q 盘（就是服务器上你的主目录）里单独的文件夹 `chiaki-voice-train`，你的科研项目文件一个都没动：
+Claude 已经把下面这些放进了 Q 盘（对应服务器上的 `~/feng`）里单独的文件夹 `chiaki-voice-train`，你的科研项目文件一个都没动：
 
 - `chiaki-voice.tar.gz`（241 MB）：训练包
 - `chiaki-voice-scripts.tar.gz`（几十 KB）：脚本的新版本（大包传到一半时脚本又改过，用它覆盖大包里的旧脚本）
@@ -39,7 +39,7 @@ Claude 已经把下面这些放进了 Q 盘（就是服务器上你的主目录�
 ### 2. 解压、装环境（服务器上）
 
 ```bash
-cd ~/chiaki-voice-train
+cd ~/feng/chiaki-voice-train
 sha256sum -c chiaki-voice.tar.gz.sha256 chiaki-voice-scripts.tar.gz.sha256   # 两行都显示「OK」才继续
 tar -xzf chiaki-voice.tar.gz
 tar -xzf chiaki-voice-scripts.tar.gz       # 一定在上一行之后：用新版脚本覆盖旧的
@@ -47,7 +47,7 @@ cd chiaki-voice
 bash setup.sh
 ```
 
-（如果 `cd ~/chiaki-voice-train` 说找不到，用 `ls ~` 看看；Q 盘对应的是 SSH 登录后的主目录。）
+（Q 盘 `\\sshfs\crossai@100.108.18.39!2024` 对应的是服务器上的 `/home/crossai/feng`，不是主目录。）
 
 `setup.sh` 大约 10~30 分钟（看网速；要下载约 3 GB 的 PyTorch 和 1.4 GB 的模型，都是服务器自己下，不经过 Q 盘），最后看到「装好了」就行。海外服务器用 `SOURCE=HF bash setup.sh`。中途断了（比如 SSH 掉线）重新运行一次，会接着下载。
 
@@ -70,7 +70,7 @@ tail -f train.log
 
 - 第一行让训练在后台跑，**关掉 SSH 窗口也不会停**；第二行看进度（按 Ctrl+C 只是不看了，不会停止训练）。
 - 4090 上大约 20~40 分钟。最后一行出现「完成！」和 `chiaki-model.tar.gz` 的路径。
-- 中途想再看进度：重新登录后 `cd ~/chiaki-voice-train/chiaki-voice && tail -f train.log`。
+- 中途想再看进度：重新登录后 `cd ~/feng/chiaki-voice-train/chiaki-voice && tail -f train.log`。
 
 ### 5. 拿回来
 
@@ -79,7 +79,7 @@ tail -f train.log
 ### 6. 清理（服务器上，拿回来以后）
 
 ```bash
-rm -rf ~/chiaki-voice-train
+rm -rf ~/feng/chiaki-voice-train
 ```
 
 在服务器上删比在 Q 盘里删快得多（Q 盘是网络盘，删上万个小文件会很慢，资源管理器可能卡住）。

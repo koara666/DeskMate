@@ -333,7 +333,7 @@ pub struct ActionView {
 /// 把回复里的打开 / 读取标记变成按钮（任务标记不在这里处理）
 pub fn action_view(m: &Marker, adv: &AdvancedSettings) -> Option<ActionView> {
     let (label, error) = match m.kind {
-        MarkerKind::Task | MarkerKind::Game | MarkerKind::Remind => return None,
+        MarkerKind::Task | MarkerKind::Game | MarkerKind::Remind | MarkerKind::Ja => return None,
         MarkerKind::Open => match resolve_open(&m.text, &adv.programs) {
             Ok(t) => (format!("打开{}", t.describe()), None),
             Err(e) => (format!("打开 {}", m.text), Some(e)),
