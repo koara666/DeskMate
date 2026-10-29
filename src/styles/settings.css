@@ -263,6 +263,14 @@ select:focus {
   background: var(--danger-bg);
   color: var(--danger);
 }
+.alert-warn {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
 .alert .hint {
   color: var(--text);
   margin-top: 4px;

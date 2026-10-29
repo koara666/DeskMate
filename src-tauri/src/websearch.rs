@@ -503,7 +503,7 @@ async fn get(http: &reqwest::Client, url: reqwest::Url) -> Result<String, String
         .get(url)
         .header("User-Agent", UA)
         .header("Accept-Language", "zh-CN,zh;q=0.9,ja;q=0.8,en;q=0.7")
-        .timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(6))
         .send()
         .await
         .map_err(|_| "网络不通".to_string())?;
@@ -623,7 +623,7 @@ pub async fn web_note(st: &AppState, text: &str) -> Option<WebNote> {
         return None;
     }
     let q = query_for(text)?;
-    let r = tokio::time::timeout(Duration::from_secs(20), search(&st.http, &q)).await;
+    let r = tokio::time::timeout(Duration::from_secs(15), search(&st.http, &q)).await;
     Some(match r {
         Ok(Ok(hits)) if !hits.is_empty() => WebNote {
             display: format!("上网查了「{}」· {} 条结果", q.text, hits.len()),

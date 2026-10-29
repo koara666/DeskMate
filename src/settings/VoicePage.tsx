@@ -80,6 +80,15 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
             <small>{v.engine ? '右键她头顶的气泡里也能开关' : '先在下面选一个声音引擎'}</small>
           </span>
         </label>
+        {v.engine && !v.enabled && (
+          // 以前这里什么提示都没有：引擎配好、试听也能响，但总开关没勾，聊天 / 播报 / 游戏里她都是安静的
+          <div class="alert alert-warn" role="alert">
+            <div>「让她出声」还没打开：现在只有下面的「试听一句」会出声，聊天回复、播报、游戏、摸头时她都是安静的。</div>
+            <button type="button" class="btn btn-small" onClick={() => save({ ...v, enabled: true })}>
+              现在打开
+            </button>
+          </div>
+        )}
       </div>
 
       <div class="card">
@@ -269,7 +278,16 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
         <div class="card">
           <h2>试听和细节</h2>
           <div class="row">
-            <button type="button" class="btn" onClick={() => run(() => api.voiceTest(), '她应该在说话了（桌宠那边出声）')}>
+            <button
+              type="button"
+              class="btn"
+              onClick={() =>
+                run(
+                  () => api.voiceTest(),
+                  v.enabled ? '她应该在说话了（桌宠那边出声）' : '试听成功。注意上面的「让她出声」还没打开，现在只有试听会出声',
+                )
+              }
+            >
               试听一句
             </button>
           </div>

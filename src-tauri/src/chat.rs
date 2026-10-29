@@ -483,8 +483,11 @@ pub async fn run_turn_with_notes(
         notes.push(n);
     }
     // 问新闻 / 最新消息 / 比分，或说了「搜一下」：上网查好放进背景资料，并在气泡下写明查了什么
-    if let Some(w) = crate::websearch::web_note(&state, &user_text).await {
+    if state.settings().web.enabled && crate::websearch::query_for(&user_text).is_some() {
+        // 搜索要等几秒（网络不通时最多 15 秒），先让桌宠显示在想
         emit_pet_state(&app, PetState::Thinking);
+    }
+    if let Some(w) = crate::websearch::web_note(&state, &user_text).await {
         notes.push(w.note);
         let _ = channel.send(ChatEvent::Note { text: w.display });
     }
