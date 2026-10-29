@@ -590,9 +590,13 @@ async function main() {
       await settings.waitFor(`document.querySelector('main h1')?.innerText === '声音'`, '声音页');
       await settings.eval(`[...document.querySelectorAll('label.engine-choice')].find(l => l.innerText.includes('Windows')).querySelector('input').click()`);
       await settings.waitText('试听一句');
+      await settings.waitText('她说话的语言');
+      const ja = await settings.eval(`[...document.querySelectorAll('input[name=voice-lang]')].find(i => i.checked)?.closest('label')?.innerText.startsWith('日语') === true`);
+      if (!ja) throw new Error('说话的语言默认不是日语（DECISIONS #58）');
       await settings.shot('settings-声音.png');
       const n = await pet.eval(`typeof speechSynthesis === 'undefined' ? -1 : speechSynthesis.getVoices().length`);
-      console.log(`    （桌宠页面的系统声音：${n} 个）`);
+      const nja = await pet.eval(`typeof speechSynthesis === 'undefined' ? -1 : speechSynthesis.getVoices().filter(v => v.lang.toLowerCase().startsWith('ja')).length`);
+      console.log(`    （桌宠页面的系统声音：${n} 个，其中日语 ${nja} 个）`);
       if (n < 0) throw new Error('WebView2 里没有 speechSynthesis');
     });
     await test('换成七海千秋：桌宠和聊天窗口换上掌机风皮肤', async () => {
