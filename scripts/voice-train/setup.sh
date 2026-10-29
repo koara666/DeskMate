@@ -77,9 +77,35 @@ CU="$(echo "$CUDA_VER" | tr 'A-Z' 'a-z')"
 if [ "$SOURCE" = HF ]; then
     python -m pip install torch==2.9.1 torchaudio==2.9.1 --index-url "https://download.pytorch.org/whl/$CU"
 else
-    # 国内：torch 本体从官方源下（实测 20 MB/s；阿里云的 PyTorch 镜像只有几百 KB/s），但不带依赖——
-    # 依赖里的 NVIDIA 库在官方源指向 pypi.nvidia.com，国内读超时、几乎下不动，改从阿里云 PyPI 装（实测 26 MB/s）
-    python -m pip install torch==2.9.1 torchaudio==2.9.1 --no-deps --index-url "https://download.pytorch.org/whl/$CU"
+    # 国内：torch 本体从官方源 / 南大镜像下（实测各 20 MB/s 左右；阿里云、上交的 PyTorch 镜像不到 2 MB/s），但不带依赖——
+    # 依赖里的 NVIDIA 库在官方源指向 pypi.nvidia.com，国内读超时、几乎下不动，改从阿里云 PyPI 装（实测 26 MB/s）。
+    # 不让 pip 直接下：实测它碰上慢的线路会一直死守（0.3 MB/s）。用 curl 下成文件：低于 1 MB/s 超过 30 秒就断开，
+    # 换一个源接着下（续传），最后用官方索引里的 sha256 核对。
+    WHL="$ROOT/.cache/wheels"
+    mkdir -p "$WHL"
+    for p in torch torchaudio; do
+        name="$p-2.9.1%2B$CU-cp310-cp310-manylinux_2_28_x86_64.whl"
+        file="$WHL/${name//%2B/+}"
+        want=$(curl -fsS --connect-timeout 15 --retry 5 "https://download.pytorch.org/whl/$CU/$p/" | grep -oE "$name#sha256=[0-9a-f]{64}" | head -1 | cut -d= -f2)
+        [ -n "$want" ] || { echo "出错了：官方索引里找不到 $name" >&2; exit 1; }
+        for i in $(seq 1 30); do
+            [ -s "$file" ] && [ "$(sha256sum "$file" | cut -d' ' -f1)" = "$want" ] && break
+            [ "$i" = 30 ] && { echo "下载失败：$name（重新运行 bash setup.sh 会接着下）" >&2; exit 1; }
+            for u in "https://download.pytorch.org/whl/$CU/$name" "https://mirrors.nju.edu.cn/pytorch/whl/$CU/$name"; do
+                curl -fL -sS --connect-timeout 15 --speed-limit 1000000 --speed-time 30 -C - -o "$file" "$u" && break
+                echo "  $p 下载中断（已有 $(du -h "$file" 2>/dev/null | cut -f1)），换一个源接着下"
+                sleep 2
+            done
+            # 下完但对不上：删掉重下
+            if [ -s "$file" ] && [ "$(stat -c %s "$file")" -gt 100000000 ] && [ "$(sha256sum "$file" | cut -d' ' -f1)" != "$want" ]; then
+                curl -fsS --connect-timeout 15 -I "https://download.pytorch.org/whl/$CU/$name" | grep -qi "content-length: $(stat -c %s "$file")" \
+                    && { echo "  $p 核对失败，重新下载"; rm -f "$file"; }
+            fi
+        done
+        echo "  $p 下好了，核对通过"
+    done
+    python -m pip install --no-deps "$WHL/torch-2.9.1+$CU-cp310-cp310-manylinux_2_28_x86_64.whl" \
+        "$WHL/torchaudio-2.9.1+$CU-cp310-cp310-manylinux_2_28_x86_64.whl"
     python - > "$TMPDIR/torch-deps.txt" <<'PY'
 import importlib.metadata as md
 from pip._vendor.packaging.requirements import Requirement
