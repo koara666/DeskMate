@@ -281,7 +281,12 @@ pub fn current_variants(st: &AppState) -> Vec<&'static str> {
         rainy = crate::briefing::weather::is_rain(d.code);
         snowy = crate::briefing::weather::is_snow(d.code);
     }
-    idle_variants(mood, rainy, snowy, now.hour(), now.month())
+    let mut v = idle_variants(mood, rainy, snowy, now.hour(), now.month());
+    // 勿扰时戴上兜帽（有这张图的角色）
+    if st.settings().dnd {
+        v.insert(0, "hood");
+    }
+    v
 }
 
 // ---------------- 触摸 ----------------
@@ -338,6 +343,7 @@ pub fn touch(app: &AppHandle, part: &str) -> Option<String> {
         _ => ("touch.body", 120, Interaction::Poke),
     };
     interact(app, interaction);
+    emit_pose(app, scene);
     if cooldown > 0 {
         let mut last = st
             .companion
@@ -356,8 +362,42 @@ pub fn touch(app: &AppHandle, part: &str) -> Option<String> {
     st.line(scene, &[])
 }
 
+/// 反应时桌宠短暂换上的图（纯函数）：台词场景 → （图名，显示多久毫秒）。没画这张图的角色保持原样。
+pub fn pose_for(scene: &str) -> Option<(&'static str, u32)> {
+    Some(match scene {
+        "touch.head" | "touch.rub" | "touch.head_many" => ("pat", 2200),
+        "touch.head_lots" => ("shy", 2600),
+        "touch.hold" | "menu.repeat" | "menu.indecisive" | "menu.hold_long" => ("confused", 2400),
+        "touch.poke_many" | "menu.dnd_spam" => ("pout", 2600),
+        "touch.drag" => ("surprised", 1600),
+        "touch.shake" => ("dizzy", 3200),
+        "touch.carry" | "menu.secret" => ("wink", 2400),
+        "touch.wake" => ("wake", 2600),
+        "intent.hide" | "menu.hide" | "intent.dnd_on" => ("hood", 2400),
+        "update.available" | "vision.refuse_password" => ("surprised", 2400),
+        // 小游戏的事件是从用户的角度说的：用户赢了 = 她输了
+        "game.win" => ("lose", 3500),
+        "game.lose" => ("win", 3500),
+        _ => return None,
+    })
+}
+
+/// 让桌宠按场景短暂换一张反应图
+pub fn emit_pose(app: &AppHandle, scene: &str) {
+    if let Some((pose, ms)) = pose_for(scene) {
+        let _ = app.emit_to("pet", "pet-pose", PoseEvent { pose, ms });
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PoseEvent {
+    pub pose: &'static str,
+    pub ms: u32,
+}
+
 /// 在「她说的话」气泡里说一句小反应（不记进聊天记录）。台词池里没有就不说。
 pub fn say_reaction(app: &AppHandle, scene: &str, vars: &[(&str, String)]) {
+    emit_pose(app, scene);
     let Some(text) = app.state::<AppState>().line(scene, vars) else {
         return;
     };
@@ -629,6 +669,31 @@ pub fn remember_special_date(app: &AppHandle, text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn reaction_poses_exist_in_the_pose_list() {
+        for scene in [
+            "touch.head",
+            "touch.rub",
+            "touch.head_lots",
+            "touch.hold",
+            "touch.poke_many",
+            "touch.drag",
+            "touch.shake",
+            "touch.carry",
+            "touch.wake",
+            "menu.hide",
+            "intent.dnd_on",
+            "game.win",
+            "game.lose",
+        ] {
+            let (pose, ms) = pose_for(scene).unwrap();
+            assert!(crate::character::POSES.contains(&pose), "{scene} → {pose}");
+            assert!(ms >= 1000);
+        }
+        assert_eq!(pose_for("game.win").unwrap().0, "lose", "用户赢了 = 她输了");
+        assert_eq!(pose_for("touch.body"), None, "点身体是开聊天，不换图");
+    }
 
     #[test]
     fn pat_scenes() {

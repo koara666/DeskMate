@@ -44,12 +44,21 @@ jobs:
         run: |
           npm run typecheck
           npm test
-      - name: Rust 格式、lint、测试
+      - name: Rust 格式、lint
         working-directory: src-tauri
         run: |
           cargo fmt --check
           cargo clippy --all-targets -- -D warnings
-          cargo test
+      # 测试失败时把失败的测试名和报错写成注解（注解公开可读，不用管理员权限也能从接口看到原因）
+      - name: Rust 测试
+        shell: bash
+        working-directory: src-tauri
+        run: |
+          set -o pipefail
+          if ! cargo test 2>&1 | tee ../rust-test.log; then
+            grep -E "panicked at|^test .+ FAILED|^error|left:|right:|assertion" ../rust-test.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          fi
       - name: 构建安装包
         run: npx tauri build
       - name: 记录安装包大小

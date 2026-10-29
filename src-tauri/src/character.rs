@@ -34,6 +34,21 @@ pub const IDLE_VARIANTS: [&str; 7] = [
     "idle_night",
 ];
 
+/// 反应时短暂换上的图（摸头、甩晕、躲起来、输赢……，DECISIONS #55）：有图才换，没有就保持原来的状态图
+pub const POSES: [&str; 11] = [
+    "pat",
+    "dizzy",
+    "pout",
+    "surprised",
+    "confused",
+    "hood",
+    "win",
+    "lose",
+    "wink",
+    "shy",
+    "wake",
+];
+
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_PERSONA_BYTES: u64 = 64 * 1024;
 const MAX_CANON_BYTES: u64 = 64 * 1024;
@@ -551,11 +566,20 @@ pub fn appearance(c: &Character) -> Appearance {
             images.insert(state.to_string(), url);
         }
     }
-    // 变体只在用户真的放了那张图时才有（缺图回退默认）
-    for v in IDLE_VARIANTS {
+    // 变体和反应图只在用户真的放了那张图时才有（缺图回退默认）
+    for v in IDLE_VARIANTS.iter().chain(POSES.iter()) {
         if let Some(url) = user_image_url(c, v) {
             images.insert(v.to_string(), url);
         }
+    }
+    // 用户没放图：内置角色包有自己画的一整套（assets/idle.svg 等）就用它
+    if images.is_empty()
+        && let Some(set) = builtin_set(c)
+    {
+        return Appearance {
+            images: set,
+            placeholder: false,
+        };
     }
     if images.is_empty() {
         let svg = c
@@ -578,6 +602,31 @@ pub fn appearance(c: &Character) -> Appearance {
         images,
         placeholder: false,
     }
+}
+
+/// 内置角色包里画好的一整套形象（`assets/<状态>.svg`，至少要有 idle）。SVG 是程序自带的、可信的，
+/// 放在 <img> 里显示（不会执行脚本）；用户目录里的 SVG 仍然不认（DECISIONS #26）。
+fn builtin_set(c: &Character) -> Option<BTreeMap<String, String>> {
+    let dir = c.builtin_dir.as_ref()?.join("assets");
+    let read = |name: &str| {
+        read_limited(&dir.join(format!("{name}.svg")), MAX_SVG_BYTES)
+            .ok()
+            .map(|b| data_url("image/svg+xml", &b))
+    };
+    let idle = read("idle")?;
+    let mut m = BTreeMap::new();
+    for state in STATES {
+        m.insert(
+            state.to_string(),
+            read(state).unwrap_or_else(|| idle.clone()),
+        );
+    }
+    for v in IDLE_VARIANTS.iter().chain(POSES.iter()) {
+        if let Some(u) = read(v) {
+            m.insert(v.to_string(), u);
+        }
+    }
+    Some(m)
 }
 
 /// 用户为哪些状态提供了自己的图片（设置界面显示用）
@@ -607,6 +656,31 @@ pub fn pick_line(list: &[String], fallback: &str, seed: u64) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn chiaki_has_her_own_chibi_set() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+        let dir = tempfile::tempdir().unwrap();
+        let chars = load_all(Some(&root), dir.path());
+        let c = chars
+            .iter()
+            .find(|c| c.manifest.id == "nanami-chiaki")
+            .unwrap();
+        let a = appearance(c);
+        assert!(!a.placeholder, "千秋用自己画的 Q 版形象");
+        for k in STATES.iter().chain(POSES.iter()) {
+            assert!(
+                a.images
+                    .get(*k)
+                    .is_some_and(|u| u.starts_with("data:image/svg+xml;base64,")),
+                "缺少 {k}"
+            );
+        }
+        assert!(a.images.contains_key("idle_night"));
+        // 没有画好整套的角色照旧用占位形象
+        let other = chars.iter().find(|c| c.manifest.id == "nailong").unwrap();
+        assert!(appearance(other).placeholder);
+    }
 
     #[test]
     fn theme_is_sanitized() {
@@ -826,7 +900,9 @@ mod tests {
         assert!(a.images["idle"].starts_with(&format!("{base}idle?v=")));
         assert_eq!(a.images["happy"], a.images["idle"]); // 文件头不对 → 回退到 idle，且是同一个地址
         assert_eq!(a.images["talking"], a.images["idle"]); // 用户 SVG 不读取
-        assert_eq!(a.images.len(), STATES.len());
+        // confused.webp 同时也是「反应图」confused
+        assert_eq!(a.images.len(), STATES.len() + 1);
+        assert_eq!(a.images["confused"], a.images["sad"]);
         assert_eq!(user_image_states(&all[0]), vec!["idle", "sad"]);
 
         // 协议处理：只给对应角色的、校验通过的图片
@@ -884,7 +960,8 @@ mod tests {
             assert!(!c.manifest.lines.greeting.is_empty(), "{id} 缺少开场白");
             assert!(c.manifest.color.starts_with('#'), "{id} 缺少主题色");
             let a = appearance(c);
-            assert!(a.placeholder);
+            // 七海千秋有自己画的一整套 Q 版形象，其他角色用占位形象
+            assert_eq!(a.placeholder, id != "nanami-chiaki", "{id}");
             assert!(
                 c.builtin_dir
                     .as_ref()

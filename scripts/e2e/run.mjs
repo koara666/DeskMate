@@ -600,11 +600,18 @@ async function main() {
       await settings.waitFor(`document.body.innerText.includes('七海千秋')`, '角色列表');
       await settings.eval(`(() => { const c = [...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('七海千秋')); const b = c && [...c.querySelectorAll('button')].find(b => b.innerText.trim() === '切换'); if (b) b.click(); })()`);
       await pet.waitFor(`document.documentElement.dataset.skin === 'arcade'`, '桌宠皮肤', 6000);
+      await pet.waitFor(`(document.querySelector('.pet-img')?.getAttribute('src') ?? '').startsWith('data:image/svg+xml')`, '千秋的 Q 版形象', 6000);
+      await sleep(300);
+      await pet.shot('pet-chiaki.png');
       await chat.waitFor(`document.documentElement.dataset.skin === 'arcade'`, '聊天皮肤', 6000);
       await petAt(0, 15);
       await chat.waitFor(`!!document.querySelector('.panel.speech')`, '她说的话气泡', 6000);
       await sleep(300);
       await chat.shot('chat-speech-arcade.png');
+      // 摸头时换成「被摸头」的图
+      const src = await pet.eval(`document.querySelector('.pet-img').getAttribute('src')`);
+      await pet.shot('pet-chiaki-pat.png');
+      if (!src.startsWith('data:image/svg+xml')) throw new Error('摸头时应该换成反应图');
       await chat.click('[data-testid=speech]');
       await chat.waitFor(`!!document.querySelector('textarea[aria-label="输入消息"]')`, '变成聊天框');
       await chat.shot('chat-arcade.png');

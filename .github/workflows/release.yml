@@ -31,10 +31,15 @@ jobs:
           v=$(node -p "require('./src-tauri/tauri.conf.json').version")
           test "v$v" = "${GITHUB_REF_NAME}" || { echo "标签 ${GITHUB_REF_NAME} 和版本 v$v 不一致"; exit 1; }
       - name: 测试
+        shell: bash
         run: |
+          set -o pipefail
           npm test
           cd src-tauri
-          cargo test
+          if ! cargo test 2>&1 | tee ../rust-test.log; then
+            grep -E "panicked at|^test .+ FAILED|^error|left:|right:|assertion" ../rust-test.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          fi
       - name: 构建安装包
         run: npx tauri build
       - name: 计算 SHA-256

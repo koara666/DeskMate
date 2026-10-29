@@ -317,6 +317,7 @@ pub async fn handle(
             st.update_settings(|s| s.dnd = on);
             crate::desktop::broadcast_settings_changed(app);
             if on {
+                crate::companion::emit_pose(app, "intent.dnd_on");
                 line(
                     &st,
                     "intent.dnd_on",
@@ -328,6 +329,7 @@ pub async fn handle(
             }
         }
         Intent::Hide => {
+            crate::companion::emit_pose(app, "intent.hide");
             after = Some(Box::new(|app: AppHandle| {
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_millis(1600)).await;

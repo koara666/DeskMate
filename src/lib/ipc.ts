@@ -169,6 +169,8 @@ export interface PetApi {
   startDrag(): Promise<void>;
   onState(cb: (s: PetState) => void): Promise<UnlistenFn>;
   onChanged(cb: () => void): Promise<UnlistenFn[]>;
+  /** 反应时短暂换一张图（摸头、甩晕、躲起来、输赢……） */
+  onPose?(cb: (p: { pose: string; ms: number }) => void): Promise<UnlistenFn>;
 }
 
 export const petApi: PetApi = {
@@ -179,6 +181,7 @@ export const petApi: PetApi = {
   menuOpen: (hold) => invoke('menu_open', { hold }),
   startDrag: () => getCurrentWindow().startDragging(),
   onState: (cb) => listen<PetState>('pet-state', (e) => cb(e.payload)),
+  onPose: (cb) => listen<{ pose: string; ms: number }>('pet-pose', (e) => cb(e.payload)),
   onChanged: (cb) =>
     Promise.all([
       listen('settings-changed', () => cb()),

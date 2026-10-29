@@ -397,6 +397,7 @@ pub async fn game_say(
         })
         .collect();
     let st = app.state::<AppState>();
+    crate::companion::emit_pose(&app, &format!("game.{event}"));
     let pool = games::line(&st, &game, &event, &vars);
     if matches!(event.as_str(), "win" | "lose") && crate::lines::seed() % 5 == 0 {
         let style = st

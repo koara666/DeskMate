@@ -167,3 +167,40 @@ describe('Pet 桌宠', () => {
     expect(f.el.className).toContain('frame-0');
   });
 });
+
+describe('Pet 反应图', () => {
+  it('收到反应就短暂换图，过一会儿换回来；没有这张图就不换', async () => {
+    let poseCb: ((p: { pose: string; ms: number }) => void) | null = null;
+    const api = {
+      init: async () => ({
+        character: { id: 't', name: '测试酱', color: '' },
+        appearance: { images: { idle: 'data:idle', pat: 'data:pat' }, placeholder: false },
+        idle_animation: false,
+        dnd: false,
+      }),
+      click: vi.fn(async () => {}),
+      touch: vi.fn(async () => {}),
+      menu: vi.fn(async () => {}),
+      menuOpen: vi.fn(async () => {}),
+      startDrag: vi.fn(async () => {}),
+      onState: async () => () => {},
+      onChanged: async () => [],
+      onPose: async (cb: (p: { pose: string; ms: number }) => void) => {
+        poseCb = cb;
+        return () => {};
+      },
+    };
+    render(<Pet api={api as never} />);
+    await act(async () => {});
+    const img = () => screen.getByAltText('测试酱').getAttribute('src');
+    expect(img()).toBe('data:idle');
+    act(() => poseCb!({ pose: 'pat', ms: 2000 }));
+    expect(img()).toBe('data:pat');
+    act(() => {
+      vi.advanceTimersByTime(2100);
+    });
+    expect(img()).toBe('data:idle');
+    act(() => poseCb!({ pose: 'dizzy', ms: 2000 }));
+    expect(img()).toBe('data:idle');
+  });
+});

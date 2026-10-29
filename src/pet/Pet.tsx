@@ -49,6 +49,21 @@ export function Pet({ api, voice, random = Math.random }: Props) {
   });
   /** 摸头时本地马上缩一下（不用等后端） */
   const [patted, setPatted] = useState(0);
+  /** 反应图（摸头、甩晕……），过一会儿自动换回来 */
+  const [react, setReact] = useState<string | null>(null);
+  useEffect(() => {
+    if (!api.onPose) return;
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const off = api.onPose(({ pose, ms }) => {
+      if (t) clearTimeout(t);
+      setReact(pose);
+      t = setTimeout(() => setReact(null), Math.min(Math.max(ms, 500), 8000));
+    });
+    return () => {
+      if (t) clearTimeout(t);
+      off.then((f) => f()).catch(() => {});
+    };
+  }, [api]);
   /** 正在出声（嘴跟着动） */
   const [speaking, setSpeaking] = useState(false);
   useEffect(() => (voice ? startVoice(voice, setSpeaking) : undefined), [voice]);
@@ -231,7 +246,9 @@ export function Pet({ api, voice, random = Math.random }: Props) {
   const images = init?.appearance?.images ?? {};
   // 待机时：心情 / 天气 / 夜里 / 季节的图片（用户放了才有），没有就用 idle
   const idleVariant = (init?.variants ?? []).find((v) => images[v]);
-  const src = shown === 'idle' && idleVariant ? images[idleVariant] : (images[shown] ?? images.idle);
+  // 反应图优先（说话、思考、睡觉时不换，免得嘴型对不上）；没有这张图就照常显示
+  const reactSrc = react && (shown === 'idle' || shown === 'happy' || shown === 'sad') ? images[react] : undefined;
+  const src = reactSrc ?? (shown === 'idle' && idleVariant ? images[idleVariant] : (images[shown] ?? images.idle));
   const mood = init?.mood ?? 0;
   const placeholder = init?.appearance?.placeholder ?? true;
   const name = init?.character.name ?? '';

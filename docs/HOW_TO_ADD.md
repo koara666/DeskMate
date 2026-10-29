@@ -41,6 +41,8 @@
 | `theme` | 否 | 这个角色自己的界面（见 1.8）：`{"skin": "arcade", "colors": {"accent": "#e8789a", ...}}` |
 
 表情状态：`idle` 待机、`talking` 说话、`thinking` 思考、`happy` 开心、`sad` 难过/困惑、`sleep` 睡觉。
+反应图（DECISIONS #55，有就换、没有就保持原状态，显示 1~4 秒）：`pat` 被摸头、`dizzy` 晕、`pout` 鼓脸、`surprised` 吃惊、`confused` 疑惑、`hood` 戴兜帽（躲起来、勿扰）、`win` 她赢了、`lose` 她输了、`wink` 眨眼、`shy` 害羞、`wake` 刚睡醒。场景和图的对应在 `companion::pose_for`。
+内置角色包的 `assets/` 里放了 `idle.svg` 就会用整套内置 SVG（七海千秋的 Q 版形象由 `scripts/chibi/chiaki.mjs` 生成：在 `POSES` 里加一行组合、运行 `node scripts/chibi/chiaki.mjs` 就多一张）。
 待机图片的可选变体（只用在用户图片上，没有就用 `idle`）：`idle_good`（心情好）、`idle_low`（心情差）、`idle_rain`、`idle_snow`、`idle_night`（22 点到 5 点）、`idle_summer`、`idle_winter`。
 
 ### 1.3 persona.md 写法
