@@ -2,6 +2,16 @@
 
 > 最新条目在最上面。超过 300 行时把旧条目压缩成摘要移到 `docs/progress-archive/`。
 
+## 2026-10-29 12:35（进行中）
+- 背景：用户要用自己的 4090 服务器训练千秋的声音，没用过 GPT-SoVITS，要我把游戏原声和训练代码打包好、给命令（DECISIONS #56）。
+- 完成：
+  - 找到千秋的语音：`dr2_data.wad` 序号 4920~5630（711 条、约 52 分钟），方法见 DECISIONS #56；`scripts/voice-train/extract_chiaki.py` 已把它们转成 wav 放进 `chiaki-voice/dataset/wavs/`（`/chiaki-voice/` 已加进 .gitignore）。
+  - `scripts/voice-train/`：`wad.py`（只读 WAD）、`extract_chiaki.py`、`transcribe.py`（Whisper 识别 → 清单）、`train.py`（无界面训练，照 webui.py）、`setup.sh` / `train.sh`（服务器上）、`pack.py`（打包）、`README.md`（给用户的一步步说明）。
+  - GPT-SoVITS 源码（b4570b8）已放进 `chiaki-voice/GPT-SoVITS/`，训练用的预训练模型已下到本机（打包时不带）。
+- 进行中：本机测试环境（临时文件夹里的 Python 3.11 venv，装 PyTorch 2.9.1 cu126 + GPT-SoVITS 依赖）和 Whisper large-v3 模型在下载；下载完 → 跑 `transcribe.py` 生成 `chiaki.list` 并抽查 → 选参考音频放 `chiaki-voice/ref/` → 本机 4060 上 `train.py --quick` 冒烟 → `pack.py` 打包 → 告诉用户命令。
+- 下一步：用户把模型拿回来后，在本机配 GPT-SoVITS 推理服务（api_v2.py，127.0.0.1:9880）接进 DeskMate；做 ROADMAP v2.2 的「声音语言」（日语输出）。
+- 本次决策：DECISIONS #56
+
 ## 2026-10-29 11:56
 - 背景：用户试用 0.3.1 后反馈——① 代码画的 Q 版认不出是千秋（身体太大太胖、脸和眼睛不像、没有发卡、不可爱），想自己生图，要 prompt；② 语音完全不像、也不是日语，想要中文 / 日语两种输出，问能不能用自己的 4090 服务器训练声音、还能不能保持轻量。用户要求东京时间 12:20 前停下并保存进度，这次只做文档和规划，没有改代码。
 - 完成：

@@ -77,3 +77,8 @@ desktop.ini
 
 # ===== 用户挑选用的角色贴图（别人的版权图片，绝不进公开仓库） =====
 /stickers/
+
+# ===== 千秋声音训练包（游戏原声，版权属于原作，绝不进公开仓库） =====
+/chiaki-voice/
+/chiaki-voice*.zip
+/chiaki-voice*.tar*
