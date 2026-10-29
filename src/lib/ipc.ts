@@ -286,6 +286,8 @@ export const settingsApi = {
     invoke('prefs_save', { global, characterId, prefs }),
   openCharacterDir: (id: string) => invoke('open_character_dir', { id }),
   onOpenTab: (cb: (tab: string) => void) => listen<string>('settings-tab', (e) => cb(e.payload)),
+  // 换了角色：设置页里和角色有关的内容（比如这个角色有没有预录语音）要跟着刷新
+  onCharacterChanged: (cb: () => void) => listen('character-changed', () => cb()),
   memoryOverview: () => invoke<MemoryOverview>('memory_overview'),
   memoryList: (filter: MemoryFilter) => invoke<{ items: Memory[]; total: number }>('memory_list', { filter }),
   memoryUpdate: (id: number, content: string, importance: number) =>

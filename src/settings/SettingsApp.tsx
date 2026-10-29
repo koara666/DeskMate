@@ -62,8 +62,12 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
       const next = toTab(t);
       if (next) setTab(next);
     });
+    const offChar = api.onCharacterChanged(() => {
+      reload();
+    });
     return () => {
       off.then((f) => f()).catch(() => {});
+      offChar.then((f) => f()).catch(() => {});
     };
   }, [api, reload]);
 
