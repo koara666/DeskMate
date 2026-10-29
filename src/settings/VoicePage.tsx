@@ -8,19 +8,24 @@ type Api = Pick<SettingsApi, 'voiceSave' | 'voiceSetKey' | 'voiceClearKey' | 'vo
 
 const ENGINES: { id: string; name: string; desc: string }[] = [
   {
+    id: 'pack',
+    name: '预录语音（七海千秋的声音，装好就能用）',
+    desc: '安装包里自带的千秋录音，免费、不联网、不用装任何东西。只念事先写好的台词（问候、播报、摸头、提醒、小游戏……）；聊天里现场说的话不出声。想要每句话都出声，用下面的 GPT-SoVITS。',
+  },
+  {
+    id: 'sovits',
+    name: 'GPT-SoVITS（完整：每句话都出声，包括聊天）',
+    desc: '免费、不联网、声音最像（用她的原声训练的模型），聊天回复、现场播报都能念。要先在自己电脑上装好 GPT-SoVITS 并运行它的语音服务（有显卡最好），模型和步骤见 GitHub 仓库里的 docs/VOICE.md。',
+  },
+  {
     id: 'fish',
-    name: 'Fish Audio（推荐：有现成的七海千秋声音）',
-    desc: '云端合成。社区里有人做好了七海千秋的声音模型，选好就能用；默认用免费的合成模型（s2.1-pro-free），也可以换成付费的（更稳定，按字数计费，大约每 1 万个汉字 3 元多，一句话不到 1 分钱）。需要注册 Fish Audio 拿一个 Key。',
+    name: 'Fish Audio（云端，有现成的七海千秋声音）',
+    desc: '云端合成，每句话都出声。社区里有人做好了七海千秋的声音模型，选好就能用；默认用免费的合成模型（s2.1-pro-free），也可以换成付费的（更稳定，按字数计费，大约每 1 万个汉字 3 元多，一句话不到 1 分钱）。需要注册 Fish Audio 拿一个 Key。',
   },
   {
     id: 'system',
     name: 'Windows 自带的语音（免费、不联网）',
-    desc: '开箱就能用，但声音是系统的朗读声音，不像她。适合先试试效果。',
-  },
-  {
-    id: 'sovits',
-    name: 'GPT-SoVITS（在你自己电脑上运行）',
-    desc: '免费、不联网、声音最像（用她的原声训练的模型）。要先在电脑上运行它的语音服务（api_v2.py，有显卡最好），步骤见 NEEDS_USER 第 13 项。',
+    desc: '开箱就能用，每句话都出声，但声音是系统的朗读声音，不像她。',
   },
   {
     id: 'openai',
@@ -104,7 +109,7 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
         ))}
       </div>
 
-      {v.engine && (
+      {v.engine && v.engine !== 'pack' && (
         <div class="card">
           <h2>她说话的语言</h2>
           {(
@@ -121,6 +126,21 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
               </span>
             </label>
           ))}
+        </div>
+      )}
+
+      {v.engine === 'pack' && (
+        <div class="card">
+          <h2>预录语音</h2>
+          {view.voice_pack > 0 ? (
+            <p class="small">已装好：{view.voice_pack} 句千秋的日语台词。气泡里照常显示中文，像看番的字幕。</p>
+          ) : (
+            <p class="small">当前角色没有预录语音（目前只有七海千秋带了），换成别的引擎，或者先把角色切到七海千秋。</p>
+          )}
+          <p class="muted small">
+            只念她事先写好的台词，念得出来的有：开机问候、天气和今天的播报、摸头和戳一下的反应、提醒、关心你休息、玩游戏时的话。她现场想的话（聊天回复、
+            需要联网查的内容）不出声。想要这些也出声，换成 GPT-SoVITS（自己装，免费）或 Fish Audio（云端）。
+          </p>
         </div>
       )}
 
@@ -270,7 +290,7 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
               </button>
             )}
           </div>
-          {keyFor === 'fish' && <p class="muted small">怎么拿：fish.audio 注册登录 → 右上角头像 → API Keys → 新建一个，复制过来。详细步骤见 NEEDS_USER 第 11 项。</p>}
+          {keyFor === 'fish' && <p class="muted small">怎么拿：fish.audio 注册登录 → 右上角头像 → API Keys → 新建一个，复制过来。</p>}
         </div>
       )}
 
@@ -296,21 +316,25 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
               音量（{v.volume}）
               <input type="range" min={0} max={100} value={v.volume} onChange={(e) => save({ ...v, volume: num(e) })} />
             </label>
-            <label>
-              语速（{v.speed.toFixed(2)}）
-              <input type="range" min={0.5} max={2} step={0.05} value={v.speed} onChange={(e) => save({ ...v, speed: num(e) })} />
-            </label>
+            {v.engine !== 'pack' && (
+              <label>
+                语速（{v.speed.toFixed(2)}）
+                <input type="range" min={0.5} max={2} step={0.05} value={v.speed} onChange={(e) => save({ ...v, speed: num(e) })} />
+              </label>
+            )}
           </div>
-          <div class="row">
-            <label>
-              每次最多读几个字
-              <input type="number" min={10} max={120} value={v.max_chars} onChange={(e) => save({ ...v, max_chars: num(e) || 40 })} />
-            </label>
-            <label>
-              付费引擎每天最多合成几个字
-              <input type="number" min={0} max={100000} value={v.daily_chars} onChange={(e) => save({ ...v, daily_chars: num(e) || 0 })} />
-            </label>
-          </div>
+          {v.engine !== 'pack' && (
+            <div class="row">
+              <label>
+                每次最多读几个字
+                <input type="number" min={10} max={120} value={v.max_chars} onChange={(e) => save({ ...v, max_chars: num(e) || 40 })} />
+              </label>
+              <label>
+                付费引擎每天最多合成几个字
+                <input type="number" min={0} max={100000} value={v.daily_chars} onChange={(e) => save({ ...v, daily_chars: num(e) || 0 })} />
+              </label>
+            </div>
+          )}
           <h3>哪些时候出声</h3>
           {(
             [
@@ -319,16 +343,18 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
               ['chat', '聊天回复（只读开头一两句）'],
               ['games', '小游戏里的台词'],
             ] as const
-          ).map(([k, label]) => (
-            <label class="row" key={k}>
-              <input
-                type="checkbox"
-                checked={v.scenes[k]}
-                onChange={(e) => save({ ...v, scenes: { ...v.scenes, [k]: (e.currentTarget as HTMLInputElement).checked } })}
-              />
-              <span>{label}</span>
-            </label>
-          ))}
+          )
+            .filter(([k]) => !(v.engine === 'pack' && k === 'chat'))
+            .map(([k, label]) => (
+              <label class="row" key={k}>
+                <input
+                  type="checkbox"
+                  checked={v.scenes[k]}
+                  onChange={(e) => save({ ...v, scenes: { ...v.scenes, [k]: (e.currentTarget as HTMLInputElement).checked } })}
+                />
+                <span>{label}</span>
+              </label>
+            ))}
           <label class="row">
             <input type="checkbox" checked={v.fullscreen_voice} onChange={(e) => save({ ...v, fullscreen_voice: (e.currentTarget as HTMLInputElement).checked })} />
             <span>

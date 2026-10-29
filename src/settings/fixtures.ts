@@ -82,6 +82,7 @@ const view: SettingsView = {
     openai_model: 'gpt-4o-mini-tts',
     openai_voice: 'nova',
   },
+  voice_pack: 243,
   voice_keys: [null, null],
   care: { sit: true, sit_minutes: 60, water: true, water_minutes: 150, late: true, late_time: '00:30', meal: true },
   briefing: {

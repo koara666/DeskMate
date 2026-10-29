@@ -65,6 +65,8 @@ pub struct SettingsView {
     pub update: crate::update::UpdateSettings,
     pub web: crate::websearch::WebSettings,
     pub voice: crate::voice::VoiceSettings,
+    /// 当前角色的预录语音有多少句（0 = 没有语音包）
+    pub voice_pack: u32,
     /// 语音服务 Key 的末尾 4 位（没填是 None）：（Fish Audio，OpenAI 兼容）
     pub voice_keys: (Option<String>, Option<String>),
 }
@@ -135,6 +137,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         update: s.update.clone(),
         web: s.web.clone(),
         voice: s.voice.clone(),
+        voice_pack: crate::voice::pack_count(&state),
         voice_keys: (
             voice_key_hint(&state, crate::voice::FISH_KEY_ID),
             voice_key_hint(&state, crate::voice::OPENAI_KEY_ID),

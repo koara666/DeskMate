@@ -2,6 +2,7 @@
 //!
 //! - 只读精简后的部分（`condense`：去掉括号里的动作、表情符号、网址和代码，取开头一两句，默认 40 字以内）。
 //! - 引擎（可扩展，新增一个就是 `synth` 里多一个分支 + 设置页多一张卡片）：
+//!   - `pack`：预录语音（随安装包带的千秋声音，只念事先写好的台词；不合成、不联网，装完即用）；
 //!   - `system`：Windows 自带的语音（浏览器的 Web Speech，免费、离线；声音不像她，但开箱就能用）；
 //!   - `fish`：Fish Audio（云端，社区里有现成的七海千秋声音模型；有免费档 `s2.1-pro-free`）；
 //!   - `sovits`：GPT-SoVITS（用户自己在本机运行的服务，`api_v2.py` 的 `/tts`）；
@@ -21,7 +22,7 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
-pub const ENGINES: [&str; 4] = ["system", "fish", "sovits", "openai"];
+pub const ENGINES: [&str; 5] = ["pack", "system", "fish", "sovits", "openai"];
 /// 她说话的语言：日语（气泡照常中文）/ 中文
 pub const LANGS: [&str; 2] = ["ja", "zh"];
 /// 「中文 → 日语」对照表最多记几句
@@ -108,7 +109,8 @@ impl Default for VoiceSettings {
     fn default() -> Self {
         Self {
             enabled: false,
-            engine: String::new(),
+            // 新装的默认选预录语音：总开关还是关的，打开就能听到，不用先去挑引擎
+            engine: "pack".into(),
             volume: 80,
             max_chars: 40,
             speed: 1.0,
@@ -431,7 +433,8 @@ impl VoiceState {
 
 /// 聊天回复要不要附日语：开着声音、说日语、聊天回复会念
 pub fn chat_wants_ja(v: &VoiceSettings) -> bool {
-    v.enabled && !v.engine.is_empty() && v.lang == "ja" && v.scenes.chat
+    // 预录语音只念事先写好的台词，聊天回复不念，不用让模型多写日语
+    v.enabled && !v.engine.is_empty() && v.engine != "pack" && v.lang == "ja" && v.scenes.chat
 }
 
 /// 她主动说的话（播报、打招呼、关怀、胜负反应）要不要让模型顺带写日语版：开着声音、说日语、这类场合会念。
@@ -439,6 +442,7 @@ pub fn chat_wants_ja(v: &VoiceSettings) -> bool {
 pub fn proactive_wants_ja(v: &VoiceSettings) -> bool {
     v.enabled
         && !v.engine.is_empty()
+        && v.engine != "pack"
         && v.lang == "ja"
         && (v.scenes.proactive || v.scenes.reactions || v.scenes.games)
 }
@@ -602,6 +606,9 @@ fn plan(st: &AppState, v: &VoiceSettings, text: &str) -> Plan {
     if zh.is_empty() {
         return Plan::Silent;
     }
+    if v.engine == "pack" {
+        return plan_pack(st, text, zh);
+    }
     if v.lang != "ja" {
         return Plan::Speak {
             text: zh.clone(),
@@ -622,6 +629,25 @@ fn plan(st: &AppState, v: &VoiceSettings, text: &str) -> Plan {
             zh,
         },
         _ => Plan::Translate(zh),
+    }
+}
+
+/// 预录语音：只念语音包里有的台词，按日语原句查（不受「说话的语言」和「最多读几个字」影响）；
+/// 现场生成的话（聊天回复这类）语音包里没有，就不出声——不翻译、不调用模型。
+fn plan_pack(st: &AppState, text: &str, zh: String) -> Plan {
+    let ja = {
+        let g = st.voice.ja.lock().unwrap_or_else(|e| e.into_inner());
+        find_ja(&g, text)
+    }
+    // 重启前记下的（比如昨天设的提醒今天到点）
+    .or_else(|| find_ja(&load_ja(&st.db()), text));
+    match (ja, pack_dir(st)) {
+        (Some(ja), Some(dir)) if pack_find(&dir, &ja).is_some() => Plan::Speak {
+            text: ja.trim().to_string(),
+            lang: "ja",
+            zh,
+        },
+        _ => Plan::Silent,
     }
 }
 
@@ -737,6 +763,10 @@ pub fn on_chat_stream(app: &AppHandle, line: &str, ja: bool) -> bool {
         return false;
     }
     let v = s.voice;
+    // 预录语音不念聊天回复：有意不念，回复写完后也不用再试
+    if v.engine == "pack" {
+        return true;
+    }
     let (text, lang) = if ja {
         // 系统语音可能没有日语声音，要靠对应的中文兜底，这里拿不到：等写完再念
         if v.lang != "ja" || v.engine == "system" {
@@ -824,6 +854,15 @@ fn speak(
         let volume = v.volume as f32 / 100.0;
         let (id, ms) = if v.engine == "system" {
             (None, say_ms(&text, lang))
+        } else if v.engine == "pack" {
+            // 语音包里现成的：不用向引擎要，直接播
+            match pack_dir(&st).and_then(|d| pack_find(&d, &text)) {
+                Some((id, ms)) => (Some(id), ms),
+                None => {
+                    st.voice.slot().release(ticket);
+                    return;
+                }
+            }
         } else {
             // 同一时间只向引擎要一句；轮到我时如果已经被更新的一句顶掉，就不合成了
             let _gate = st.voice.gate.lock().await;
@@ -914,6 +953,68 @@ pub fn warm_up(app: &AppHandle) {
             Err(e) => log::info!("语音预热没成功：{e}"),
         }
     });
+}
+
+// ---------------- 预录语音 ----------------
+
+/// 预录语音包放在角色包的 `voice/` 文件夹：`index.json`（每句多长）+ 每句一个 `<id>.opus`。
+/// 构建安装包时从发布页放进来（`scripts/chibi/fetch_voice_pack.py`），不进代码仓库。
+const PACK_INDEX_MAX_BYTES: u64 = 1024 * 1024;
+const PACK_AUDIO_MAX_BYTES: u64 = 1024 * 1024;
+
+/// 预录语音的编号：日语原句（去掉首尾空白）的哈希，32 位十六进制。
+/// 做语音包的脚本用同样的算法（`sha256("pack|" + 日语)` 的前 16 字节），改这里要一起改。
+pub fn pack_id(ja: &str) -> String {
+    use sha2::Digest;
+    let d = sha2::Sha256::digest(format!("pack|{}", ja.trim()).as_bytes());
+    d.iter().take(16).map(|b| format!("{b:02x}")).collect()
+}
+
+#[derive(Deserialize)]
+struct PackIndex {
+    #[serde(default)]
+    lines: std::collections::HashMap<String, i64>,
+}
+
+fn pack_index(dir: &std::path::Path) -> Option<PackIndex> {
+    let p = dir.join("index.json");
+    let meta = std::fs::symlink_metadata(&p).ok()?;
+    if !meta.is_file() || meta.len() > PACK_INDEX_MAX_BYTES {
+        return None;
+    }
+    serde_json::from_slice(&std::fs::read(&p).ok()?).ok()
+}
+
+/// 当前角色的预录语音文件夹（没有语音包的角色返回 None）
+fn pack_dir(st: &AppState) -> Option<std::path::PathBuf> {
+    let dir = st.current_character()?.builtin_dir?.join("voice");
+    dir.is_dir().then_some(dir)
+}
+
+/// 语音包里有没有这句日语：有就返回（编号，念多久毫秒）
+fn pack_find(dir: &std::path::Path, ja: &str) -> Option<(String, i64)> {
+    let id = pack_id(ja);
+    let ms = *pack_index(dir)?.lines.get(&id)?;
+    dir.join(format!("{id}.opus")).is_file().then_some((id, ms))
+}
+
+/// 语音包里有多少句（设置页显示用；没有语音包是 0）
+pub fn pack_count(st: &AppState) -> u32 {
+    pack_dir(st)
+        .and_then(|d| pack_index(&d))
+        .map_or(0, |i| i.lines.len() as u32)
+}
+
+/// 读语音包里的一句（编号必须是 32 位十六进制，不跟随符号链接）
+fn pack_read(dir: &std::path::Path, id: &str) -> Option<Vec<u8>> {
+    if id.len() != 32 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let p = dir.join(format!("{id}.opus"));
+    let meta = std::fs::symlink_metadata(&p).ok()?;
+    (meta.is_file() && meta.len() <= PACK_AUDIO_MAX_BYTES)
+        .then(|| std::fs::read(&p).ok())
+        .flatten()
 }
 
 fn cache_dir(st: &AppState) -> std::path::PathBuf {
@@ -1009,12 +1110,17 @@ fn trim_cache(dir: &std::path::Path) {
     }
 }
 
-/// 读缓存里的音频（只读 voice-cache 文件夹里、名字是 32 位十六进制的文件）
+/// 读音频：先找缓存（voice-cache 文件夹里、名字是 32 位十六进制的文件），没有再找当前角色的预录语音包
 pub fn read_cached(st: &AppState, id: &str) -> Result<Vec<u8>, String> {
     if id.len() != 32 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("不对的音频编号".into());
     }
     let p = cache_dir(st).join(format!("{id}.audio"));
+    if !p.exists()
+        && let Some(bytes) = pack_dir(st).and_then(|d| pack_read(&d, id))
+    {
+        return Ok(bytes);
+    }
     let meta = std::fs::symlink_metadata(&p).map_err(|_| "找不到音频".to_string())?;
     if !meta.is_file() || meta.len() > 20 * 1024 * 1024 {
         return Err("音频文件不对".into());
@@ -1141,6 +1247,9 @@ pub async fn test(app: &AppHandle) -> Result<(), String> {
     if v.engine.is_empty() {
         return Err("先选一个声音引擎".into());
     }
+    if v.engine == "pack" && pack_dir(&st).is_none() {
+        return Err("这个角色没有预录语音（只有七海千秋带了），换成别的引擎试试".into());
+    }
     let line = st
         .line("voice.test", &[])
         .unwrap_or_else(|| "你好，我是你的桌面伙伴。".into());
@@ -1164,7 +1273,14 @@ pub async fn test(app: &AppHandle) -> Result<(), String> {
         );
         return Ok(());
     }
-    let id = synth_cached(&st, &v, &text, lang).await?;
+    let id = if v.engine == "pack" {
+        pack_dir(&st)
+            .and_then(|d| pack_find(&d, &text))
+            .map(|(id, _)| id)
+            .ok_or("这个角色没有预录语音（或者语音包没有装好）")?
+    } else {
+        synth_cached(&st, &v, &text, lang).await?
+    };
     let _ = app.emit_to(
         "pet",
         "voice-play",
@@ -1312,6 +1428,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let st = crate::state::test_state(dir.path());
         let v = VoiceSettings {
+            engine: "sovits".into(),
             lang: "ja".into(),
             ..Default::default()
         };
@@ -1600,5 +1717,159 @@ mod tests {
         // mp3 按 64 kbps（8000 字节/秒）估
         assert_eq!(audio_ms(&vec![0u8; 16_000]), 2_000);
         assert!(say_ms("こんにちは", "ja") > 0);
+    }
+
+    #[test]
+    fn pack_id_is_stable_and_trimmed() {
+        // 做语音包的脚本（sha256("pack|" + 日语) 的前 16 字节）要得出同样的编号
+        assert_eq!(
+            pack_id("おはよう"),
+            pack_id(
+                "  おはよう
+"
+            )
+        );
+        assert_ne!(pack_id("おはよう"), pack_id("おはよう。"));
+        let id = pack_id("おはよう");
+        assert_eq!(id.len(), 32);
+        assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(id, "2a2a117802950176bd2c0ce8e5e6d7a8");
+    }
+
+    fn make_pack(dir: &std::path::Path, ja: &str, ms: i64, with_file: bool) -> String {
+        std::fs::create_dir_all(dir).unwrap();
+        let id = pack_id(ja);
+        std::fs::write(
+            dir.join("index.json"),
+            format!(r#"{{"version":1,"lines":{{"{id}":{ms}}}}}"#),
+        )
+        .unwrap();
+        if with_file {
+            std::fs::write(dir.join(format!("{id}.opus")), b"OggS-test").unwrap();
+        }
+        id
+    }
+
+    #[test]
+    fn pack_find_needs_index_entry_and_audio_file() {
+        let t = tempfile::tempdir().unwrap();
+        let id = make_pack(t.path(), "おはよう、今日もいい天気だね。", 2100, true);
+        assert_eq!(
+            pack_find(t.path(), "  おはよう、今日もいい天気だね。 "),
+            Some((id.clone(), 2100))
+        );
+        // 不是语音包里的话
+        assert_eq!(pack_find(t.path(), "別の話。"), None);
+        // 索引里有但文件丢了
+        std::fs::remove_file(t.path().join(format!("{id}.opus"))).unwrap();
+        assert_eq!(pack_find(t.path(), "おはよう、今日もいい天気だね。"), None);
+        // 没有语音包 / 索引坏了
+        assert_eq!(pack_find(&t.path().join("none"), "おはよう"), None);
+        std::fs::write(t.path().join("index.json"), "不是 json").unwrap();
+        assert_eq!(pack_find(t.path(), "おはよう"), None);
+    }
+
+    #[test]
+    fn pack_read_only_serves_hex_ids_inside_the_folder() {
+        let t = tempfile::tempdir().unwrap();
+        let id = make_pack(t.path(), "うん。", 500, true);
+        assert_eq!(pack_read(t.path(), &id).unwrap(), b"OggS-test");
+        for bad in [
+            "",
+            "..",
+            "../index",
+            &id[..31],
+            &format!("{id}0"),
+            &"g".repeat(32),
+        ] {
+            assert!(pack_read(t.path(), bad).is_none(), "{bad}");
+        }
+        // 太大的文件不读
+        let big = "a".repeat(32);
+        std::fs::write(
+            t.path().join(format!("{big}.opus")),
+            vec![0u8; PACK_AUDIO_MAX_BYTES as usize + 1],
+        )
+        .unwrap();
+        assert!(pack_read(t.path(), &big).is_none());
+    }
+
+    #[test]
+    fn pack_engine_is_valid_default_and_skips_the_model() {
+        let v = VoiceSettings::default();
+        assert_eq!(v.engine, "pack");
+        assert!(!v.enabled, "声音默认关闭");
+        assert_eq!(v.clone().sanitize().engine, "pack");
+        // 预录语音不念聊天回复，也不用让模型多写日语版
+        let on = VoiceSettings {
+            enabled: true,
+            ..VoiceSettings::default()
+        };
+        assert!(!chat_wants_ja(&on));
+        assert!(!proactive_wants_ja(&on));
+        let sovits = VoiceSettings {
+            engine: "sovits".into(),
+            ..on
+        };
+        assert!(chat_wants_ja(&sovits));
+        assert!(proactive_wants_ja(&sovits));
+    }
+
+    #[test]
+    fn shipped_pack_covers_every_fixed_japanese_line() {
+        // 本机构建时放进了语音包才查（CI 和没拉过语音包的机器直接跳过）：
+        // 改了某句日语台词却没重录，这里会失败，提醒重做语音包（scripts/voice-pack/build_pack.py）
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+        let pack = root.join("nanami-chiaki/voice");
+        if !pack.join("index.json").is_file() {
+            return;
+        }
+        let mut all = crate::lines::Lines::load_dir(&root.join("nanami-chiaki/lines")).all_ja();
+        all.extend(crate::lines::Lines::load_dir(&root.join("_common/lines")).all_ja());
+        assert!(all.len() > 200, "台词里的日语版只有 {} 句", all.len());
+        let missing: Vec<&String> = all
+            .iter()
+            .filter(|j| !j.contains('{') && pack_find(&pack, j).is_none())
+            .collect();
+        assert!(missing.is_empty(), "语音包里没有这些日语台词：{missing:?}");
+        for a in ["是", "不是", "无关", "很接近", "不确定"] {
+            let ja = crate::games_llm::answer_ja(a).unwrap();
+            assert!(pack_find(&pack, ja).is_some(), "语音包里没有：{ja}");
+        }
+    }
+
+    #[test]
+    fn pack_engine_speaks_only_prewritten_lines() {
+        // 整条链路：挑一句预写台词（记下日语）→ 预录语音按日语查到；现场生成的话查不到、不出声
+        let dir = tempfile::tempdir().unwrap();
+        let st = crate::state::test_state(dir.path());
+        st.update_settings(|s| s.character_id = "nanami-chiaki".into());
+        let v = VoiceSettings {
+            enabled: true,
+            ..VoiceSettings::default()
+        };
+        let live = "这是她现场想的一句话，语音包里不可能有。";
+        assert_eq!(plan(&st, &v, live), Plan::Silent);
+        remember_ja(&st, live, "これは現場で考えた一言。");
+        assert_eq!(
+            plan(&st, &v, live),
+            Plan::Silent,
+            "有日语但不在语音包里也不念"
+        );
+        let has_pack = pack_dir(&st).is_some_and(|d| pack_index(&d).is_some());
+        if !has_pack {
+            return; // 没拉过语音包（CI）：到这里为止
+        }
+        assert!(pack_count(&st) > 200);
+        let line = st.line("voice.test", &[]).expect("千秋有试听台词");
+        match plan(&st, &v, &line) {
+            Plan::Speak { text, lang, .. } => {
+                assert_eq!(lang, "ja");
+                let (id, ms) = pack_find(&pack_dir(&st).unwrap(), &text).unwrap();
+                assert!(ms > 500, "{ms}");
+                assert!(read_cached(&st, &id).unwrap().starts_with(b"OggS"));
+            }
+            p => panic!("{p:?}"),
+        }
     }
 }

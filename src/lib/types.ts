@@ -268,6 +268,8 @@ export interface SettingsView {
   update: UpdateSettings;
   web: WebSettings;
   voice: VoiceSettings;
+  /** 当前角色的预录语音有多少句（0 = 没有语音包） */
+  voice_pack: number;
   /** 语音服务 Key 的末尾 4 位：[Fish Audio, OpenAI 兼容] */
   voice_keys: [string | null, string | null];
 }

@@ -25,7 +25,7 @@ import urllib.request
 import zipfile
 
 URL = "https://github.com/koara666/DeskMate/releases/download/voicepack-chiaki-v1/chiaki-voicepack-v1.zip"
-SHA256 = "0000000000000000000000000000000000000000000000000000000000000000"
+SHA256 = "afe8561b7aaa860951fbbb17ad83f7d2a64dacef45e345d430d1184a0da22e80"
 MAX_ZIP = 30 * 1024 * 1024
 MAX_EACH = 1024 * 1024
 NAME = re.compile(r"^[0-9a-f]{32}\.opus$")

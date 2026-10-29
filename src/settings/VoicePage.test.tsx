@@ -32,7 +32,7 @@ describe('声音设置', () => {
     render(<VoicePage api={api} view={testView()} />);
     const toggle = screen.getByText('让她出声').closest('label')!.querySelector('input')!;
     expect(toggle.disabled).toBe(true);
-    fireEvent.click(screen.getByText(/Fish Audio（推荐/).closest('label')!.querySelector('input')!);
+    fireEvent.click(screen.getByText(/Fish Audio（云端/).closest('label')!.querySelector('input')!);
     await flush();
     expect(saved.at(-1)?.engine).toBe('fish');
     expect(screen.getByText('还没填')).toBeTruthy();
@@ -92,5 +92,35 @@ describe('声音设置', () => {
     };
     render(<VoicePage api={api} view={testView()} />);
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('预录语音：装好了就显示句数，不显示语言 / 语速 / 字数和聊天回复；没装好就说清楚', async () => {
+    const saved: VoiceSettings[] = [];
+    const api = {
+      voiceSave: async (v: VoiceSettings) => {
+        saved.push(v);
+        return v;
+      },
+      voiceSetKey: async () => '',
+      voiceClearKey: async () => {},
+      voiceTest: async () => {},
+      voiceClearCache: async () => 0,
+    };
+    const base = testView();
+    const view = { ...base, voice: { ...base.voice, engine: 'pack' } };
+    const { unmount } = render(<VoicePage api={api} view={view} />);
+    expect(screen.getByText(/已装好：243 句/)).toBeTruthy();
+    expect(screen.queryByText('她说话的语言')).toBeNull();
+    expect(screen.queryByText(/^语速/)).toBeNull();
+    expect(screen.queryByText('每次最多读几个字')).toBeNull();
+    expect(screen.queryByText(/聊天回复（只读开头一两句）/)).toBeNull();
+    expect(screen.getByText('小游戏里的台词')).toBeTruthy();
+    unmount();
+    render(<VoicePage api={api} view={{ ...view, voice_pack: 0 }} />);
+    expect(screen.getByText(/当前角色没有预录语音/)).toBeTruthy();
+    // 切到完整的 GPT-SoVITS：语言、语速又出现了
+    fireEvent.click(screen.getByText(/GPT-SoVITS（完整/).closest('label')!.querySelector('input')!);
+    await flush();
+    expect(saved.at(-1)?.engine).toBe('sovits');
   });
 });

@@ -6,7 +6,7 @@
 // 注意：会短暂出现测试用的桌宠和设置窗口；运行前确认用户没有在全屏玩游戏。
 
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -634,6 +634,28 @@ async function main() {
       await chat.shot('chat-arcade.png');
       await chat.click('[aria-label="关闭"]');
     });
+
+    // 构建时放进了预录语音包（scripts/voice/fetch_voice_pack.py）才测：声音页能选，包里的录音能被 WebView2 解码（只加载、不播放，不出声）
+    const packIndex = resolve('characters/nanami-chiaki/voice/index.json');
+    if (existsSync(packIndex)) {
+      await test('预录语音：声音页显示句数；包里的录音能取到并被 WebView2 解码', async () => {
+        await settings.click('声音');
+        await settings.waitFor(`document.querySelector('main h1')?.innerText === '声音'`, '声音页');
+        await settings.eval(`[...document.querySelectorAll('label.engine-choice')].find(l => l.innerText.includes('预录语音')).querySelector('input').click()`);
+        await settings.waitText('已装好');
+        await settings.shot('settings-预录语音.png');
+        const lines = Object.keys(JSON.parse(readFileSync(packIndex, 'utf8')).lines ?? {});
+        if (lines.length < 100) throw new Error(`语音包里只有 ${lines.length} 句`);
+        const sec = await pet.eval(`(async () => {
+          const buf = await window.__TAURI_INTERNALS__.invoke('voice_audio', { id: '${lines[0]}' });
+          const a = new Audio(URL.createObjectURL(new Blob([buf])));
+          await new Promise((ok, no) => { a.onloadedmetadata = ok; a.onerror = () => no(new Error('WebView2 解码失败')); setTimeout(() => no(new Error('解码超时')), 5000); });
+          return a.duration;
+        })()`);
+        if (!(sec > 0.3 && sec < 20)) throw new Error(`录音时长不对：${sec}`);
+        console.log(`    （语音包 ${lines.length} 句，第一句 ${sec.toFixed(1)} 秒）`);
+      });
+    }
 
     console.log('\n窗口关闭');
     await test('点设置窗口标题栏的 ✕（WM_CLOSE）能关掉设置窗口', async () => {

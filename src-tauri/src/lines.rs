@@ -331,6 +331,19 @@ impl Lines {
         v
     }
 
+    /// 全部日语版（测试用：核对预录语音包有没有覆盖）
+    #[cfg(test)]
+    pub fn all_ja(&self) -> Vec<String> {
+        let mut v: Vec<String> = self
+            .scenes
+            .values()
+            .flatten()
+            .filter_map(|l| l.ja.clone())
+            .collect();
+        v.sort();
+        v
+    }
+
     pub fn scene_count(&self) -> usize {
         self.scenes.len()
     }
