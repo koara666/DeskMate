@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+# 脚本里有中文输出，Windows 构建机的 Python 默认不是 UTF-8
+env:
+  PYTHONUTF8: "1"
+
 jobs:
   release:
     name: 构建并发布（Windows）

@@ -59,6 +59,9 @@ def download():
 
 
 def main():
+    # Windows 构建机的控制台默认不是 UTF-8，打印中文会报错退出
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     dest = os.path.join(root, "characters", "nanami-chiaki", "assets")
     if "--from-zip" in sys.argv:
