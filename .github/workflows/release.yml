@@ -25,7 +25,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: dtolnay/rust-toolchain@stable
+      # 固定成本机用的版本（rustc --version），下载版和本机版同一个编译器
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
       # 和 CI 共用同一份依赖缓存（以前各用各的，发布每次都从零编译所有依赖，是最慢的一步）；发布这边只读不存
       - uses: Swatinem/rust-cache@v2
         with:

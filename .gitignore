@@ -44,9 +44,8 @@ characters/*/assets/*.webp
 characters/*/assets/*.gif
 /user-characters/
 
-# ===== 原作语料与台词库（DECISIONS #31） =====
-# 原作台词原文只放在用户数据目录（%APPDATA%\DeskMate），不进公开仓库
-characters/*/quotes.md
+# ===== 原作语料（只留本机） =====
+# 提炼出来的台词库 characters/*/quotes.md 是公开的（用户 2026-10-30 决定，DECISIONS #69）；提炼前的原始语料不进仓库
 /corpus/
 
 # ===== 日志 =====

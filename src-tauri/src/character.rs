@@ -5,7 +5,7 @@
 //! 2. 用户：`%APPDATA%\DeskMate\characters\<id>\`
 //!    - 有 `character.json` + `persona.md`（+ 可选的 `canon.md`）：完整的用户角色包（新增角色或替换内置设定）
 //!    - 只有 `assets/`：给内置角色换上用户自己的图片
-//!    - 可选的 `quotes.md`（原作台词库，DECISIONS #31）：内置角色也从这里读，台词原文不进公开仓库
+//!    - 可选的 `quotes.md`（原作台词库）：内置角色也读这里；有就优先用它，没有再用内置的
 //!
 //! 安全（防恶意角色包，见 SECURITY.md T6）：id 和图片名只允许 `[a-z0-9_-]`；
 //! 只读取固定文件名；文件大小有上限；图片校验文件头；用户目录里的 SVG 不读取。
@@ -1037,6 +1037,30 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn chiaki_ships_her_quote_library() {
+        // 千秋的原作台词库随安装包发布（characters/nanami-chiaki/quotes.md，DECISIONS #69）：
+        // 解析得出、常驻部分有内容也没被预算砍掉、按关键词取用的有若干条
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+        let empty = tempfile::tempdir().unwrap();
+        let all = load_all(Some(&root), empty.path());
+        let c = all
+            .iter()
+            .find(|c| c.manifest.id == "nanami-chiaki")
+            .unwrap();
+        assert!(
+            c.quotes.fixed_count >= 3,
+            "常驻片段 {}",
+            c.quotes.fixed_count
+        );
+        assert_eq!(c.quotes.fixed_dropped, 0, "有常驻片段超出预算被丢掉了");
+        assert!(
+            c.quotes.keyed.len() >= 10,
+            "按关键词取用的 {}",
+            c.quotes.keyed.len()
+        );
     }
 
     #[test]

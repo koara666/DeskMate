@@ -298,7 +298,7 @@ pub fn announce(app: &AppHandle, v: UpdateView) {
 }
 
 /// 这个版本的新功能（升级后她说一次）
-pub const WHATS_NEW: &str = "这次最明显的是：我换上了 Q 版小人的新形象，声音也能直接听到了——「设置 → 声音」里选「预录语音」，再打开「让她出声」就行，什么都不用装。我现场想的话还不会出声，想要的话可以装 GPT-SoVITS（步骤见 GitHub 上的 docs/VOICE.md）。";
+pub const WHATS_NEW: &str = "这次最明显的是：我换上了 Q 版小人的新形象，声音也能直接听到了——「设置 → 声音」里选「预录语音」，再打开「让她出声」就行，什么都不用装；说话的口吻也更像原作里的我了。我现场想的话还不会出声，想要的话可以装 GPT-SoVITS（步骤见 GitHub 上的 docs/VOICE.md）。";
 
 /// 升级后 20 秒：她介绍一次新功能（走调度器，勿扰 / 全屏时等合适的时候）
 pub fn spawn_whats_new(app: &AppHandle) {
