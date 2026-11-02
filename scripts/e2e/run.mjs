@@ -341,11 +341,12 @@ async function main() {
       mkdirSync(assets, { recursive: true });
       // 1×1 像素的 PNG
       const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-      writeFileSync(join(assets, 'idle.png'), Buffer.from(png, 'base64'));
+      // 待机图会按时间 / 季节换变体（夜里 idle_night、冬天 idle_winter），内置图里有这些变体，所以一起放，测试不看几点钟
+      for (const n of ['idle', 'idle_night', 'idle_winter']) writeFileSync(join(assets, `${n}.png`), Buffer.from(png, 'base64'));
       await settings.click('重新加载');
       await settings.waitText('已重新加载');
       await pet.waitFor(
-        `(() => { const i = document.querySelector('.pet-img'); return !!i && i.src.startsWith('http://deskmate-img.localhost/makise-kurisu/idle?v=') && i.complete && i.naturalWidth === 1; })()`,
+        `(() => { const i = document.querySelector('.pet-img'); return !!i && /^http:\\/\\/deskmate-img\\.localhost\\/makise-kurisu\\/idle(_night|_winter)?\\?v=/.test(i.src) && i.complete && i.naturalWidth === 1; })()`,
         '桌宠显示用户图片',
       );
       if (await pet.eval(`document.querySelector('.pet').classList.contains('placeholder')`)) throw new Error('仍是占位形象');
