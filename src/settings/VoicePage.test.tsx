@@ -82,6 +82,44 @@ describe('声音设置', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('GPT-SoVITS 的设置按角色分别保存：改红莉栖的不会动千秋的', async () => {
+    const saved: VoiceSettings[] = [];
+    const api = {
+      voiceSave: async (v: VoiceSettings) => {
+        saved.push(v);
+        return v;
+      },
+      voiceSetKey: async () => '',
+      voiceClearKey: async () => {},
+      voiceTest: async () => {},
+      voiceClearCache: async () => 0,
+    };
+    const base = testView();
+    const voice = {
+      ...base.voice,
+      engine: 'sovits',
+      sovits_ref_audio: 'D:/chiaki.wav',
+      sovits_profiles: { 'makise-kurisu': { url: 'http://127.0.0.1:9881', ref_audio: 'D:/kurisu.wav', ref_text: 'くりす', ref_lang: 'ja' } },
+    };
+    // 红莉栖：显示她自己的，改参考音频只改她那份
+    const { unmount } = render(<VoicePage api={api} view={{ ...base, voice, character_id: 'makise-kurisu' }} />);
+    const ref = screen.getByDisplayValue('D:/kurisu.wav') as HTMLInputElement;
+    expect((screen.getByDisplayValue('http://127.0.0.1:9881') as HTMLInputElement).value).toBe('http://127.0.0.1:9881');
+    fireEvent.change(ref, { target: { value: 'D:/kurisu2.wav' } });
+    await flush();
+    expect(saved.at(-1)?.sovits_profiles['makise-kurisu'].ref_audio).toBe('D:/kurisu2.wav');
+    expect(saved.at(-1)?.sovits_profiles['makise-kurisu'].url).toBe('http://127.0.0.1:9881');
+    expect(saved.at(-1)?.sovits_ref_audio).toBe('D:/chiaki.wav');
+    unmount();
+    // 千秋：还没单独存过，显示通用的那份；一改就给她存一份自己的
+    render(<VoicePage api={api} view={{ ...base, voice, character_id: 'nanami-chiaki' }} />);
+    fireEvent.change(screen.getByDisplayValue('D:/chiaki.wav'), { target: { value: 'D:/chiaki2.wav' } });
+    await flush();
+    expect(saved.at(-1)?.sovits_profiles['nanami-chiaki'].ref_audio).toBe('D:/chiaki2.wav');
+    expect(saved.at(-1)?.sovits_profiles['nanami-chiaki'].url).toBe('http://127.0.0.1:9880');
+    expect(saved.at(-1)?.sovits_profiles['makise-kurisu'].ref_audio).toBe('D:/kurisu.wav');
+  });
+
   it('没选引擎时不弹这个提示（先选引擎）', () => {
     const api = {
       voiceSave: async (v: VoiceSettings) => v,

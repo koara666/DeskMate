@@ -69,9 +69,19 @@ export function Pet({ api, voice, random = Math.random }: Props) {
       off.then((f) => f()).catch(() => {});
     };
   }, [api]);
-  /** 正在出声（嘴跟着动） */
+  /** 正在出声（嘴跟着动），以及这句话贴切的表情候选（她说「困了」就是困的脸，不一直是「说话」那张） */
   const [speaking, setSpeaking] = useState(false);
-  useEffect(() => (voice ? startVoice(voice, setSpeaking) : undefined), [voice]);
+  const [speakPoses, setSpeakPoses] = useState<string[]>([]);
+  useEffect(
+    () =>
+      voice
+        ? startVoice(voice, (on, poses) => {
+            setSpeaking(on);
+            setSpeakPoses(on ? (poses ?? []) : []);
+          })
+        : undefined,
+    [voice],
+  );
   /** 出声时显示成「说话」（睡觉、思考时不变） */
   const shown: PetState = speaking && state !== 'sleep' && state !== 'thinking' ? 'talking' : state;
 
@@ -251,9 +261,11 @@ export function Pet({ api, voice, random = Math.random }: Props) {
   const images = init?.appearance?.images ?? {};
   // 待机时：心情 / 天气 / 夜里 / 季节的图片（用户放了才有），没有就用 idle
   const idleVariant = (init?.variants ?? []).find((v) => images[v]);
-  // 反应图优先（说话、思考、睡觉时不换，免得嘴型对不上）；没有这张图就照常显示
-  const reactSrc = react && (shown === 'idle' || shown === 'happy' || shown === 'sad') ? images[react] : undefined;
-  const src = reactSrc ?? (shown === 'idle' && idleVariant ? images[idleVariant] : (images[shown] ?? images.idle));
+  // 反应图优先（思考、睡觉时不换）；说话时也一样：摸头、晃晕了她说的话，脸要跟着反应走，不能一直是「说话」那张；没有这张图就照常显示
+  const reactSrc = react && (shown === 'idle' || shown === 'happy' || shown === 'sad' || shown === 'talking') ? images[react] : undefined;
+  // 没有专属的反应图时，按这句话的内容换一张贴切的（候选里角色有哪张用哪张，都没有才用「说话」图）
+  const speakSrc = shown === 'talking' ? speakPoses.map((p) => images[p]).find(Boolean) : undefined;
+  const src = reactSrc ?? speakSrc ?? (shown === 'idle' && idleVariant ? images[idleVariant] : (images[shown] ?? images.idle));
   const mood = init?.mood ?? 0;
   const placeholder = init?.appearance?.placeholder ?? true;
   const name = init?.character.name ?? '';

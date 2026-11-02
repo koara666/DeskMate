@@ -11,6 +11,7 @@ import { copyText } from '../lib/clipboard';
 import { GAP_SECS, formatTime, nowSecs } from '../lib/time';
 import type {
   ActionView,
+  AsrPhase,
   CharacterView,
   ChatEvent,
   ChatMode,
@@ -104,6 +105,16 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   const proactive = useRef<{ timer: ReturnType<typeof setTimeout> | null; hovering: boolean } | null>(null);
   /** 用户上次在聊天窗口里打字、发消息的时间（正在聊天时不自动收起） */
   const lastActivity = useRef(0);
+  /** 语音输入：开关打开且模型下好了才显示麦克风按钮 */
+  const [asrOn, setAsrOn] = useState(false);
+  const [asrPhase, setAsrPhase] = useState<AsrPhase>('idle');
+  const [asrLevel, setAsrLevel] = useState(0);
+  const [asrNote, setAsrNote] = useState('');
+  /** 识别出来、不自动发送的文字（接到输入框里） */
+  const [asrInsert, setAsrInsert] = useState({ text: '', n: 0 });
+  // 回调里要用最新的 send / generating，用 ref 取
+  const sendRef = useRef<(text: string) => void>(() => {});
+  const generatingRef = useRef(false);
 
   const load = useCallback(async () => {
     const init = await api.init();
@@ -161,6 +172,25 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
         }),
       );
     }
+    const asr = api.asr;
+    if (asr) {
+      const refresh = () => asr.available().then(setAsrOn).catch(() => setAsrOn(false));
+      refresh();
+      offs.push(
+        asr.onSettingsChanged(refresh),
+        asr.onState((e) => {
+          setAsrPhase(e.state);
+          setAsrLevel(e.level);
+          if (e.state === 'idle') setAsrNote(e.note);
+        }),
+        asr.onText((e) => {
+          setAsrNote('');
+          // 她正在回复时不再插一条：先放进输入框，等她说完再发
+          if (e.auto_send && !generatingRef.current) sendRef.current(e.text);
+          else setAsrInsert((i) => ({ text: e.text, n: i.n + 1 }));
+        }),
+      );
+    }
     const onVisible = () => {
       if (!document.hidden) setNow(nowSecs());
     };
@@ -192,10 +222,11 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
   }, [messages, mode]);
 
   const generating = requestId !== null;
+  generatingRef.current = generating;
 
   // 气泡模式：窗口高度跟着内容走（短回复不留一大块空白）。
   // 生成过程中只长不缩，避免文字一边出来气泡一边跳；说完再缩到合适的高度。
-  useLayoutEffect(() => {
+  const fitCompact = () => {
     const panel = panelRef.current;
     const area = listRef.current;
     if (!ready || mode !== 'compact' || !panel || !area) return;
@@ -206,6 +237,18 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     if (Math.abs(need - fitted.current) < 2 || (generating && need < fitted.current)) return;
     fitted.current = need;
     api.fit(need).catch(() => {});
+  };
+  useLayoutEffect(fitCompact);
+  // 渲染完之后排版又变了几个像素（字体、输入框自适应高度……）时没有新的渲染来触发重量，
+  // 气泡区会被挤出一小截滚动。安静 200 毫秒后以窗口的真实高度为准补量一次
+  useEffect(() => {
+    if (!ready || mode !== 'compact') return;
+    const t = setTimeout(() => {
+      if (!panelRef.current?.offsetHeight) return; // 没有真实排版（测试环境）
+      fitted.current = window.innerHeight;
+      fitCompact();
+    }, 200);
+    return () => clearTimeout(t);
   });
 
   // ---------- 主动发言：无人理会自动收起，并告诉调度器（连续被忽略会降低频率） ----------
@@ -296,6 +339,8 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
     setMessages((ms) => [...ms, { id: nextId(), role: 'user', text, status: 'done', at: nowSecs() }]);
     startStream((rid, onEvent) => api.send(text, rid, onEvent));
   };
+
+  sendRef.current = send;
 
   const regenerate = () => {
     setMessages((ms) => {
@@ -549,7 +594,28 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
           onFinished={(id) => startStream((rid, onEvent) => taskApi.report(id, rid, onEvent))}
         />
       )}
-      {!playing && <Composer generating={generating} onSend={send} onStop={stop} focusSignal={focusSignal} />}
+      {!playing && asrNote && asrPhase === 'idle' && <div class="asr-note" role="status">{asrNote}</div>}
+      {!playing && (
+        <Composer
+          generating={generating}
+          onSend={send}
+          onStop={stop}
+          focusSignal={focusSignal}
+          mic={
+            asrOn && api.asr
+              ? {
+                  phase: asrPhase,
+                  level: asrLevel,
+                  onToggle: () => {
+                    setAsrNote('');
+                    api.asr?.toggle().catch((e: unknown) => setAsrNote(String(e)));
+                  },
+                }
+              : undefined
+          }
+          insert={asrInsert}
+        />
+      )}
         </>
       )}
     </div>

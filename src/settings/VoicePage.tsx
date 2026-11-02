@@ -3,14 +3,15 @@ import { useEffect, useState } from 'preact/hooks';
 import type { SettingsApi } from '../lib/ipc';
 import type { SettingsView, VoiceSettings } from '../lib/types';
 import { StatusLine, useStatus } from './SettingsApp';
+import { AsrCard, type AsrApi } from './AsrCard';
 
-type Api = Pick<SettingsApi, 'voiceSave' | 'voiceSetKey' | 'voiceClearKey' | 'voiceTest' | 'voiceClearCache'>;
+type Api = Pick<SettingsApi, 'voiceSave' | 'voiceSetKey' | 'voiceClearKey' | 'voiceTest' | 'voiceClearCache'> & Partial<AsrApi>;
 
 const ENGINES: { id: string; name: string; desc: string }[] = [
   {
     id: 'pack',
-    name: '预录语音（七海千秋的声音，装好就能用）',
-    desc: '安装包里自带的千秋录音，免费、不联网、不用装任何东西。只念事先写好的台词（问候、播报、摸头、提醒、小游戏……）；聊天里现场说的话不出声。想要每句话都出声，用下面的 GPT-SoVITS。',
+    name: '预录语音（她自己的声音，装好就能用）',
+    desc: '安装包里自带的她的录音（七海千秋、牧濑红莉栖），免费、不联网、不用装任何东西。只念事先写好的台词（问候、播报、摸头、提醒、小游戏……）；聊天里现场说的话不出声。想要每句话都出声，用下面的 GPT-SoVITS。',
   },
   {
     id: 'sovits',
@@ -63,6 +64,17 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
     if (ok && saved) setV(saved);
   };
   const num = (e: Event) => Number((e.currentTarget as HTMLInputElement).value);
+  // GPT-SoVITS 的设置按角色分别保存（每个角色的声音是不同的模型）：没单独存过的角色先显示通用的那一份
+  const cid = view.character_id;
+  const sp = v.sovits_profiles?.[cid];
+  const sovits = {
+    url: sp?.url || v.sovits_url,
+    ref_audio: sp ? sp.ref_audio : v.sovits_ref_audio,
+    ref_text: sp ? sp.ref_text : v.sovits_ref_text,
+    ref_lang: sp?.ref_lang || v.sovits_ref_lang,
+  };
+  const saveSovits = (patch: Partial<typeof sovits>) =>
+    save({ ...v, sovits_profiles: { ...v.sovits_profiles, [cid]: { ...sovits, ...patch } } });
   const keyFor = v.engine === 'fish' ? 'fish' : v.engine === 'openai' ? 'openai' : null;
   const keyHint = keyFor === 'fish' ? keys[0] : keyFor === 'openai' ? keys[1] : null;
 
@@ -209,30 +221,30 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
           <h2>GPT-SoVITS（本机服务）</h2>
           <div class="row">
             <span class="label">接口地址</span>
-            <input class="mono" value={v.sovits_url} onChange={(e) => save({ ...v, sovits_url: (e.currentTarget as HTMLInputElement).value })} />
+            <input class="mono" value={sovits.url} onChange={(e) => saveSovits({ url: (e.currentTarget as HTMLInputElement).value })} />
           </div>
           <div class="row">
             <span class="label">参考音频</span>
             <input
               class="mono"
               placeholder="D:\\GPT-SoVITS\\ref\\chiaki.wav"
-              value={v.sovits_ref_audio}
-              onChange={(e) => save({ ...v, sovits_ref_audio: (e.currentTarget as HTMLInputElement).value })}
+              value={sovits.ref_audio}
+              onChange={(e) => saveSovits({ ref_audio: (e.currentTarget as HTMLInputElement).value })}
             />
           </div>
           <div class="row">
             <span class="label">参考音频说的话</span>
-            <input value={v.sovits_ref_text} onChange={(e) => save({ ...v, sovits_ref_text: (e.currentTarget as HTMLInputElement).value })} />
+            <input value={sovits.ref_text} onChange={(e) => saveSovits({ ref_text: (e.currentTarget as HTMLInputElement).value })} />
           </div>
           <div class="row">
             <span class="label">参考音频的语言</span>
-            <select aria-label="参考音频语言" value={v.sovits_ref_lang} onChange={(e) => save({ ...v, sovits_ref_lang: (e.currentTarget as HTMLSelectElement).value })}>
+            <select aria-label="参考音频语言" value={sovits.ref_lang} onChange={(e) => saveSovits({ ref_lang: (e.currentTarget as HTMLSelectElement).value })}>
               <option value="ja">日语</option>
               <option value="zh">中文</option>
               <option value="en">英语</option>
             </select>
           </div>
-          <p class="muted small">参考音频是一段 3~10 秒的她的原声（文件路径由 GPT-SoVITS 那边读取），「参考音频说的话」要一字不差。只能连本机地址。</p>
+          <p class="muted small">参考音频是一段 3~10 秒的她的原声（文件路径由 GPT-SoVITS 那边读取），「参考音频说的话」要一字不差；参考音频旁边有 refs.txt 并且写了这个文件（模型包里的 ref 文件夹就是这样）时，会自动用里面的原文，这一栏填什么都不影响。只能连本机地址。这里的设置按角色分别保存：每个角色的声音是不同的模型，各自开一个服务（不同端口），换角色时会自动用她自己的那一份。</p>
         </div>
       )}
 
@@ -372,6 +384,7 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
           </div>
         </div>
       )}
+      {api.asrSave && api.asrStatus && api.asrDownload && <AsrCard api={api as AsrApi} initial={view.asr} />}
       <StatusLine status={status} />
     </section>
   );

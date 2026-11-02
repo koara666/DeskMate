@@ -21,7 +21,7 @@ export interface CharacterView {
   theme?: Theme;
 }
 
-/** 角色的界面：skin = 程序自带的皮肤（default / arcade），colors = 颜色变量 */
+/** 角色的界面：skin = 程序自带的皮肤（default / arcade / lab），colors = 颜色变量 */
 export interface Theme {
   skin: string;
   colors: Record<string, string>;
@@ -268,10 +268,21 @@ export interface SettingsView {
   update: UpdateSettings;
   web: WebSettings;
   voice: VoiceSettings;
+  /** 语音输入（对着麦克风说话） */
+  asr: AsrSettings;
+  /** 现在是哪个角色（声音页按角色分别保存 GPT-SoVITS 的设置） */
+  character_id: string;
   /** 当前角色的预录语音有多少句（0 = 没有语音包） */
   voice_pack: number;
   /** 语音服务 Key 的末尾 4 位：[Fish Audio, OpenAI 兼容] */
   voice_keys: [string | null, string | null];
+}
+
+export interface SovitsProfile {
+  url: string;
+  ref_audio: string;
+  ref_text: string;
+  ref_lang: string;
 }
 
 export interface VoiceSettings {
@@ -295,9 +306,57 @@ export interface VoiceSettings {
   sovits_ref_audio: string;
   sovits_ref_text: string;
   sovits_ref_lang: string;
+  /** 每个角色自己的 GPT-SoVITS 设置（角色 id → 设置），优先于上面通用的那一份 */
+  sovits_profiles: Record<string, SovitsProfile>;
   openai_url: string;
   openai_model: string;
   openai_voice: string;
+}
+
+/** 语音输入：对着麦克风说话，本机识别（中文模型），变成一条聊天消息。默认关闭 */
+export interface AsrSettings {
+  enabled: boolean;
+  /** 识别完直接发给她；关掉就先放进输入框 */
+  auto_send: boolean;
+  /** 连续对话：她说完话自己接着听 */
+  continuous: boolean;
+  /** 麦克风（空 = 系统默认） */
+  input_device: string;
+  hotkey_enabled: boolean;
+  hotkey: string;
+}
+
+export interface AsrDownload {
+  running: boolean;
+  done: number;
+  total: number;
+  error: string;
+}
+
+export interface AsrDevice {
+  id: string;
+  name: string;
+}
+
+export interface AsrStatus {
+  model_ready: boolean;
+  download: AsrDownload;
+  listening: boolean;
+  devices: AsrDevice[];
+}
+
+export type AsrPhase = 'idle' | 'loading' | 'listening' | 'hearing' | 'thinking';
+
+/** 录音状态；`note` 是要告诉用户的一句话（比如「没听到你说话」） */
+export interface AsrStateEvent {
+  state: AsrPhase;
+  level: number;
+  note: string;
+}
+
+export interface AsrTextEvent {
+  text: string;
+  auto_send: boolean;
 }
 
 /** 联网搜索：开了以后问新闻、最新消息或说「搜一下」，她会先上网查 */
@@ -339,6 +398,10 @@ export interface VisionSettings {
   daily_max: number;
   /** 发送前在本机用文字识别涂黑敏感文字 */
   mask_text: boolean;
+  /** 切到新界面（比如刚打开一个游戏）时看一眼，由她决定说不说 */
+  on_switch: boolean;
+  /** 按时间定时看（做这些事满 5 分钟后每隔一阵看一眼） */
+  timed_look: boolean;
 }
 
 /** 「预览她会看到什么」：只在设置窗口里显示，不发送、不保存 */
@@ -353,7 +416,7 @@ export interface VisionPreview {
 /** 本次运行里看过的记录（不存图、不存标题） */
 export interface LookRecord {
   at: number;
-  trigger: 'hotkey' | 'auto' | 'preview';
+  trigger: 'hotkey' | 'auto' | 'switch' | 'preview';
   app: string;
   outcome: string;
   masked: number;

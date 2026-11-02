@@ -3,7 +3,7 @@
 // 系统语音用浏览器自带的 Web Speech（Windows 的语音，离线、免费）；别的引擎由后端合成好，这里只播放。
 import type { VoiceApi } from '../lib/ipc';
 
-export function startVoice(api: VoiceApi, onSpeaking: (on: boolean) => void): () => void {
+export function startVoice(api: VoiceApi, onSpeaking: (on: boolean, poses?: string[]) => void): () => void {
   let audio: HTMLAudioElement | null = null;
   let url = '';
   // 每次停止 / 每来一句新的就加一：取回音频时和它对不上，说明这一句已经过期
@@ -48,7 +48,7 @@ export function startVoice(api: VoiceApi, onSpeaking: (on: boolean) => void): ()
       u.rate = e.rate;
       u.pitch = e.pitch;
       u.volume = e.volume;
-      u.onstart = () => onSpeaking(true);
+      u.onstart = () => onSpeaking(true, e.poses);
       u.onend = () => onSpeaking(false);
       u.onerror = () => onSpeaking(false);
       speechSynthesis.speak(u);
@@ -63,7 +63,7 @@ export function startVoice(api: VoiceApi, onSpeaking: (on: boolean) => void): ()
         const a = new Audio(url);
         audio = a;
         a.volume = Math.max(0, Math.min(1, e.volume));
-        a.onplay = () => onSpeaking(true);
+        a.onplay = () => onSpeaking(true, e.poses);
         a.onended = () => {
           if (audio === a) stopAll();
         };

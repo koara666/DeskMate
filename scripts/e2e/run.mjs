@@ -327,17 +327,17 @@ async function main() {
 
     await settings.click('角色');
     await test('角色：切换角色并保存禁词', async () => {
-      await settings.waitFor(`document.querySelectorAll('.char-card').length >= 8`, '8 个角色');
-      await settings.eval(`[...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('奶龙')).querySelector('button.btn').click()`);
-      await settings.waitFor(`[...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('奶龙'))?.innerText.includes('使用中')`, '奶龙使用中');
-      await settings.eval(`[...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('奶龙')).querySelector('.char-main').click()`);
+      await settings.waitFor(`document.querySelectorAll('.char-card').length >= 2`, '2 个内置角色');
+      await settings.eval(`[...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('牧濑红莉栖')).querySelector('button.btn').click()`);
+      await settings.waitFor(`[...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('牧濑红莉栖'))?.innerText.includes('使用中')`, '牧濑红莉栖使用中');
+      await settings.eval(`[...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('牧濑红莉栖')).querySelector('.char-main').click()`);
       await sleep(200);
-      await settings.eval(`(() => { const ta = [...document.querySelectorAll('label')].find(l => l.innerText.startsWith('奶龙 的禁词')).querySelector('textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, '笨蛋'); ta.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      await settings.eval(`(() => { const ta = [...document.querySelectorAll('label')].find(l => l.innerText.startsWith('牧濑红莉栖 的禁词')).querySelector('textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, '笨蛋'); ta.dispatchEvent(new Event('input', { bubbles: true })); })()`);
       await settings.click('保存');
       await settings.waitText('已保存');
     });
     await test('角色：放进自己的图片后，桌宠按地址读取并显示（不再整张图转文本传给界面）', async () => {
-      const assets = join(DATA, 'characters', 'nailong', 'assets');
+      const assets = join(DATA, 'characters', 'makise-kurisu', 'assets');
       mkdirSync(assets, { recursive: true });
       // 1×1 像素的 PNG
       const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -345,15 +345,20 @@ async function main() {
       await settings.click('重新加载');
       await settings.waitText('已重新加载');
       await pet.waitFor(
-        `(() => { const i = document.querySelector('.pet-img'); return !!i && i.src.startsWith('http://deskmate-img.localhost/nailong/idle?v=') && i.complete && i.naturalWidth === 1; })()`,
+        `(() => { const i = document.querySelector('.pet-img'); return !!i && i.src.startsWith('http://deskmate-img.localhost/makise-kurisu/idle?v=') && i.complete && i.naturalWidth === 1; })()`,
         '桌宠显示用户图片',
       );
       if (await pet.eval(`document.querySelector('.pet').classList.contains('placeholder')`)) throw new Error('仍是占位形象');
-      const preview = await settings.eval(`[...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('奶龙')).querySelector('img').src`);
-      if (!preview.startsWith('http://deskmate-img.localhost/nailong/idle?v=')) throw new Error(`角色页预览地址不对：${preview.slice(0, 60)}`);
+      const preview = await settings.eval(`[...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('牧濑红莉栖')).querySelector('img').src`);
+      if (!preview.startsWith('http://deskmate-img.localhost/makise-kurisu/idle?v=')) throw new Error(`角色页预览地址不对：${preview.slice(0, 60)}`);
       rmSync(assets, { recursive: true, force: true });
       await settings.click('重新加载');
-      await pet.waitFor(`document.querySelector('.pet-img')?.src.startsWith('data:image/svg+xml')`, '删掉图片后回到占位形象');
+      // 删掉用户图片后回到内置形象：装了形象包是安装包内置的 PNG（不是刚才那张 1×1 的），否则是内置的 SVG
+      const bundledArt = existsSync(resolve('characters/makise-kurisu/assets/idle.png'));
+      await pet.waitFor(
+        `(() => { const i = document.querySelector('.pet-img'); const s = i?.getAttribute('src') ?? ''; return ${bundledArt} ? (s.includes('/makise-kurisu/idle') && i.complete && i.naturalWidth > 1) : s.startsWith('data:image/svg+xml'); })()`,
+        '删掉图片后回到内置形象',
+      );
     });
 
     await settings.click('记忆');
@@ -599,6 +604,40 @@ async function main() {
       console.log(`    （桌宠页面的系统声音：${n} 个，其中日语 ${nja} 个）`);
       if (n < 0) throw new Error('WebView2 里没有 speechSynthesis');
     });
+    await test('语音输入：声音页有「语音输入」卡片，默认关闭、选项藏着（不打开，免得去下载识别模型）', async () => {
+      await settings.click('声音');
+      await settings.waitFor(`document.querySelector('main h1')?.innerText === '声音'`, '声音页');
+      await settings.waitText('语音输入');
+      const off = await settings.eval(`document.querySelector('input[aria-label="打开语音输入"]')?.checked === false`);
+      if (!off) throw new Error('语音输入默认应该是关闭的');
+      const hidden = await settings.eval(`!document.querySelector('input[aria-label="连续对话"]')`);
+      if (!hidden) throw new Error('语音输入没打开时不应该显示它的选项');
+      // 没打开语音输入时，聊天框里没有麦克风按钮
+      const noMic = await chat.eval(`!document.querySelector('button[aria-label="语音输入"]')`);
+      if (!noMic) throw new Error('没打开语音输入时聊天框不应该有麦克风按钮');
+    });
+    await test('语音输入、联网开关的命令都有授权：真实调用不会报 "not allowed by ACL"（不打开语音输入，不下载模型）', async () => {
+      // 单元测试和模拟接口碰不到 Tauri 的权限检查，只有真实窗口里调用才知道
+      const inv = (page, cmd, args = '') => page.eval(`window.__TAURI_INTERNALS__.invoke('${cmd}'${args})`);
+      const st = await inv(settings, 'asr_status');
+      if (typeof st?.model_ready !== 'boolean' || !Array.isArray(st?.devices)) throw new Error(`asr_status 返回不对：${JSON.stringify(st)}`);
+      const cur = await settings.eval(`window.__TAURI_INTERNALS__.invoke('settings_get').then(v => v.asr)`);
+      const saved = await settings.eval(`window.__TAURI_INTERNALS__.invoke('asr_save', { asr: ${JSON.stringify(cur)} })`);
+      if (saved?.enabled !== false) throw new Error(`asr_save 之后语音输入应该还是关的：${JSON.stringify(saved)}`);
+      const web = await inv(settings, 'web_save', ', { enabled: true }');
+      if (web?.enabled !== true) throw new Error(`web_save 返回不对：${JSON.stringify(web)}`);
+      const avail = await inv(chat, 'asr_available');
+      if (avail !== false) throw new Error(`没打开语音输入时 asr_available 应该是 false：${JSON.stringify(avail)}`);
+    });
+    await test('看屏幕：「切到新界面时看一眼」默认开、「按时间定时看」默认关（需要先允许她看屏幕）', async () => {
+      await settings.click('活动感知');
+      await settings.waitFor(`document.querySelector('main h1')?.innerText.includes('活动')`, '活动感知页');
+      // 看屏幕的选项在打开「允许她看屏幕」后才显示；这里只看后端给的默认值
+      const d = await settings.eval(`window.__TAURI_INTERNALS__.invoke('settings_get').then(v => v.vision)`);
+      if (d.on_switch !== true) throw new Error('切到新界面时看一眼应该默认开');
+      if (d.timed_look !== false) throw new Error('按时间定时看应该默认关');
+      if (d.enabled !== false) throw new Error('允许她看屏幕应该默认关');
+    });
     await test('模型页：有联网搜索开关，默认开着（DECISIONS #59）', async () => {
       await settings.click('模型');
       await settings.waitFor(`document.querySelector('main h1')?.innerText === '模型'`, '模型页');
@@ -654,6 +693,68 @@ async function main() {
         })()`);
         if (!(sec > 0.3 && sec < 20)) throw new Error(`录音时长不对：${sec}`);
         console.log(`    （语音包 ${lines.length} 句，第一句 ${sec.toFixed(1)} 秒）`);
+      });
+    }
+
+    await test('换成牧濑红莉栖：桌宠、聊天窗口、头顶菜单换上实验室风皮肤，带她自己的 Q 版形象', async () => {
+      await settings.click('角色');
+      await settings.waitFor(`document.body.innerText.includes('牧濑红莉栖')`, '角色列表');
+      await settings.eval(`(() => { const c = [...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('牧濑红莉栖')); const b = c && [...c.querySelectorAll('button')].find(b => b.innerText.trim() === '切换'); if (b) b.click(); })()`);
+      await pet.waitFor(`document.documentElement.dataset.skin === 'lab'`, '桌宠皮肤', 6000);
+      const bundledArt = existsSync(resolve('characters/makise-kurisu/assets/idle.png'));
+      await pet.waitFor(`(() => { const s = document.querySelector('.pet-img')?.getAttribute('src') ?? ''; return ${bundledArt} ? (s.includes('deskmate-img') && s.includes('/makise-kurisu/idle')) : s.startsWith('data:image/svg+xml'); })()`, bundledArt ? '红莉栖的 Q 版形象（安装包内置的 PNG）' : '红莉栖的 Q 版形象（内置 SVG）', 6000);
+      console.log(`    （这次安装包里${bundledArt ? '带' : '没带'}红莉栖的 Q 版形象包）`);
+      await sleep(300);
+      await pet.shot('pet-kurisu.png');
+      await chat.waitFor(`document.documentElement.dataset.skin === 'lab'`, '聊天皮肤', 6000);
+      await petAt(0, 15);
+      await chat.waitFor(`!!document.querySelector('.panel.speech')`, '她说的话气泡', 6000);
+      await sleep(300);
+      await chat.shot('chat-speech-lab.png');
+      const src = await pet.eval(`document.querySelector('.pet-img').getAttribute('src')`);
+      await pet.shot('pet-kurisu-pat.png');
+      const patOk = bundledArt ? src.includes('/makise-kurisu/pat') : src.startsWith('data:image/svg+xml');
+      if (!patOk) throw new Error(`摸头时应该换成反应图（现在是 ${src.slice(0, 80)}）`);
+      await chat.click('[data-testid=speech]');
+      await chat.waitFor(`!!document.querySelector('textarea[aria-label="输入消息"]')`, '变成聊天框');
+      await chat.shot('chat-lab.png');
+      await chat.click('[aria-label="关闭"]');
+      // 头顶气泡菜单也是实验室风
+      await petAt(2, 150);
+      const tm = await waitTarget('menu.html', 8000);
+      if (!tm) throw new Error('气泡菜单页面没有出现');
+      const menu = await Page.open('menu', tm.webSocketDebuggerUrl);
+      try {
+        await menu.waitFor(`document.querySelectorAll('.bubble').length >= 7 && document.documentElement.dataset.skin === 'lab'`, '实验室风气泡', 5000);
+        await sleep(400);
+        await menu.shot('menu-lab.png');
+        await menu.click('[data-id=chat]');
+        await waitVisible(pid, 'menu', false);
+        await chat.waitFor(`!!document.querySelector('textarea[aria-label="输入消息"]')`, '聊天框', 6000);
+        await chat.click('[aria-label="关闭"]');
+        if (menu.errors.length) throw new Error(`菜单页面报错：${menu.errors.join(' | ')}`);
+      } finally {
+        menu.close();
+      }
+    });
+    const kurisuPackIndex = resolve('characters/makise-kurisu/voice/index.json');
+    if (existsSync(kurisuPackIndex)) {
+      await test('红莉栖的预录语音：声音页显示句数；包里的录音能被 WebView2 解码', async () => {
+        await settings.click('声音');
+        await settings.waitFor(`document.querySelector('main h1')?.innerText === '声音'`, '声音页');
+        await settings.eval(`[...document.querySelectorAll('label.engine-choice')].find(l => l.innerText.includes('预录语音')).querySelector('input').click()`);
+        await settings.waitText('已装好');
+        await settings.shot('settings-预录语音-红莉栖.png');
+        const lines = Object.keys(JSON.parse(readFileSync(kurisuPackIndex, 'utf8')).lines ?? {});
+        if (lines.length < 100) throw new Error(`语音包里只有 ${lines.length} 句`);
+        const sec = await pet.eval(`(async () => {
+          const buf = await window.__TAURI_INTERNALS__.invoke('voice_audio', { id: '${lines[0]}' });
+          const a = new Audio(URL.createObjectURL(new Blob([buf])));
+          await new Promise((ok, no) => { a.onloadedmetadata = ok; a.onerror = () => no(new Error('WebView2 解码失败')); setTimeout(() => no(new Error('解码超时')), 5000); });
+          return a.duration;
+        })()`);
+        if (!(sec > 0.3 && sec < 20)) throw new Error(`录音时长不对：${sec}`);
+        console.log(`    （红莉栖语音包 ${lines.length} 句，第一句 ${sec.toFixed(1)} 秒）`);
       });
     }
 

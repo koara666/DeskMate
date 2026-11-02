@@ -2,6 +2,7 @@ import { render } from 'preact';
 import '../styles/base.css';
 import '../styles/pet.css';
 import '../styles/skins/arcade.css';
+import '../styles/skins/lab.css';
 import { petApi, voiceApi } from '../lib/ipc';
 import { Pet } from './Pet';
 

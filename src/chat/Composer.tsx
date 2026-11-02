@@ -3,6 +3,7 @@
 // - Chromium（WebView2）里这次 keydown 的 isComposing 为 true、keyCode 为 229；
 // - 个别浏览器会先触发 compositionend 再触发 keydown，所以组字结束后的同一轮事件里仍然视为组字中。
 import { useEffect, useRef, useState } from 'preact/hooks';
+import type { AsrPhase } from '../lib/types';
 
 interface Props {
   generating: boolean;
@@ -12,13 +13,32 @@ interface Props {
   onStop: () => void;
   /** 每次变化时自增，用来请求聚焦输入框 */
   focusSignal?: number;
+  /** 语音输入：不传 = 没有麦克风按钮 */
+  mic?: MicProps;
+  /** 语音识别出来的文字（不自动发送时）：`n` 每变一次就把 `text` 接到输入框里 */
+  insert?: { text: string; n: number };
 }
+
+export interface MicProps {
+  phase: AsrPhase;
+  /** 0~1，说话的音量 */
+  level: number;
+  onToggle: () => void;
+}
+
+const MIC_TITLE: Record<AsrPhase, string> = {
+  idle: '语音输入：点一下开始说话',
+  loading: '正在准备麦克风…',
+  listening: '正在听你说…说完会自动识别；再点一下结束',
+  hearing: '听到了…说完停一下就会识别；再点一下结束',
+  thinking: '正在识别…',
+};
 
 export function isImeEnter(e: KeyboardEvent, composing: boolean): boolean {
   return e.isComposing || composing || e.keyCode === 229;
 }
 
-export function Composer({ generating, disabled, placeholder, onSend, onStop, focusSignal }: Props) {
+export function Composer({ generating, disabled, placeholder, onSend, onStop, focusSignal, mic, insert }: Props) {
   const [text, setText] = useState('');
   const composing = useRef(false);
   const ta = useRef<HTMLTextAreaElement>(null);
@@ -26,6 +46,13 @@ export function Composer({ generating, disabled, placeholder, onSend, onStop, fo
   useEffect(() => {
     ta.current?.focus();
   }, [focusSignal]);
+
+  // 语音识别的文字接在已有内容后面，并把光标留在输入框里方便改
+  useEffect(() => {
+    if (!insert || !insert.text) return;
+    setText((t) => (t ? `${t} ${insert.text}` : insert.text));
+    ta.current?.focus();
+  }, [insert?.n]);
 
   // 根据内容自动调整高度（最多约 5 行）
   useEffect(() => {
@@ -74,6 +101,26 @@ export function Composer({ generating, disabled, placeholder, onSend, onStop, fo
           }, 0);
         }}
       />
+      {mic && (
+        <button
+          type="button"
+          class="btn btn-mic"
+          data-phase={mic.phase}
+          style={{ '--mic-level': String(Math.round(mic.level * 100) / 100) }}
+          onClick={mic.onToggle}
+          disabled={disabled || mic.phase === 'loading' || mic.phase === 'thinking'}
+          aria-pressed={mic.phase === 'listening' || mic.phase === 'hearing'}
+          title={MIC_TITLE[mic.phase]}
+          aria-label="语音输入"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"
+            />
+          </svg>
+        </button>
+      )}
       {generating ? (
         <button type="button" class="btn btn-stop" onClick={onStop} title="停止生成" aria-label="停止生成">
           停止

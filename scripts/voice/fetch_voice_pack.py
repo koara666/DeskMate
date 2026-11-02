@@ -1,12 +1,13 @@
-"""构建安装包时，把千秋的预录语音包放进内置角色包：用户装完 / 更新完就能听到她的声音，不用自己下载或放文件。
+"""构建安装包时，把内置角色的预录语音包放进角色包：用户装完 / 更新完就能听到她的声音，不用自己下载或放文件。
 
 用法：
-  python scripts/voice/fetch_voice_pack.py              从 GitHub 发布页下载（发布流程里自动调用）
-  python scripts/voice/fetch_voice_pack.py --from-zip X 用本地的包（本机打包、还没上传时用；同样要校验）
+  python scripts/voice/fetch_voice_pack.py                      从 GitHub 发布页下载所有角色的语音包（发布流程里自动调用）
+  python scripts/voice/fetch_voice_pack.py --only makise-kurisu 只处理这一个角色
+  python scripts/voice/fetch_voice_pack.py --from-zip 角色id=X   用本地的包（本机打包、还没上传时用；同样要校验，可以重复写）
   加 --require：发布页上找不到就失败（发布用，保证装上的版本和本机一样）；不加只警告、不带语音继续构建
 
-- 语音不进代码仓库（解出来的 characters/nanami-chiaki/voice/ 已写进 .gitignore）：
-  放在发布页 voicepack-chiaki-v1，哪天需要撤下，删掉那个附件，之后的安装包就不再带。
+- 语音不进代码仓库（解出来的 characters/<角色>/voice/ 已写进 .gitignore）：
+  放在发布页 voicepack-<角色>-v1，哪天需要撤下，删掉那个附件，之后的安装包就不再带。
 - 下载到了但 SHA-256 对不上：直接失败——不能把来路不明的东西打进安装包。
 - 只解压 index.json 和「32 位十六进制 + .opus」，文件头必须是 Ogg，每个不超过 1 MB。
 - 每句的编号和程序里查找的算法见 src-tauri/src/voice.rs（pack_id）。
@@ -24,8 +25,11 @@ import urllib.error
 import urllib.request
 import zipfile
 
-URL = "https://github.com/koara666/DeskMate/releases/download/voicepack-chiaki-v1/chiaki-voicepack-v1.zip"
-SHA256 = "afe8561b7aaa860951fbbb17ad83f7d2a64dacef45e345d430d1184a0da22e80"
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import builtin_characters  # noqa: E402
+
+# 角色 id → （显示名，下载地址，SHA-256）；登记表和命名规则在 scripts/builtin_characters.py
+PACKS = builtin_characters.packs("voicepack")
 MAX_ZIP = 30 * 1024 * 1024
 MAX_EACH = 1024 * 1024
 NAME = re.compile(r"^[0-9a-f]{32}\.opus$")
@@ -37,11 +41,11 @@ def warn(msg):
     print(f"::warning::{msg}" if os.environ.get("GITHUB_ACTIONS") else f"警告：{msg}")
 
 
-def download():
+def download(url):
     last = None
     for i in range(3):
         try:
-            req = urllib.request.Request(URL, headers={"User-Agent": "DeskMate-build"})
+            req = urllib.request.Request(url, headers={"User-Agent": "DeskMate-build"})
             with urllib.request.urlopen(req, timeout=60) as r:
                 if not r.geturl().startswith("https://"):
                     sys.exit("下载地址被跳转到了不安全的地址，已停止。")
@@ -59,25 +63,32 @@ def download():
     sys.exit(f"下载语音包失败（重试 3 次）：{last}")
 
 
-def main():
-    # Windows 构建机的控制台默认不是 UTF-8，打印中文会报错退出
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    dest = os.path.join(root, "characters", "nanami-chiaki", "voice")
-    if "--from-zip" in sys.argv:
-        data = open(sys.argv[sys.argv.index("--from-zip") + 1], "rb").read()
+def local_zips():
+    out = {}
+    args = sys.argv
+    for i, a in enumerate(args):
+        if a == "--from-zip":
+            cid, _, path = args[i + 1].partition("=")
+            out[cid] = path
+    return out
+
+
+def fetch_one(root, cid, locals_):
+    label, url, sha = PACKS[cid]
+    dest = os.path.join(root, "characters", cid, "voice")
+    if cid in locals_:
+        data = open(locals_[cid], "rb").read()
     else:
-        data = download()
+        data = download(url)
         if data is None:
-            msg = "千秋预录语音包在 GitHub 发布页上找不到（voicepack-chiaki-v1），这次的安装包不带预录语音。"
+            msg = f"{label}预录语音包在 GitHub 发布页上找不到（{url.split('/')[-2]}），这次的安装包不带{label}的预录语音。"
             if "--require" in sys.argv:
                 sys.exit(msg)
             warn(msg)
             return
     got = hashlib.sha256(data).hexdigest()
-    if got != SHA256:
-        sys.exit(f"语音包校验没通过：期望 {SHA256}，实际 {got}。不能打进安装包。")
+    if got != sha:
+        sys.exit(f"{label}语音包校验没通过：期望 {sha}，实际 {got}。不能打进安装包。")
 
     files = {}
     with zipfile.ZipFile(io.BytesIO(data)) as z:
@@ -89,11 +100,11 @@ def main():
                 continue
             files[info.filename] = body
     if "index.json" not in files:
-        sys.exit("语音包里没有 index.json。")
+        sys.exit(f"{label}语音包里没有 index.json。")
     lines = json.loads(files["index.json"]).get("lines", {})
     missing = [k for k in lines if f"{k}.opus" not in files]
     if not lines or missing:
-        sys.exit(f"语音包不完整：索引 {len(lines)} 句，缺 {len(missing)} 个音频文件。")
+        sys.exit(f"{label}语音包不完整：索引 {len(lines)} 句，缺 {len(missing)} 个音频文件。")
 
     # 先清掉旧的再放，免得上一版留下的句子混进来
     shutil.rmtree(dest, ignore_errors=True)
@@ -101,7 +112,22 @@ def main():
     for name, body in files.items():
         with open(os.path.join(dest, name), "wb") as f:
             f.write(body)
-    print(f"千秋预录语音包：放进了 {len(lines)} 句 -> {dest}")
+    print(f"{label}预录语音包：放进了 {len(lines)} 句 -> {dest}")
+
+
+def main():
+    # Windows 构建机的控制台默认不是 UTF-8，打印中文会报错退出
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
+    if only and only not in PACKS:
+        sys.exit(f"不认识的角色 {only}，可选：{', '.join(PACKS)}")
+    locals_ = local_zips()
+    for cid in PACKS:
+        if only and cid != only:
+            continue
+        fetch_one(root, cid, locals_)
 
 
 if __name__ == "__main__":

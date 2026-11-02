@@ -524,6 +524,83 @@ mod tests {
         assert!(check_request_id("a b").is_err());
         assert!(check_request_id(&"a".repeat(65)).is_err());
     }
+
+    fn rs_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                rs_files(&p, out);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                out.push(p);
+            }
+        }
+    }
+
+    /// 每个 #[tauri::command] 都得登记到 build.rs 的清单，并在至少一个窗口的 capability 里授权；
+    /// 漏了的话，前端调用会报 "Command xxx not allowed by ACL"（单元测试和 e2e 的模拟接口发现不了）
+    #[test]
+    fn every_command_is_registered_and_authorized() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut files = Vec::new();
+        rs_files(&root.join("src"), &mut files);
+        let marker = ["#[tauri::command", "]"].concat();
+        let mut defined = std::collections::BTreeSet::new();
+        for f in &files {
+            let text = std::fs::read_to_string(f).unwrap();
+            for part in text.split(marker.as_str()).skip(1) {
+                let mut words = part.split_whitespace();
+                let mut w = words.next();
+                while matches!(w, Some("pub" | "async")) {
+                    w = words.next();
+                }
+                if w == Some("fn") {
+                    if let Some(name) = words.next() {
+                        let name = name.split('(').next().unwrap_or(name);
+                        defined.insert(name.to_string());
+                    }
+                }
+            }
+        }
+        assert!(defined.len() > 50, "没扫到命令，扫描规则坏了：{defined:?}");
+
+        let build = std::fs::read_to_string(root.join("build.rs")).unwrap();
+        let list = build
+            .split("const COMMANDS")
+            .nth(1)
+            .and_then(|s| s.split("];").next())
+            .unwrap();
+        let listed: std::collections::BTreeSet<String> = list
+            .split('"')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_string)
+            .collect();
+
+        let mut authorized = std::collections::BTreeSet::new();
+        for e in std::fs::read_dir(root.join("capabilities"))
+            .unwrap()
+            .flatten()
+        {
+            let v: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(e.path()).unwrap()).unwrap();
+            for p in v["permissions"].as_array().unwrap() {
+                if let Some(n) = p.as_str().and_then(|s| s.strip_prefix("allow-")) {
+                    authorized.insert(n.replace('-', "_"));
+                }
+            }
+        }
+
+        let unlisted: Vec<_> = defined.difference(&listed).collect();
+        let unauthorized: Vec<_> = defined.difference(&authorized).collect();
+        assert!(
+            unlisted.is_empty(),
+            "没有登记到 build.rs 的命令清单：{unlisted:?}"
+        );
+        assert!(
+            unauthorized.is_empty(),
+            "没有在任何窗口的 capability 里授权：{unauthorized:?}"
+        );
+    }
 }
 
 // ---------------- 检查更新（v2.1 P10） ----------------

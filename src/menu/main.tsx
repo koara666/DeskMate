@@ -2,6 +2,7 @@ import { render } from 'preact';
 import '../styles/base.css';
 import '../styles/menu.css';
 import '../styles/skins/arcade.css';
+import '../styles/skins/lab.css';
 import { menuApi } from '../lib/ipc';
 import { Menu } from './Menu';
 

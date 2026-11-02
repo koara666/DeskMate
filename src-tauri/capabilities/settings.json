@@ -66,6 +66,10 @@
     "allow-voice-set-key",
     "allow-voice-clear-key",
     "allow-voice-test",
-    "allow-voice-clear-cache"
+    "allow-voice-clear-cache",
+    "allow-web-save",
+    "allow-asr-save",
+    "allow-asr-status",
+    "allow-asr-download"
   ]
 }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/preact';
 import { Pet } from './Pet';
-import type { PetApi } from '../lib/ipc';
+import type { PetApi, VoiceApi } from '../lib/ipc';
 import type { PetState } from '../lib/types';
 
 function fakeApi() {
@@ -238,3 +238,96 @@ describe('Pet 反应图', () => {
     expect(img()).toBe('data:idle');
   });
 });
+
+describe('Pet 说话时的表情', () => {
+  // 出声时不再一直是「说话」那一张：她说「晕了」就是晕的脸，说「困了」就是困的脸；没有合适的才用「说话」图
+  async function mountSpeaking() {
+    let say: ((e: { poses?: string[] }) => void) | null = null;
+    let poseCb: ((p: { pose: string; ms: number }) => void) | null = null;
+    const api = {
+      init: async () => ({
+        character: { id: 't', name: '测试酱', color: '' },
+        appearance: {
+          images: { idle: 'data:idle', talking: 'data:talking', dizzy: 'data:dizzy', idle_night: 'data:night', surprised: 'data:surprised' },
+          placeholder: false,
+        },
+        idle_animation: false,
+        dnd: false,
+      }),
+      click: vi.fn(async () => {}),
+      touch: vi.fn(async () => {}),
+      menu: vi.fn(async () => {}),
+      menuOpen: vi.fn(async () => {}),
+      startDrag: vi.fn(async () => {}),
+      onState: async () => () => {},
+      onChanged: async () => [],
+      onPose: async (cb: (p: { pose: string; ms: number }) => void) => {
+        poseCb = cb;
+        return () => {};
+      },
+    };
+    const voice = {
+      onSay: (cb: (e: { poses?: string[] }) => void) => {
+        say = cb;
+        return Promise.resolve(() => {});
+      },
+      onPlay: () => Promise.resolve(() => {}),
+      onStop: () => Promise.resolve(() => {}),
+      audio: async () => new ArrayBuffer(0),
+    } as unknown as VoiceApi;
+    // 假的 Web Speech：开口就触发 onstart
+    class Utterance {
+      onstart: (() => void) | null = null;
+      onend: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      voice = null;
+      lang = '';
+      rate = 1;
+      pitch = 1;
+      volume = 1;
+      constructor(public text: string) {}
+    }
+    vi.stubGlobal('SpeechSynthesisUtterance', Utterance);
+    vi.stubGlobal('speechSynthesis', {
+      getVoices: () => [{ name: 'Huihui', lang: 'zh-CN' }],
+      cancel: () => {},
+      speak: (u: Utterance) => u.onstart?.(),
+    });
+    render(<Pet api={api as never} voice={voice} />);
+    await act(async () => {});
+    const img = () => screen.getByAltText('测试酱').getAttribute('src');
+    const speak = (poses?: string[]) => act(() => say!({ text: 'x', lang: 'zh', fallback: '', voice: '', rate: 1, pitch: 1, volume: 1, poses } as never));
+    return { img, speak, pose: (pose: string) => act(() => poseCb!({ pose, ms: 5000 })) };
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('没有合适的表情时还是「说话」图', async () => {
+    const { img, speak } = await mountSpeaking();
+    speak([]);
+    expect(img()).toBe('data:talking');
+  });
+
+  it('按内容换：候选里角色有哪张用哪张，都没有就用「说话」图', async () => {
+    const { img, speak } = await mountSpeaking();
+    speak(['dizzy']);
+    expect(img()).toBe('data:dizzy');
+    speak(['idle_night', 'sleep']);
+    expect(img()).toBe('data:night');
+    speak(['angry', 'pout']); // 这个角色没有这两张
+    expect(img()).toBe('data:talking');
+    speak(['sleep', 'idle_night']); // 按顺序试：没有 sleep，用 idle_night
+    expect(img()).toBe('data:night');
+  });
+
+  it('摸头、晃晕之类的反应图在说话时也不会被「说话」图盖住', async () => {
+    const { img, speak, pose } = await mountSpeaking();
+    speak([]);
+    pose('surprised');
+    expect(img()).toBe('data:surprised');
+    // 反应图比按内容挑的表情优先
+    speak(['dizzy']);
+    expect(img()).toBe('data:surprised');
+  });
+});
+

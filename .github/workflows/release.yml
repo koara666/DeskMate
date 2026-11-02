@@ -44,9 +44,9 @@ jobs:
       # 不再在这里重跑测试：推送前本机 `npm run check` 已经全过，推送到 main 的 CI 也会再跑一遍；
       # 这里重跑只是白白多花十来分钟（DECISIONS #66）。
       # 下面两个包放在发布页上，找不到就让发布失败（--require）：保证下载到的安装包和开发机上的一样
-      - name: 放进千秋的 Q 版形象包
+      - name: 放进内置角色的 Q 版形象包（千秋、红莉栖）
         run: python scripts/chibi/fetch_art.py --require
-      - name: 放进千秋的预录语音包
+      - name: 放进内置角色的预录语音包（千秋、红莉栖）
         run: python scripts/voice/fetch_voice_pack.py --require
       - name: 构建安装包
         run: npx tauri build

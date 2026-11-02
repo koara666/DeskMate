@@ -23,7 +23,7 @@ const OUTCOME: Record<string, string> = {
   nothing: '没看：前面只有桌面',
   error: '没看成',
 };
-const TRIGGER: Record<string, string> = { hotkey: '你让她看', auto: '她主动看', preview: '预览' };
+const TRIGGER: Record<string, string> = { hotkey: '你让她看', auto: '她定时看', switch: '你切到新界面', preview: '预览' };
 
 interface Props {
   api: Pick<SettingsApi, 'saveVision' | 'visionCost' | 'visionPreview' | 'visionRecords'>;
@@ -126,7 +126,24 @@ export function VisionSection({ api, view, games }: Props) {
           </div>
 
           <h3>她什么时候主动看</h3>
-          <p class="muted small">做这些事超过 5 分钟后，她每隔一阵看一眼、说句话；全屏时不看（气泡显示不出来）。聊天、上网、其他程序从不主动看。</p>
+          <label class="row">
+            <input type="checkbox" aria-label="切到新界面时看一眼" checked={v.on_switch} onChange={(e) => save({ ...v, on_switch: (e.currentTarget as HTMLInputElement).checked })} />
+            <span>
+              你切到新界面时，她看一眼
+              <small>
+                比如你刚打开一个游戏，停几秒后她看一眼，自己决定要不要说话、说什么：可能是对这件事的反应（“要开始爬塔了呀”），
+                有值得在意的事才轻轻提醒一句，没什么可说就保持安静。同一个界面隔很久才会再看；全屏时不看（气泡显示不出来）。
+              </small>
+            </span>
+          </label>
+          <label class="row">
+            <input type="checkbox" aria-label="按时间定时看" checked={v.timed_look} onChange={(e) => save({ ...v, timed_look: (e.currentTarget as HTMLInputElement).checked })} />
+            <span>
+              也按时间定时看
+              <small>做同一件事满 5 分钟后，每隔下面设的时间看一眼、说句话。不如上面一条自然，一般不用开。</small>
+            </span>
+          </label>
+          <p class="muted small">在下面这些事上才会主动看。聊天、上网、其他程序从不主动看。</p>
           {AUTO.map((a) => (
             <label class="row" key={a.id}>
               <input
@@ -142,7 +159,7 @@ export function VisionSection({ api, view, games }: Props) {
           ))}
           <div class="row">
             <label>
-              两次之间至少隔（分钟）
+              定时看：两次之间至少隔（分钟）
               <input
                 type="number"
                 min={10}

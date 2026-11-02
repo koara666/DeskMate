@@ -36,7 +36,16 @@ describe('看一眼屏幕设置', () => {
     fireEvent.click(screen.getByText('允许她看屏幕').closest('label')!.querySelector('input')!);
     await flush();
     expect(saved.at(-1)).toMatchObject({ enabled: true, backend: 'claude' });
-    expect(screen.getByText(/涂黑 1 处/).textContent).toContain('她主动看');
+    expect(screen.getByText(/涂黑 1 处/).textContent).toContain('她定时看');
+    // 切到新界面时看一眼：默认开着，定时看默认关着
+    expect((screen.getByLabelText('切到新界面时看一眼') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('按时间定时看') as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByLabelText('切到新界面时看一眼'));
+    await flush();
+    expect(saved.at(-1)?.on_switch).toBe(false);
+    fireEvent.click(screen.getByLabelText('按时间定时看'));
+    await flush();
+    expect(saved.at(-1)?.timed_look).toBe(true);
     fireEvent.click(screen.getByText('看视频时').closest('label')!.querySelector('input')!);
     await flush();
     expect(saved.at(-1)?.auto_categories).toEqual(['game', 'video']);

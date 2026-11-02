@@ -2,6 +2,8 @@
 
 pub mod abilities;
 pub mod activity;
+pub mod asr;
+pub mod asr_names;
 pub mod backends;
 pub mod briefing;
 pub mod canon;
@@ -15,7 +17,9 @@ pub mod daily;
 pub mod db;
 pub mod desktop;
 pub mod diary;
+pub mod emotion;
 pub mod filter;
+pub mod fullscreen;
 pub mod games;
 pub mod games_llm;
 pub mod geometry;
@@ -143,6 +147,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         if let Err(e) = daily::apply_vision_hotkey(&handle, v.enabled, &v.hotkey) {
             log::warn!("{e}");
         }
+        let a = handle.state::<AppState>().settings().asr;
+        if let Err(e) = daily::apply_asr_hotkey(&handle, a.enabled && a.hotkey_enabled, &a.hotkey) {
+            log::warn!("{e}");
+        }
+        asr::on_startup(&handle);
     }
 
     // 桌宠出现后再在后台准备聊天窗口，不拖慢启动
@@ -328,6 +337,11 @@ pub fn run() {
             task_cmds::task_open_log,
             task_cmds::chat_task_report,
             settings_cmds::daily_save,
+            asr::asr_status,
+            asr::asr_available,
+            asr::asr_save,
+            asr::asr_download,
+            asr::asr_toggle,
         ])
         .build(tauri::generate_context!())
         .expect("DeskMate 启动失败");

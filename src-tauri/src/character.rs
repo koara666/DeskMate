@@ -35,7 +35,7 @@ pub const IDLE_VARIANTS: [&str; 7] = [
 ];
 
 /// 反应时短暂换上的图（摸头、甩晕、躲起来、输赢……，DECISIONS #55）：有图才换，没有就保持原来的状态图
-pub const POSES: [&str; 11] = [
+pub const POSES: [&str; 13] = [
     "pat",
     "dizzy",
     "pout",
@@ -47,6 +47,8 @@ pub const POSES: [&str; 11] = [
     "wink",
     "shy",
     "wake",
+    "angry",
+    "scared",
 ];
 
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
@@ -75,6 +77,9 @@ pub struct Lines {
 pub struct Manifest {
     pub id: String,
     pub name: String,
+    /// 简称、外号（可选）：语音输入听错名字时靠它们改回来，比如「红莉栖」「克里斯蒂娜」
+    #[serde(default)]
+    pub aliases: Vec<String>,
     /// 在列表里的排序（越小越靠前），没写时排在最后
     #[serde(default = "default_order")]
     pub order: i32,
@@ -118,7 +123,7 @@ pub struct Manifest {
 }
 
 /// 程序自带的界面皮肤（样式写在 `src/styles/skins/` 里，角色包只能选，不能带自己的样式代码）
-pub const SKINS: [&str; 2] = ["default", "arcade"];
+pub const SKINS: [&str; 3] = ["default", "arcade", "lab"];
 /// 角色包可以改的颜色
 pub const THEME_COLORS: [&str; 10] = [
     "accent",
@@ -136,7 +141,7 @@ pub const THEME_COLORS: [&str; 10] = [
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Theme {
-    /// 皮肤：default（通用）/ arcade（掌机像素风）
+    /// 皮肤：default（通用）/ arcade（掌机像素风）/ lab（实验室终端风）
     pub skin: String,
     /// 颜色变量名 → #rgb / #rrggbb / #rrggbbaa
     pub colors: BTreeMap<String, String>,
@@ -667,6 +672,20 @@ pub fn pick_line(list: &[String], fallback: &str, seed: u64) -> String {
     }
 }
 
+/// 内置完整角色（有 Q 版形象 + 日语声音）的登记表：scripts/builtin_characters.json。
+/// 测试按它给每个完整角色同一套要求，新角色登记后自动被测到，不用再各写一份。
+#[cfg(test)]
+pub fn voiced_character_ids() -> Vec<String> {
+    let reg: serde_json::Value =
+        serde_json::from_str(include_str!("../../scripts/builtin_characters.json")).unwrap();
+    reg.as_object()
+        .unwrap()
+        .keys()
+        .filter(|k| !k.starts_with('_'))
+        .cloned()
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -685,13 +704,105 @@ mod tests {
         let ok = |u: &str| {
             u.starts_with("data:image/svg+xml;base64,") || u.starts_with(image_url_base())
         };
-        for k in STATES.iter().chain(POSES.iter()) {
+        // angry / scared 是后来给红莉栖加的两张，千秋没有（说话时没有合适的图就用「说话」图）
+        for k in STATES
+            .iter()
+            .chain(POSES.iter().filter(|k| !["angry", "scared"].contains(k)))
+        {
             assert!(a.images.get(*k).is_some_and(|u| ok(u)), "缺少 {k}");
         }
         assert!(a.images.contains_key("idle_night"));
-        // 没有画好整套的角色照旧用占位形象
-        let other = chars.iter().find(|c| c.manifest.id == "nailong").unwrap();
-        assert!(appearance(other).placeholder);
+    }
+
+    #[test]
+    fn kurisu_has_her_own_chibi_set() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+        let dir = tempfile::tempdir().unwrap();
+        let chars = load_all(Some(&root), dir.path());
+        let c = chars
+            .iter()
+            .find(|c| c.manifest.id == "makise-kurisu")
+            .unwrap();
+        let a = appearance(c);
+        assert!(!a.placeholder, "红莉栖用自己的 Q 版形象");
+        // 内置的是代码画的 SVG；构建时放进了形象包就是 PNG（走图片协议）。两种都对
+        let ok = |u: &str| {
+            u.starts_with("data:image/svg+xml;base64,") || u.starts_with(image_url_base())
+        };
+        for k in STATES.iter().chain(POSES.iter()) {
+            assert!(a.images.get(*k).is_some_and(|u| ok(u)), "缺少 {k}");
+        }
+        for k in [
+            "idle_good",
+            "idle_low",
+            "idle_night",
+            "idle_rain",
+            "idle_winter",
+        ] {
+            assert!(a.images.contains_key(k), "缺少 {k}");
+        }
+        assert_eq!(c.manifest.theme.skin, "lab");
+        assert!(c.manifest.theme.sanitized().colors.len() >= 8);
+    }
+
+    #[test]
+    fn every_registered_character_meets_the_same_bar() {
+        // 完整角色同一套标准（登记在 scripts/builtin_characters.json）：以后新增角色登记后自动被查，不能各做各的
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+        let empty = tempfile::tempdir().unwrap();
+        let all = load_all(Some(&root), empty.path());
+        let ids = voiced_character_ids();
+        assert!(ids.len() >= 2, "登记表读到的角色太少：{ids:?}");
+        for id in &ids {
+            let c = all
+                .iter()
+                .find(|c| &c.manifest.id == id)
+                .unwrap_or_else(|| panic!("登记了 {id}，但 characters/ 里没有这个角色"));
+            // 形象：整套状态 + 动作都有（内置 SVG 兜底；装了形象包就是 PNG）。angry / scared 是红莉栖加的，其他角色可以没有
+            let a = appearance(c);
+            assert!(!a.placeholder, "{id} 要有自己的 Q 版形象");
+            for k in STATES
+                .iter()
+                .chain(POSES.iter().filter(|k| !["angry", "scared"].contains(k)))
+            {
+                assert!(a.images.contains_key(*k), "{id} 缺少 {k}");
+            }
+            for k in [
+                "idle_good",
+                "idle_low",
+                "idle_night",
+                "idle_rain",
+                "idle_winter",
+            ] {
+                assert!(a.images.contains_key(k), "{id} 缺少 {k}");
+            }
+            // 界面：自己的主题色
+            assert!(
+                c.manifest.theme.sanitized().colors.len() >= 8,
+                "{id} 主题色太少"
+            );
+            // 台词库：常驻片段在预算内、按关键词取用的有若干条
+            assert!(
+                c.quotes.fixed_count >= 3,
+                "{id} 常驻片段 {}",
+                c.quotes.fixed_count
+            );
+            assert_eq!(c.quotes.fixed_dropped, 0, "{id} 有常驻片段超出预算被丢掉了");
+            assert!(
+                c.quotes.keyed.len() >= 10,
+                "{id} 按关键词取用的 {}",
+                c.quotes.keyed.len()
+            );
+            // 日语台词：每个有声音的场景都写了，日语版里没有占位符以外的奇怪字符
+            let ja = crate::lines::Lines::load_dir(&root.join(id).join("lines")).all_ja();
+            assert!(ja.len() > 200, "{id} 的日语台词只有 {}", ja.len());
+            for j in &ja {
+                assert!(
+                    !j.contains('@') && !j.contains('（') && !j.contains('('),
+                    "{id}：{j}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -730,7 +841,7 @@ mod tests {
 
     #[test]
     fn id_rules() {
-        assert!(valid_id("deepseek-whale"));
+        assert!(valid_id("nanami-chiaki"));
         assert!(valid_id("yui_2"));
         assert!(!valid_id(""));
         assert!(!valid_id("../evil"));
@@ -991,20 +1102,8 @@ mod tests {
         let empty = tempfile::tempdir().unwrap();
         let all = load_all(Some(&root), empty.path());
         let ids: Vec<&str> = all.iter().map(|c| c.manifest.id.as_str()).collect();
-        assert_eq!(all[0].manifest.id, "deepseek-whale", "按 order 排序");
-        assert_eq!(all[7].manifest.id, "yui-sao");
-        for id in [
-            "deepseek-whale",
-            "nailong",
-            "naiwa",
-            "makise-kurisu",
-            "shiina-mayuri",
-            "nanami-chiaki",
-            "fujisaki-chihiro",
-            "yui-sao",
-        ] {
-            assert!(ids.contains(&id), "缺少内置角色 {id}");
-        }
+        // 现在只留两个做完整的角色；其余角色等做完整再加回来
+        assert_eq!(ids, ["nanami-chiaki", "makise-kurisu"], "按 order 排序");
         for c in &all {
             let id = &c.manifest.id;
             assert!(c.persona.contains("示范对话"), "{id} 缺少示范对话");
@@ -1012,8 +1111,8 @@ mod tests {
             assert!(!c.manifest.lines.greeting.is_empty(), "{id} 缺少开场白");
             assert!(c.manifest.color.starts_with('#'), "{id} 缺少主题色");
             let a = appearance(c);
-            // 七海千秋有自己画的一整套 Q 版形象，其他角色用占位形象
-            assert_eq!(a.placeholder, id != "nanami-chiaki", "{id}");
+            // 登记过的完整角色（千秋、红莉栖…）有自己画的一整套 Q 版形象，其他角色用占位形象
+            assert_eq!(a.placeholder, !voiced_character_ids().contains(id), "{id}");
             assert!(
                 c.builtin_dir
                     .as_ref()
@@ -1025,7 +1124,7 @@ mod tests {
             assert!(user_image_states(c).is_empty());
         }
         // 有原作往事的角色：每条都能被关键词想起
-        for id in ["makise-kurisu", "nanami-chiaki"] {
+        for id in voiced_character_ids() {
             let c = all.iter().find(|c| c.manifest.id == id).unwrap();
             assert!(c.canon.len() >= 10, "{id} 往事太少");
             for e in c.canon.iter() {
@@ -1061,6 +1160,41 @@ mod tests {
             "按关键词取用的 {}",
             c.quotes.keyed.len()
         );
+    }
+
+    #[test]
+    fn kurisu_ships_her_quote_library_and_japanese_lines() {
+        // 红莉栖的台词库（characters/makise-kurisu/quotes.md）：常驻部分有内容也没被预算砍掉，按关键词取用的有若干条
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+        let empty = tempfile::tempdir().unwrap();
+        let all = load_all(Some(&root), empty.path());
+        let c = all
+            .iter()
+            .find(|c| c.manifest.id == "makise-kurisu")
+            .unwrap();
+        assert!(
+            c.quotes.fixed_count >= 3,
+            "常驻片段 {}",
+            c.quotes.fixed_count
+        );
+        assert_eq!(c.quotes.fixed_dropped, 0, "有常驻片段超出预算被丢掉了");
+        assert!(
+            c.quotes.keyed.len() >= 10,
+            "按关键词取用的 {}",
+            c.quotes.keyed.len()
+        );
+        // 「克里斯蒂娜」的梗：用户一提这个外号就会想起相关的原作台词
+        let hit = crate::quotes::recall(&c.quotes, "我叫你克里斯蒂娜好不好");
+        assert!(hit.iter().any(|h| h.contains("蒂娜")), "{hit:?}");
+        // 每个有声音的场景都写了日语版（语音包按日语查），日语版里不留占位符以外的奇怪字符
+        let ja = crate::lines::Lines::load_dir(&root.join("makise-kurisu/lines")).all_ja();
+        assert!(ja.len() > 200, "红莉栖的日语台词只有 {}", ja.len());
+        for j in &ja {
+            assert!(
+                !j.contains('@') && !j.contains('（') && !j.contains('('),
+                "{j}"
+            );
+        }
     }
 
     #[test]

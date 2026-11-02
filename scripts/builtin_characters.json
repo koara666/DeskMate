@@ -1,0 +1,17 @@
+{
+  "_说明": "内置「完整角色」登记表：每个有 Q 版形象 + 日语声音的角色都在这里登记，三个下载包的地址按固定规则从这里推出来（scripts/builtin_characters.py）。新增角色只改这个文件，不要再往别处抄地址和校验值。",
+  "nanami-chiaki": {
+    "label": "千秋",
+    "short": "chiaki",
+    "art": { "version": 1, "sha256": "9ebba3cfb970f445c8f3af220c0e2120656ec37813f19cf6ad776bcd2b480bff" },
+    "voicepack": { "version": 1, "sha256": "afe8561b7aaa860951fbbb17ad83f7d2a64dacef45e345d430d1184a0da22e80" },
+    "model": { "version": 1, "sha256": "630af666d19d4521c834bbd6cb10ec8dc30a0d8e85e331a7ef18953a4fa14256" }
+  },
+  "makise-kurisu": {
+    "label": "红莉栖",
+    "short": "kurisu",
+    "art": { "version": 1, "sha256": "92da038dcc2190552dabf04d46f5af4efe7c518cd69a77fa259f59f1643e1d16" },
+    "voicepack": { "version": 1, "sha256": "a2876020b35974bc8f532333ef21a182df7cef3132cae2fa5b190b0a7c964bdb" },
+    "model": { "version": 1, "sha256": "3483f25ebf7098a3de533432c6a1595b5cd753d708e2cff5334bc672e8bcfad2" }
+  }
+}

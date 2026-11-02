@@ -55,6 +55,8 @@ pub struct AppState {
     pub radial: crate::radial::MenuState,
     /// 语音：缓存、正在说的
     pub voice: crate::voice::VoiceState,
+    /// 语音输入：识别器、正在录的这一轮、模型下载
+    pub asr: crate::asr::AsrState,
 }
 
 impl AppState {
@@ -94,6 +96,7 @@ impl AppState {
             update: Default::default(),
             radial: Default::default(),
             voice: Default::default(),
+            asr: Default::default(),
         }
     }
 

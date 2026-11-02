@@ -108,3 +108,14 @@ __pycache__/
 /scripts/voice-pack/
 /scripts/chibi/pack_art.py
 /scripts/chibi/slice_sheet.py
+
+# ===== 完整角色的发布包（形象包 / 语音包 / 声音模型）：只放发布页，不进仓库 =====
+# 命名规则见 scripts/builtin_characters.py，所有角色一样
+/*-art-v*.zip
+/*-voicepack-v*.zip
+/*-model.tar*
+/*-model/
+
+# ===== 红莉栖：训练用的原声数据集、形象表情表（只留本机）=====
+/Kurisu_Voice/
+/牧濑*.png

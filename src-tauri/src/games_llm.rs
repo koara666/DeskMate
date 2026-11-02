@@ -888,8 +888,18 @@ pub async fn turn_with(st: &AppState, id: &str, kind: &str, input: &str) -> Resu
     }
 }
 
-/// 主持人的固定回答的日语（本地写好，不用再问模型 / 翻译）
-pub fn answer_ja(answer: &str) -> Option<&'static str> {
+/// 主持人的固定回答的日语（本地写好，不用再问模型 / 翻译）；每个角色的口吻不一样，没单独写的角色用千秋的
+pub fn answer_ja(character_id: &str, answer: &str) -> Option<&'static str> {
+    if character_id == "makise-kurisu" {
+        return Some(match answer {
+            "是" => "ええ、そうよ。",
+            "不是" => "いいえ、違うわ。",
+            "无关" => "それは関係ないわね。",
+            "很接近" => "惜しいわね、かなり近いわよ。",
+            "不确定" => "うーん、どうかしら。",
+            _ => return None,
+        });
+    }
     Some(match answer {
         "是" => "うん、そうだよ。",
         "不是" => "ううん、違うよ。",
@@ -904,8 +914,12 @@ pub fn answer_ja(answer: &str) -> Option<&'static str> {
 /// 每一问中间模型现编的那句话不念（不然每问一次都要多翻译一次）。
 pub fn speak(app: &AppHandle, t: &Turn) {
     let st = app.state::<AppState>();
+    let cid = st
+        .current_character()
+        .map(|c| c.manifest.id.clone())
+        .unwrap_or_default();
     if let Some(a) = &t.answer
-        && let Some(ja) = answer_ja(a)
+        && let Some(ja) = answer_ja(&cid, a)
     {
         crate::voice::remember_ja(&st, a, ja);
         crate::voice::on_line(app, a, crate::voice::Scene::Game);
@@ -1023,10 +1037,17 @@ mod tests {
     #[test]
     fn every_host_answer_has_japanese() {
         // answer_of 认得的回答，都要有日语（不然那一句会退回去翻译或念中文）
-        for a in ["是", "不是", "无关", "很接近", "不确定"] {
-            assert!(answer_ja(a).is_some(), "{a}");
+        for id in ["nanami-chiaki", "makise-kurisu", "nailong"] {
+            for a in ["是", "不是", "无关", "很接近", "不确定"] {
+                assert!(answer_ja(id, a).is_some(), "{id} {a}");
+            }
+            assert!(answer_ja(id, "也许吧").is_none());
         }
-        assert!(answer_ja("也许吧").is_none());
+        // 红莉栖有自己的口吻
+        assert_ne!(
+            answer_ja("makise-kurisu", "是"),
+            answer_ja("nanami-chiaki", "是")
+        );
     }
 
     #[test]

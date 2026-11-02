@@ -124,6 +124,8 @@ pub struct Settings {
     pub voice: crate::voice::VoiceSettings,
     /// 联网搜索（默认开，只发搜索关键词，可关）
     pub web: crate::websearch::WebSettings,
+    /// 语音输入（默认关闭）
+    pub asr: crate::asr::AsrSettings,
 }
 
 impl Default for Settings {
@@ -131,7 +133,7 @@ impl Default for Settings {
         Self {
             global_prefs: CharacterPrefs::default(),
             character_prefs: Default::default(),
-            character_id: "deepseek-whale".into(),
+            character_id: "nanami-chiaki".into(),
             always_on_top: true,
             pet_scale: 1.0,
             idle_animation: true,
@@ -157,6 +159,7 @@ impl Default for Settings {
             vision: Default::default(),
             update: Default::default(),
             voice: Default::default(),
+            asr: Default::default(),
             web: Default::default(),
         }
     }
@@ -318,7 +321,7 @@ mod tests {
         .unwrap();
         let s = load(&conn);
         assert_eq!(s.pet_scale, 2.0);
-        assert_eq!(s.character_id, "deepseek-whale");
+        assert_eq!(s.character_id, "nanami-chiaki");
     }
 
     #[test]

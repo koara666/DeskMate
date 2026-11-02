@@ -3,6 +3,11 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
+  AsrDownload,
+  AsrSettings,
+  AsrStateEvent,
+  AsrStatus,
+  AsrTextEvent,
   MenuShow,
   VoiceSettings,
   UpdateProgress,
@@ -88,7 +93,29 @@ export interface ChatApi {
   update?: UpdateApi;
   /** 头顶气泡里点了「提醒」：她说一句，下面给提醒表单 */
   onReminderForm?(cb: (text: string) => void): Promise<UnlistenFn>;
+  /** 语音输入（对着麦克风说话）；不传时输入框没有麦克风按钮 */
+  asr?: AsrChatApi;
 }
+
+/** 语音输入：聊天窗口这一侧（开始 / 停止、状态、识别出来的文字） */
+export interface AsrChatApi {
+  /** 开关打开、模型也下好了 */
+  available(): Promise<boolean>;
+  /** 没在听就开始听，在听就停下 */
+  toggle(): Promise<void>;
+  onState(cb: (e: AsrStateEvent) => void): Promise<UnlistenFn>;
+  onText(cb: (e: AsrTextEvent) => void): Promise<UnlistenFn>;
+  /** 设置变了（开关、模型下好了）：重新问一次 available */
+  onSettingsChanged(cb: () => void): Promise<UnlistenFn>;
+}
+
+export const asrChatApi: AsrChatApi = {
+  available: () => invoke<boolean>('asr_available'),
+  toggle: () => invoke('asr_toggle'),
+  onState: (cb) => listen<AsrStateEvent>('asr-state', (e) => cb(e.payload)),
+  onText: (cb) => listen<AsrTextEvent>('asr-text', (e) => cb(e.payload)),
+  onSettingsChanged: (cb) => listen('settings-changed', () => cb()),
+};
 
 /** 更新：只能安装后端上次查到的版本（前端不能指定下载地址） */
 export interface UpdateApi {
@@ -157,6 +184,7 @@ export const chatApi: ChatApi = {
   games: gameApi,
   update: updateApi,
   onReminderForm: (cb) => listen<string>('chat-reminder-form', (e) => cb(e.payload)),
+  asr: asrChatApi,
 };
 
 export interface PetApi {
@@ -194,16 +222,33 @@ export const petApi: PetApi = {
 export type TouchPart = 'head' | 'rub' | 'drag' | 'hold' | 'poke';
 
 /** 桌宠窗口里的语音播放（系统语音在这里合成；云端 / 本机服务合成的音频从后端取来播放） */
+/** 说这句话时的表情候选（按顺序试，角色有哪张用哪张；没有 / 空 = 保持「说话」图） */
+export interface SayEvent {
+  text: string;
+  lang: string;
+  fallback: string;
+  voice: string;
+  rate: number;
+  pitch: number;
+  volume: number;
+  poses?: string[];
+}
+export interface PlayEvent {
+  id: string;
+  volume: number;
+  poses?: string[];
+}
+
 export interface VoiceApi {
-  onSay(cb: (e: { text: string; lang: string; fallback: string; voice: string; rate: number; pitch: number; volume: number }) => void): Promise<UnlistenFn>;
-  onPlay(cb: (e: { id: string; volume: number }) => void): Promise<UnlistenFn>;
+  onSay(cb: (e: SayEvent) => void): Promise<UnlistenFn>;
+  onPlay(cb: (e: PlayEvent) => void): Promise<UnlistenFn>;
   onStop(cb: () => void): Promise<UnlistenFn>;
   audio(id: string): Promise<ArrayBuffer>;
 }
 
 export const voiceApi: VoiceApi = {
-  onSay: (cb) => listen<{ text: string; lang: string; fallback: string; voice: string; rate: number; pitch: number; volume: number }>('voice-say', (e) => cb(e.payload)),
-  onPlay: (cb) => listen<{ id: string; volume: number }>('voice-play', (e) => cb(e.payload)),
+  onSay: (cb) => listen<SayEvent>('voice-say', (e) => cb(e.payload)),
+  onPlay: (cb) => listen<PlayEvent>('voice-play', (e) => cb(e.payload)),
   onStop: (cb) => listen('voice-stop', () => cb()),
   audio: (id) => invoke<ArrayBuffer>('voice_audio', { id }),
 };
@@ -265,6 +310,10 @@ export const settingsApi = {
   voiceClearKey: (which: 'fish' | 'openai') => invoke('voice_clear_key', { which }),
   voiceTest: () => invoke('voice_test'),
   voiceClearCache: () => invoke<number>('voice_clear_cache'),
+  asrSave: (asr: AsrSettings) => invoke<AsrSettings>('asr_save', { asr }),
+  asrStatus: () => invoke<AsrStatus>('asr_status'),
+  asrDownload: () => invoke('asr_download'),
+  onAsrDownload: (cb: (d: AsrDownload) => void) => listen<AsrDownload>('asr-download', (e) => cb(e.payload)),
   updateSave: (autoCheck: boolean) => invoke<UpdateSettings>('update_save', { autoCheck }),
   webSave: (enabled: boolean) => invoke<WebSettings>('web_save', { enabled }),
   saveNickname: (nickname: string) => invoke<string>('nickname_save', { nickname }),

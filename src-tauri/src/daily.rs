@@ -5,13 +5,14 @@
 
 use crate::chat::{self, PetState};
 use crate::desktop;
+use crate::fullscreen;
 use crate::memory;
 use crate::state::AppState;
 use crate::usage;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio_util::sync::CancellationToken;
@@ -93,6 +94,8 @@ pub struct DailyState {
     hotkey: Mutex<Option<Shortcut>>,
     /// 「看一眼」的快捷键（第三层打开时才注册）
     vision_hotkey: Mutex<Option<Shortcut>>,
+    /// 语音输入的快捷键（打开语音输入并勾选快捷键时才注册）
+    asr_hotkey: Mutex<Option<Shortcut>>,
     /// 今天主动搭话的次数（日期，次数）
     proactive_count: Mutex<(String, u32)>,
 }
@@ -124,21 +127,6 @@ pub fn interact(app: &AppHandle) {
 }
 
 // ---------------- Windows 系统查询 ----------------
-
-/// 有全屏程序在前台（游戏、全屏视频、演示模式）
-#[cfg(windows)]
-pub fn fullscreen_active() -> bool {
-    use windows_sys::Win32::UI::Shell::SHQueryUserNotificationState;
-    let mut state = 0;
-    // QUNS_BUSY = 2（全屏程序），QUNS_RUNNING_D3D_FULL_SCREEN = 3，QUNS_PRESENTATION_MODE = 4
-    let hr = unsafe { SHQueryUserNotificationState(&mut state) };
-    hr >= 0 && matches!(state, 2..=4)
-}
-
-#[cfg(not(windows))]
-pub fn fullscreen_active() -> bool {
-    false
-}
 
 /// 系统多久没有键盘鼠标输入了（秒）
 #[cfg(windows)]
@@ -273,7 +261,36 @@ pub fn apply_vision_hotkey(app: &AppHandle, enabled: bool, hotkey: &str) -> Resu
     Ok(())
 }
 
-/// 快捷键按下：「看一眼」或者显示/隐藏聊天输入框
+/// 注册（或取消）语音输入的快捷键
+pub fn apply_asr_hotkey(app: &AppHandle, enabled: bool, hotkey: &str) -> Result<(), String> {
+    let st = app.state::<AppState>();
+    let gs = app.global_shortcut();
+    let mut cur = st
+        .daily
+        .asr_hotkey
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if let Some(old) = cur.take() {
+        let _ = gs.unregister(old);
+    }
+    if !enabled {
+        return Ok(());
+    }
+    let sc = parse_hotkey(hotkey)?;
+    let taken = |m: &Mutex<Option<Shortcut>>| {
+        m.lock().unwrap_or_else(|e| e.into_inner()).as_ref() == Some(&sc)
+    };
+    if taken(&st.daily.hotkey) || taken(&st.daily.vision_hotkey) {
+        return Err("语音输入的快捷键不能和「唤出聊天」「看一眼」的一样".into());
+    }
+    gs.register(sc).map_err(|e| {
+        format!("快捷键 {hotkey} 注册失败，可能已经被其他程序占用了，换一个试试（{e}）")
+    })?;
+    *cur = Some(sc);
+    Ok(())
+}
+
+/// 快捷键按下：「看一眼」、语音输入，或者显示/隐藏聊天输入框
 pub fn on_hotkey(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState) {
     if state != ShortcutState::Pressed {
         return;
@@ -289,6 +306,21 @@ pub fn on_hotkey(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState) {
     if is_vision {
         interact(app);
         crate::vision::on_hotkey(app);
+        return;
+    }
+    let is_asr = app
+        .state::<AppState>()
+        .daily
+        .asr_hotkey
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        == Some(shortcut);
+    if is_asr {
+        interact(app);
+        let app = app.clone();
+        // 弹出聊天框、打开麦克风都放到后台，不堵住快捷键回调
+        std::thread::spawn(move || crate::asr::on_hotkey(&app));
         return;
     }
     if let Some(p) = desktop::pet(app)
@@ -309,10 +341,11 @@ pub fn on_hotkey(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState) {
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut tick: u64 = 0;
+        let mut fs_watch = FullscreenWatch::default();
         loop {
             tokio::time::sleep(Duration::from_secs(3)).await;
             tick += 1;
-            check_fullscreen(&app);
+            check_fullscreen(&app, &mut fs_watch);
             // 主动行为：队列里有待说的话才做事（队列空时只是加一次锁）
             crate::proactive::tick(&app);
             // 睡着时每 3 秒看一次用户回来没有（只是一次系统调用），醒得及时；平时 30 秒查一次
@@ -332,18 +365,26 @@ pub fn spawn(app: AppHandle) {
     });
 }
 
-fn check_fullscreen(app: &AppHandle) {
+/// 全屏监视：防抖状态，以及这次是什么时候被藏起来的（写日志用）
+#[derive(Default)]
+struct FullscreenWatch {
+    debounce: fullscreen::Debounce,
+    hidden_at: Option<Instant>,
+}
+
+/// 每 3 秒对一次「该不该躲起来」：不是只在状态翻转时动作，所以中途改了设置、手动把她叫出来都不会卡在隐藏状态
+fn check_fullscreen(app: &AppHandle, watch: &mut FullscreenWatch) {
     let st = app.state::<AppState>();
     let s = st.settings().daily;
-    let fs = fullscreen_active();
-    let was = st.daily.fullscreen.swap(fs, Ordering::Relaxed);
-    if fs == was {
-        return;
-    }
+    let found = fullscreen::detect();
+    let fs = watch.debounce.push(found.is_some());
+    st.daily.fullscreen.store(fs, Ordering::Relaxed);
+    let hidden = st.daily.hidden_for_fullscreen.load(Ordering::Relaxed);
     if fs && s.hide_in_fullscreen {
-        if desktop::pet(app)
-            .and_then(|p| p.is_visible().ok())
-            .unwrap_or(false)
+        if !hidden
+            && desktop::pet(app)
+                .and_then(|p| p.is_visible().ok())
+                .unwrap_or(false)
         {
             st.daily
                 .hidden_for_fullscreen
@@ -352,18 +393,21 @@ fn check_fullscreen(app: &AppHandle) {
             if let Some(p) = desktop::pet(app) {
                 let _ = desktop::hide_window(&p);
             }
-            log::info!("检测到全屏程序，已自动隐藏");
+            watch.hidden_at = Some(Instant::now());
+            let (exe, why) = found
+                .map(|f| (f.exe, f.reason))
+                .unwrap_or_else(|| (String::new(), ""));
+            log::info!("检测到全屏程序（{exe}，{why}），已自动隐藏");
         }
-    } else if !fs
-        && st
-            .daily
+    } else if hidden {
+        st.daily
             .hidden_for_fullscreen
-            .swap(false, Ordering::Relaxed)
-    {
+            .store(false, Ordering::Relaxed);
         if let Some(p) = desktop::pet(app) {
             show_no_activate(&p);
         }
-        log::info!("全屏程序已退出，恢复显示");
+        let secs = watch.hidden_at.take().map_or(0, |t| t.elapsed().as_secs());
+        log::info!("全屏程序已退出，恢复显示（隐藏了 {secs} 秒）");
     }
 }
 

@@ -67,6 +67,17 @@ impl Default for VoiceScenes {
     }
 }
 
+/// GPT-SoVITS 的接口地址和参考音频：每个角色可以单独存一份（千秋、红莉栖的声音是两个不同的模型，
+/// 各自的服务和参考音频不一样）。没单独存的角色用 `VoiceSettings` 里那一份通用的。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SovitsProfile {
+    pub url: String,
+    pub ref_audio: String,
+    pub ref_text: String,
+    pub ref_lang: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct VoiceSettings {
@@ -99,6 +110,8 @@ pub struct VoiceSettings {
     pub sovits_ref_audio: String,
     pub sovits_ref_text: String,
     pub sovits_ref_lang: String,
+    /// 每个角色自己的 GPT-SoVITS 设置（角色 id → 设置），优先于上面通用的那一份
+    pub sovits_profiles: std::collections::BTreeMap<String, SovitsProfile>,
     /// OpenAI 兼容
     pub openai_url: String,
     pub openai_model: String,
@@ -127,6 +140,7 @@ impl Default for VoiceSettings {
             sovits_ref_audio: String::new(),
             sovits_ref_text: String::new(),
             sovits_ref_lang: "ja".into(),
+            sovits_profiles: Default::default(),
             openai_url: "https://api.openai.com/v1".into(),
             openai_model: "gpt-4o-mini-tts".into(),
             openai_voice: "nova".into(),
@@ -190,9 +204,54 @@ impl VoiceSettings {
         self.sovits_ref_audio = clip(&self.sovits_ref_audio, 400);
         self.sovits_ref_text = clip(&self.sovits_ref_text, 200);
         self.sovits_ref_lang = clip(&self.sovits_ref_lang, 8);
+        let mut profiles = std::collections::BTreeMap::new();
+        for (id, p) in std::mem::take(&mut self.sovits_profiles)
+            .into_iter()
+            .take(16)
+        {
+            let id_ok = !id.is_empty()
+                && id.len() <= 40
+                && id
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_');
+            if !id_ok {
+                continue;
+            }
+            let url = clip(&p.url, 200).trim_end_matches('/').to_string();
+            profiles.insert(
+                id,
+                SovitsProfile {
+                    url: if url_ok(&url) { url } else { String::new() },
+                    ref_audio: clip(&p.ref_audio, 400),
+                    ref_text: clip(&p.ref_text, 200),
+                    ref_lang: clip(&p.ref_lang, 8),
+                },
+            );
+        }
+        self.sovits_profiles = profiles;
         self.openai_model = clip(&self.openai_model, 64);
         self.openai_voice = clip(&self.openai_voice, 32);
         self
+    }
+
+    /// 这个角色实际用的设置：她单独存过 GPT-SoVITS 的参考音频，就用她自己的接口地址和参考音频，否则用通用的
+    pub fn for_character(&self, character_id: &str) -> VoiceSettings {
+        let mut v = self.clone();
+        if let Some(p) = self
+            .sovits_profiles
+            .get(character_id)
+            .filter(|p| !p.ref_audio.is_empty())
+        {
+            if !p.url.is_empty() {
+                v.sovits_url = p.url.clone();
+            }
+            v.sovits_ref_audio = p.ref_audio.clone();
+            v.sovits_ref_text = p.ref_text.clone();
+            if !p.ref_lang.is_empty() {
+                v.sovits_ref_lang = p.ref_lang.clone();
+            }
+        }
+        v
     }
 
     /// 要不要花钱（云端、按字计费的）
@@ -297,8 +356,20 @@ impl Slot {
         Some(self.ticket)
     }
 
+    /// 有一句在合成或者在念
+    fn busy(&self, now: i64) -> bool {
+        self.pending || now < self.until
+    }
+
     fn is_current(&self, ticket: u64) -> bool {
         self.ticket == ticket
+    }
+
+    /// 这一条语音的下一句还在合成：算「忙」，免得前一句念完、下一句还没出声的空档里被低优先级的话插进来顶掉
+    fn hold(&mut self, ticket: u64) {
+        if self.ticket == ticket {
+            self.pending = true;
+        }
     }
 
     /// 这一句没念成（作废、过期、合成失败）
@@ -423,12 +494,103 @@ pub struct VoiceState {
     gate: tokio::sync::Mutex<()>,
     /// 最近的「中文 → 日语」（预写台词、聊天回复附带的日语）
     ja: Mutex<VecDeque<(String, String)>>,
+    /// 回复里的日语还没写完就先开口的那一句：后面写出来的句子往这里送
+    stream: Mutex<Option<StreamCtx>>,
+}
+
+/// 日语还在写时已经开口的那条聊天语音
+struct StreamCtx {
+    ticket: u64,
+    tx: tokio::sync::mpsc::UnboundedSender<String>,
+    /// 已经念出去的第一句（原文，用来从完整日语里切掉）
+    first_raw: String,
+    /// 已经排上的字数
+    spoken: usize,
 }
 
 impl VoiceState {
     fn slot(&self) -> std::sync::MutexGuard<'_, Slot> {
         self.slot.lock().unwrap_or_else(|e| e.into_inner())
     }
+
+    fn stream(&self) -> std::sync::MutexGuard<'_, Option<StreamCtx>> {
+        self.stream.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// 句末符号
+fn is_stop(c: char) -> bool {
+    matches!(c, '。' | '！' | '？' | '!' | '?' | '…' | '～' | '~' | '\n')
+}
+
+/// 一句至少有几个字才单独念（「えっと……」这种太短，并到下一句）
+const MIN_CHUNK: usize = 6;
+/// 一次最多切成几段
+const MAX_CHUNKS: usize = 4;
+/// 日语还在写时，第一句至少几个字就先开口（「えっと。」不够，「ええ、そうよ。」够）
+const LEAD_MIN: usize = 4;
+
+/// 把要念的话切成一句一句：合成一句、念一句，下一句在念的时候合成，第一声就不用等整段。
+/// 连着的句末符号（「……」「？！」）算一句的结尾；太短的并到下一句，最后一句太短并到上一句。
+pub fn split_chunks(text: &str) -> Vec<String> {
+    let mut parts: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut in_stop = false;
+    for c in text.trim().chars() {
+        if in_stop && !is_stop(c) {
+            parts.push(std::mem::take(&mut cur));
+        }
+        cur.push(c);
+        in_stop = is_stop(c);
+    }
+    if !cur.trim().is_empty() {
+        parts.push(cur);
+    }
+    let mut out: Vec<String> = Vec::new();
+    let mut carry = String::new();
+    for p in parts {
+        carry.push_str(&p);
+        if carry.chars().filter(|c| c.is_alphanumeric()).count() >= MIN_CHUNK {
+            out.push(std::mem::take(&mut carry));
+        }
+    }
+    if !carry.trim().is_empty() {
+        match out.last_mut() {
+            Some(last) => last.push_str(&carry),
+            None => out.push(carry),
+        }
+    }
+    while out.len() > MAX_CHUNKS {
+        let tail = out.pop().unwrap_or_default();
+        if let Some(last) = out.last_mut() {
+            last.push_str(&tail);
+        }
+    }
+    out.into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// 还在写的日语里，第一句写完了吗：返回第一句结尾（字节位置，含句末符号）。
+/// 句末符号后面还得再跟一个字才算结束（免得把「……」切成两半）；光是「えっと。」这种太短，不算一句。
+pub fn lead_sentence(partial: &str) -> Option<usize> {
+    let mut seen_stop = false;
+    let mut end = 0;
+    for (i, c) in partial.char_indices() {
+        if seen_stop && !is_stop(c) {
+            let first = &partial[..end];
+            if first.chars().filter(|c| c.is_alphanumeric()).count() >= LEAD_MIN {
+                return Some(end);
+            }
+            seen_stop = false;
+        }
+        if is_stop(c) {
+            seen_stop = true;
+            end = i + c.len_utf8();
+        }
+    }
+    None
 }
 
 /// 聊天回复要不要附日语：开着声音、说日语、聊天回复会念
@@ -699,6 +861,8 @@ pub struct SayEvent {
     pub rate: f32,
     pub pitch: f32,
     pub volume: f32,
+    /// 说这句话时的表情候选（按顺序试，角色有哪张用哪张；空 = 保持「说话」图），见 `emotion.rs`
+    pub poses: &'static [&'static str],
 }
 
 /// 合成好的音频：桌宠窗口用 `voice_audio(id)` 取来播放
@@ -706,6 +870,8 @@ pub struct SayEvent {
 pub struct PlayEvent {
     pub id: String,
     pub volume: f32,
+    /// 同 `SayEvent::poses`
+    pub poses: &'static [&'static str],
 }
 
 /// 现在能不能出声（纯函数）
@@ -724,7 +890,7 @@ pub fn on_line(app: &AppHandle, text: &str, scene: Scene) {
     if !should_speak(&s.voice, scene, s.dnd, st.daily.is_fullscreen()) {
         return;
     }
-    let v = s.voice;
+    let v = s.voice.for_character(&s.character_id);
     let p = plan(&st, &v, text);
     if p == Plan::Silent {
         return;
@@ -762,9 +928,27 @@ pub fn on_chat_stream(app: &AppHandle, line: &str, ja: bool) -> bool {
     if !should_speak(&s.voice, scene, s.dnd, st.daily.is_fullscreen()) {
         return false;
     }
-    let v = s.voice;
+    let v = s.voice.for_character(&s.character_id);
     // 预录语音不念聊天回复：有意不念，回复写完后也不用再试
     if v.engine == "pack" {
+        return true;
+    }
+    // 第一句在日语还没写完时就开口了：把剩下的送给同一条语音，不另起一条
+    let started = if ja { st.voice.stream().take() } else { None };
+    if let Some(ctx) = started {
+        if st.voice.slot().is_current(ctx.ticket)
+            && let Some(rest) = line.strip_prefix(ctx.first_raw.as_str())
+        {
+            let max = ja_max(v.max_chars).saturating_sub(ctx.spoken);
+            let rest = if max >= MIN_CHUNK {
+                condense(rest, max)
+            } else {
+                String::new()
+            };
+            if !rest.is_empty() {
+                let _ = ctx.tx.send(rest);
+            }
+        }
         return true;
     }
     let (text, lang) = if ja {
@@ -790,6 +974,61 @@ pub fn on_chat_stream(app: &AppHandle, line: &str, ja: bool) -> bool {
     true
 }
 
+/// 日语还在写（`[[日语：` 没闭合）：第一句一写完就先开口，后面的句子写出来再接着念。
+/// 返回 true = 已经开口，回复写完后不用再念一遍。
+pub fn on_chat_partial(app: &AppHandle, partial: &str) -> bool {
+    let st = app.state::<AppState>();
+    if st.voice.stream().is_some() {
+        return true;
+    }
+    let Some(end) = lead_sentence(partial) else {
+        return false;
+    };
+    let s = st.settings();
+    if !should_speak(&s.voice, Scene::Chat, s.dnd, st.daily.is_fullscreen()) {
+        return false;
+    }
+    let v = s.voice.for_character(&s.character_id);
+    // 预录语音不念聊天回复；系统语音可能没有日语声音、要靠中文兜底：都等写完再说
+    if v.lang != "ja" || v.engine == "pack" || v.engine == "system" {
+        return false;
+    }
+    let first_raw = partial[..end].trim().to_string();
+    let first = condense(&first_raw, ja_max(v.max_chars));
+    if first.is_empty() {
+        return false;
+    }
+    let now = crate::desktop::now_ms();
+    let Some(ticket) = st.voice.slot().accept(Scene::Chat, now) else {
+        return false;
+    };
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let _ = tx.send(first.clone());
+    *st.voice.stream() = Some(StreamCtx {
+        ticket,
+        tx,
+        first_raw,
+        spoken: first.chars().count(),
+    });
+    speak_chunks(
+        app,
+        v,
+        Vec::new(),
+        Some(rx),
+        "ja",
+        String::new(),
+        Scene::Chat,
+        ticket,
+        now,
+    );
+    true
+}
+
+/// 这一轮回复写完了（或者被取消）：后面不会再有句子送来，让正在念的那条语音念完就收尾
+pub fn finish_chat_stream(app: &AppHandle) {
+    *app.state::<AppState>().voice.stream() = None;
+}
+
 /// 流式输出到一半时，取已经写完的第一句（中文语音用）；还没写够返回 None。
 /// 光是「嗯……」这种不够一句，继续等；一直没有句号但已经写满上限也取。
 pub fn first_sentence(acc: &str, max: usize) -> Option<String> {
@@ -805,6 +1044,14 @@ pub fn first_sentence(acc: &str, max: usize) -> Option<String> {
         return Some(condense(acc, max)).filter(|c| !c.is_empty());
     }
     None
+}
+
+/// 她现在是不是正在出声（或者马上要出声）：语音输入在这期间不收音
+pub fn is_speaking(app: &AppHandle) -> bool {
+    app.state::<AppState>()
+        .voice
+        .slot()
+        .busy(crate::desktop::now_ms())
 }
 
 /// 马上闭嘴：用户说话了、点了停止、关了声音。还没念的旧句子也作废
@@ -848,34 +1095,32 @@ fn speak(
     ticket: u64,
     born: i64,
 ) {
+    // 要向引擎合成的（本机 / 云端）：一句一句合成、一句一句念
+    if v.engine != "system" && v.engine != "pack" {
+        speak_chunks(
+            app,
+            v,
+            split_chunks(&text),
+            None,
+            lang,
+            zh,
+            scene,
+            ticket,
+            born,
+        );
+        return;
+    }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let st = app.state::<AppState>();
         let volume = v.volume as f32 / 100.0;
         let (id, ms) = if v.engine == "system" {
             (None, say_ms(&text, lang))
-        } else if v.engine == "pack" {
+        } else {
             // 语音包里现成的：不用向引擎要，直接播
             match pack_dir(&st).and_then(|d| pack_find(&d, &text)) {
                 Some((id, ms)) => (Some(id), ms),
                 None => {
-                    st.voice.slot().release(ticket);
-                    return;
-                }
-            }
-        } else {
-            // 同一时间只向引擎要一句；轮到我时如果已经被更新的一句顶掉，就不合成了
-            let _gate = st.voice.gate.lock().await;
-            if !st.voice.slot().is_current(ticket) {
-                return;
-            }
-            match synth_cached(&st, &v, &text, lang).await {
-                Ok(id) => {
-                    let ms = cached_ms(&st, &id).unwrap_or_else(|| say_ms(&text, lang));
-                    (Some(id), ms)
-                }
-                Err(e) => {
-                    log::info!("语音合成失败：{e}");
                     st.voice.slot().release(ticket);
                     return;
                 }
@@ -902,9 +1147,10 @@ fn speak(
         st.voice
             .slot()
             .playing(ticket, crate::desktop::now_ms(), ms);
+        let poses = crate::emotion::poses_for_text(&zh);
         match id {
             Some(id) => {
-                let _ = app.emit_to("pet", "voice-play", PlayEvent { id, volume });
+                let _ = app.emit_to("pet", "voice-play", PlayEvent { id, volume, poses });
             }
             None => {
                 let _ = app.emit_to(
@@ -918,9 +1164,95 @@ fn speak(
                         rate: v.speed,
                         pitch: v.system_pitch,
                         volume,
+                        poses,
                     },
                 );
             }
+        }
+    });
+}
+
+/// 一句一句合成、一句一句念（本机 GPT-SoVITS / 云端引擎）：第一声只等第一句合成好，
+/// 后面的句子趁前一句在念的时候合成。`first` 是已经有的句子，`rx` 是之后还会陆续送来的（日语边写边念）。
+#[allow(clippy::too_many_arguments)]
+fn speak_chunks(
+    app: &AppHandle,
+    v: VoiceSettings,
+    first: Vec<String>,
+    mut rx: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
+    lang: &'static str,
+    zh: String,
+    scene: Scene,
+    ticket: u64,
+    born: i64,
+) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let st = app.state::<AppState>();
+        let volume = v.volume as f32 / 100.0;
+        let poses = crate::emotion::poses_for_text(&zh);
+        let mut queue: VecDeque<String> = first.into();
+        let mut played = 0usize;
+        loop {
+            let text = match queue.pop_front() {
+                Some(t) => t,
+                None => match rx.as_mut() {
+                    Some(r) => match r.recv().await {
+                        Some(t) => {
+                            queue.extend(split_chunks(&t));
+                            continue;
+                        }
+                        None => break,
+                    },
+                    None => break,
+                },
+            };
+            if played > 0 {
+                st.voice.slot().hold(ticket);
+            }
+            // 同一时间只向引擎要一句；轮到我时如果已经被更新的一句顶掉，就不合成了
+            let id = {
+                let _gate = st.voice.gate.lock().await;
+                if !st.voice.slot().is_current(ticket) {
+                    return;
+                }
+                match synth_cached(&st, &v, &text, lang).await {
+                    Ok(id) => id,
+                    Err(e) => {
+                        log::info!("语音合成失败：{e}");
+                        st.voice.slot().release(ticket);
+                        return;
+                    }
+                }
+            };
+            let ms = cached_ms(&st, &id).unwrap_or_else(|| say_ms(&text, lang));
+            // 合成期间被新的一句顶掉了 / 第一句等太久文字早就看完了：不念（后面几句只看有没有被顶掉）
+            let stale = |st: &AppState| {
+                !st.voice.slot().is_current(ticket)
+                    || (played == 0 && crate::desktop::now_ms() - born > scene.max_age_ms())
+            };
+            if stale(&st) {
+                st.voice.slot().release(ticket);
+                return;
+            }
+            // 上一句快念完了：等它念完、喘一口气再开口，不硬切；自己的前一句一定等到念完
+            let wait = st.voice.slot().remaining(crate::desktop::now_ms());
+            if wait > 0 && (played > 0 || wait <= WAIT_PREV_MS) {
+                tokio::time::sleep(std::time::Duration::from_millis(wait as u64 + BREATH_MS)).await;
+                if stale(&st) {
+                    st.voice.slot().release(ticket);
+                    return;
+                }
+            }
+            st.voice
+                .slot()
+                .playing(ticket, crate::desktop::now_ms(), ms);
+            let _ = app.emit_to("pet", "voice-play", PlayEvent { id, volume, poses });
+            played += 1;
+        }
+        // 一句都没念成（比如送来的全是空话）：把「正在合成」的占位放掉
+        if played == 0 {
+            st.voice.slot().release(ticket);
         }
     });
 }
@@ -938,7 +1270,8 @@ pub fn warm_up(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(8)).await;
         let st = app.state::<AppState>();
-        let v = st.settings().voice;
+        let s = st.settings();
+        let v = s.voice.for_character(&s.character_id);
         if !v.enabled || v.engine != "sovits" || v.sovits_ref_audio.is_empty() {
             return;
         }
@@ -1030,8 +1363,8 @@ pub fn cache_id(v: &VoiceSettings, text: &str, lang: &str) -> String {
             v.fish_model, v.fish_engine, v.speed, text
         ),
         "sovits" => format!(
-            "sovits|{}|{}|{}|{lang}|{}",
-            v.sovits_ref_audio, v.sovits_ref_lang, v.speed, text
+            "sovits|{}|{}|{}|{}|{lang}|{}",
+            v.sovits_ref_audio, v.sovits_ref_text, v.sovits_ref_lang, v.speed, text
         ),
         "openai" => format!(
             "openai|{}|{}|{}|{}",
@@ -1043,6 +1376,34 @@ pub fn cache_id(v: &VoiceSettings, text: &str, lang: &str) -> String {
     d.iter().take(16).map(|b| format!("{b:02x}")).collect()
 }
 
+/// 在 `refs.txt`（每行 `文件名|日语原文|语气`，`#` 开头是注释）里找某个参考音频说的话
+pub fn find_ref_text(list: &str, file_name: &str) -> Option<String> {
+    list.lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .find_map(|l| {
+            let mut cols = l.split('|');
+            let (f, t) = (cols.next()?.trim(), cols.next()?.trim());
+            (f.eq_ignore_ascii_case(file_name) && !t.is_empty()).then(|| t.to_string())
+        })
+}
+
+impl VoiceSettings {
+    /// 参考音频旁边有 `refs.txt` 并且写了这个文件，就以它为准：模型文件夹里换了参考音频，
+    /// 一起换掉 `refs.txt`，用户不用再去设置里重填「参考音频说的话」（填错一个字会让声音变形）。
+    pub fn with_ref_text_from_list(&self) -> VoiceSettings {
+        let mut v = self.clone();
+        if v.engine == "sovits"
+            && let Some(i) = v.sovits_ref_audio.rfind(['/', '\\'])
+            && let Ok(list) =
+                std::fs::read_to_string(format!("{}/refs.txt", &v.sovits_ref_audio[..i]))
+            && let Some(t) = find_ref_text(&list, &v.sovits_ref_audio[i + 1..])
+        {
+            v.sovits_ref_text = t;
+        }
+        v
+    }
+}
+
 /// 合成（有缓存就直接用），返回缓存 id
 async fn synth_cached(
     st: &AppState,
@@ -1050,6 +1411,8 @@ async fn synth_cached(
     text: &str,
     lang: &str,
 ) -> Result<String, String> {
+    let resolved = v.with_ref_text_from_list();
+    let v = &resolved;
     let id = cache_id(v, text, lang);
     let dir = cache_dir(st);
     let path = dir.join(format!("{id}.audio"));
@@ -1243,12 +1606,15 @@ async fn synth(
 /// 设置页「试听」：返回错误说明（成功时由桌宠窗口出声）
 pub async fn test(app: &AppHandle) -> Result<(), String> {
     let st = app.state::<AppState>();
-    let v = st.settings().voice;
+    let s = st.settings();
+    let v = s.voice.for_character(&s.character_id);
     if v.engine.is_empty() {
         return Err("先选一个声音引擎".into());
     }
     if v.engine == "pack" && pack_dir(&st).is_none() {
-        return Err("这个角色没有预录语音（只有七海千秋带了），换成别的引擎试试".into());
+        return Err(
+            "这个角色没有预录语音（现在只有七海千秋和牧濑红莉栖带了），换成别的引擎试试".into(),
+        );
     }
     let line = st
         .line("voice.test", &[])
@@ -1257,6 +1623,7 @@ pub async fn test(app: &AppHandle) -> Result<(), String> {
     let Some((text, lang, zh)) = resolve(&st, &v, p).await else {
         return Err("没有要念的内容".into());
     };
+    let poses = crate::emotion::poses_for_text(&zh);
     if v.engine == "system" {
         let _ = app.emit_to(
             "pet",
@@ -1269,6 +1636,7 @@ pub async fn test(app: &AppHandle) -> Result<(), String> {
                 rate: v.speed,
                 pitch: v.system_pitch,
                 volume: v.volume as f32 / 100.0,
+                poses,
             },
         );
         return Ok(());
@@ -1287,6 +1655,7 @@ pub async fn test(app: &AppHandle) -> Result<(), String> {
         PlayEvent {
             id,
             volume: v.volume as f32 / 100.0,
+            poses,
         },
     );
     Ok(())
@@ -1391,6 +1760,70 @@ mod tests {
         .sanitize();
         assert_eq!(s.lang, "ja");
         assert!(url_ok("http://127.0.0.1:9880") && !url_ok("http://192.168.1.2"));
+    }
+
+    #[test]
+    fn reference_text_comes_from_refs_txt_next_to_the_audio() {
+        let list = "# 参考音频：文件名|日语原文|语气\nref_game.wav|……阿万音さん。|平稳（默认）\nref_calm.wav|利害関係や|沉着\n\nbad line\n";
+        assert_eq!(
+            find_ref_text(list, "ref_game.wav").as_deref(),
+            Some("……阿万音さん。")
+        );
+        assert_eq!(
+            find_ref_text(list, "REF_CALM.WAV").as_deref(),
+            Some("利害関係や")
+        );
+        assert_eq!(find_ref_text(list, "ref_soft.wav"), None);
+        assert_eq!(
+            find_ref_text("ref_game.wav||x", "ref_game.wav"),
+            None,
+            "空原文不算"
+        );
+        assert_eq!(
+            find_ref_text("# ref_game.wav|注释掉的|x", "ref_game.wav"),
+            None
+        );
+
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("refs.txt"), list).unwrap();
+        let dir = d.path().to_string_lossy().replace('\\', "/");
+        let mut v = VoiceSettings {
+            engine: "sovits".into(),
+            sovits_ref_audio: format!("{dir}/ref_game.wav"),
+            sovits_ref_text: "用户以前填的、已经过时的".into(),
+            ..Default::default()
+        };
+        // refs.txt 里有这个文件：以它为准；请求体和缓存都跟着变（换参考音频后不会用到旧的缓存）
+        let r = v.with_ref_text_from_list();
+        assert_eq!(r.sovits_ref_text, "……阿万音さん。");
+        assert_eq!(
+            request_body(&r, "こんにちは", "ja")["prompt_text"],
+            "……阿万音さん。"
+        );
+        assert_ne!(
+            cache_id(&v, "こんにちは", "ja"),
+            cache_id(&r, "こんにちは", "ja")
+        );
+        // Windows 风格的路径也认
+        v.sovits_ref_audio = format!("{}\\ref_calm.wav", dir.replace('/', "\\"));
+        assert_eq!(v.with_ref_text_from_list().sovits_ref_text, "利害関係や");
+        // 没有这一行 / 没有 refs.txt / 不是 GPT-SoVITS：保持用户填的
+        v.sovits_ref_audio = format!("{dir}/mine.wav");
+        assert_eq!(
+            v.with_ref_text_from_list().sovits_ref_text,
+            v.sovits_ref_text
+        );
+        v.sovits_ref_audio = "D:/没有这个文件夹/ref_game.wav".into();
+        assert_eq!(
+            v.with_ref_text_from_list().sovits_ref_text,
+            v.sovits_ref_text
+        );
+        v.engine = "fish".into();
+        v.sovits_ref_audio = format!("{dir}/ref_game.wav");
+        assert_eq!(
+            v.with_ref_text_from_list().sovits_ref_text,
+            v.sovits_ref_text
+        );
     }
 
     #[test]
@@ -1620,6 +2053,32 @@ mod tests {
     }
 
     #[test]
+    fn next_sentence_of_the_same_reply_is_not_cut_in_by_small_talk() {
+        // 一条聊天回复分成两句：第一句念完、第二句还在合成的空档里，摸头的小反应不能插进来把后半句顶掉
+        let mut s = Slot::default();
+        let chat = s.accept(Scene::Chat, 100_000).unwrap();
+        s.playing(chat, 101_000, 2_000); // 念到 103 秒
+        s.hold(chat); // 第二句开始合成
+        assert!(
+            s.accept(Scene::Reaction, 103_500).is_none(),
+            "合成第二句时仍算忙"
+        );
+        s.playing(chat, 104_000, 3_000); // 第二句开始念
+        assert!(s.accept(Scene::Reaction, 105_000).is_none());
+        assert!(
+            s.accept(Scene::Proactive, 108_000).is_some(),
+            "两句都念完以后才可以说别的"
+        );
+        // 被新的一句顶掉以后，旧的 hold 不影响新的一句
+        let mut s = Slot::default();
+        let old = s.accept(Scene::Chat, 100_000).unwrap();
+        let new = s.accept(Scene::Chat, 100_500).unwrap();
+        s.playing(new, 101_000, 1_000);
+        s.hold(old);
+        assert!(!s.pending);
+    }
+
+    #[test]
     fn fast_rps_does_not_queue_a_pile_of_lines() {
         // 用户 2026-10-29 的原话：猜拳玩得快，开局 + 每一轮 + 胜负，五条语音紧挨着念
         let mut s = Slot::default();
@@ -1685,6 +2144,52 @@ mod tests {
         assert!(Scene::Proactive.max_age_ms() > Scene::GameMoment.max_age_ms());
         assert_eq!(Scene::Game.prio(), Prio::High);
         assert_eq!(Scene::GameMoment.prio(), Prio::Low);
+    }
+
+    #[test]
+    fn split_chunks_cuts_at_sentence_ends() {
+        // 一句话不切
+        assert_eq!(split_chunks("ええ、そうよ。"), vec!["ええ、そうよ。"]);
+        assert_eq!(split_chunks("  "), Vec::<String>::new());
+        // 两句：各合成各的；连着的句末符号「。……」留在前一句
+        assert_eq!(
+            split_chunks("いずれにせよ、岡部への負担が大きすぎる。……何か他の手を考えなくちゃ"),
+            vec![
+                "いずれにせよ、岡部への負担が大きすぎる。……",
+                "何か他の手を考えなくちゃ"
+            ]
+        );
+        // 太短的并到下一句（「えっと……」不单独念）
+        assert_eq!(
+            split_chunks("えっと……それはね、ちょっと違うのよ。"),
+            vec!["えっと……それはね、ちょっと違うのよ。"]
+        );
+        // 最后一句太短并到上一句
+        assert_eq!(
+            split_chunks("今日はもう帰りましょう。ね。"),
+            vec!["今日はもう帰りましょう。ね。"]
+        );
+        // 最多切 MAX_CHUNKS 段，多的并到最后一段；拼回去一个字不少
+        let long = "一つ目の文です。二つ目の文です。三つ目の文です。四つ目の文です。五つ目の文です。六つ目の文です。";
+        let parts = split_chunks(long);
+        assert_eq!(parts.len(), MAX_CHUNKS);
+        assert_eq!(parts.concat(), long);
+    }
+
+    #[test]
+    fn lead_sentence_waits_for_a_real_sentence() {
+        // 还没写完第一句
+        assert_eq!(lead_sentence("ええ、そうよ"), None);
+        // 句末符号后面还没有字：可能是「……」写了一半，再等一个字
+        assert_eq!(lead_sentence("ええ、そうよ。"), None);
+        let s = "ええ、そうよ。もう少し";
+        assert_eq!(&s[..lead_sentence(s).unwrap()], "ええ、そうよ。");
+        // 「……」整个算在第一句里
+        let s = "それは違うわ……。でも、少し";
+        assert_eq!(&s[..lead_sentence(s).unwrap()], "それは違うわ……。");
+        // 「えっと。」这种太短的不算一句，继续等下一句
+        let s = "えっと。それは違うわ。でも";
+        assert_eq!(&s[..lead_sentence(s).unwrap()], "えっと。それは違うわ。");
     }
 
     #[test]
@@ -1795,6 +2300,59 @@ mod tests {
     }
 
     #[test]
+    fn sovits_settings_are_kept_per_character() {
+        let mut v = VoiceSettings {
+            engine: "sovits".into(),
+            sovits_ref_audio: "D:/a/chiaki.wav".into(),
+            sovits_ref_text: "ちあき".into(),
+            ..VoiceSettings::default()
+        };
+        v.sovits_profiles.insert(
+            "makise-kurisu".into(),
+            SovitsProfile {
+                url: "http://127.0.0.1:9881/".into(),
+                ref_audio: "D:/b/kurisu.wav".into(),
+                ref_text: "くりす".into(),
+                ref_lang: "ja".into(),
+            },
+        );
+        // 乱七八糟的角色 id / 非本机地址：丢掉或清空
+        v.sovits_profiles
+            .insert("../evil".into(), SovitsProfile::default());
+        v.sovits_profiles.insert(
+            "nailong".into(),
+            SovitsProfile {
+                url: "http://evil.example.com".into(),
+                ref_audio: "D:/c.wav".into(),
+                ..SovitsProfile::default()
+            },
+        );
+        let v = v.sanitize();
+        assert_eq!(v.sovits_profiles.len(), 2);
+        assert_eq!(
+            v.sovits_profiles["makise-kurisu"].url,
+            "http://127.0.0.1:9881"
+        );
+        assert_eq!(v.sovits_profiles["nailong"].url, "");
+        // 红莉栖用自己那份；没单独存过的角色（千秋）用通用的；单独存了但没填参考音频的当没存
+        let k = v.for_character("makise-kurisu");
+        assert_eq!(k.sovits_url, "http://127.0.0.1:9881");
+        assert_eq!(k.sovits_ref_audio, "D:/b/kurisu.wav");
+        assert_eq!(k.sovits_ref_text, "くりす");
+        let c = v.for_character("nanami-chiaki");
+        assert_eq!(c.sovits_url, "http://127.0.0.1:9880");
+        assert_eq!(c.sovits_ref_audio, "D:/a/chiaki.wav");
+        let n = v.for_character("nailong");
+        assert_eq!(n.sovits_url, "http://127.0.0.1:9880");
+        assert_eq!(n.sovits_ref_audio, "D:/c.wav");
+        // 缓存按各自的参考音频分开，不会把千秋的声音当成红莉栖的
+        assert_ne!(
+            cache_id(&k, "こんにちは", "ja"),
+            cache_id(&c, "こんにちは", "ja")
+        );
+    }
+
+    #[test]
     fn pack_engine_is_valid_default_and_skips_the_model() {
         let v = VoiceSettings::default();
         assert_eq!(v.engine, "pack");
@@ -1820,21 +2378,26 @@ mod tests {
         // 本机构建时放进了语音包才查（CI 和没拉过语音包的机器直接跳过）：
         // 改了某句日语台词却没重录，这里会失败，提醒重做语音包（scripts/voice-pack/build_pack.py）
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
-        let pack = root.join("nanami-chiaki/voice");
-        if !pack.join("index.json").is_file() {
-            return;
-        }
-        let mut all = crate::lines::Lines::load_dir(&root.join("nanami-chiaki/lines")).all_ja();
-        all.extend(crate::lines::Lines::load_dir(&root.join("_common/lines")).all_ja());
-        assert!(all.len() > 200, "台词里的日语版只有 {} 句", all.len());
-        let missing: Vec<&String> = all
-            .iter()
-            .filter(|j| !j.contains('{') && pack_find(&pack, j).is_none())
-            .collect();
-        assert!(missing.is_empty(), "语音包里没有这些日语台词：{missing:?}");
-        for a in ["是", "不是", "无关", "很接近", "不确定"] {
-            let ja = crate::games_llm::answer_ja(a).unwrap();
-            assert!(pack_find(&pack, ja).is_some(), "语音包里没有：{ja}");
+        for id in crate::character::voiced_character_ids() {
+            let pack = root.join(&id).join("voice");
+            if !pack.join("index.json").is_file() {
+                continue;
+            }
+            let mut all = crate::lines::Lines::load_dir(&root.join(&id).join("lines")).all_ja();
+            all.extend(crate::lines::Lines::load_dir(&root.join("_common/lines")).all_ja());
+            assert!(all.len() > 200, "{id} 台词里的日语版只有 {} 句", all.len());
+            let missing: Vec<&String> = all
+                .iter()
+                .filter(|j| !j.contains('{') && pack_find(&pack, j).is_none())
+                .collect();
+            assert!(
+                missing.is_empty(),
+                "{id} 语音包里没有这些日语台词：{missing:?}"
+            );
+            for a in ["是", "不是", "无关", "很接近", "不确定"] {
+                let ja = crate::games_llm::answer_ja(&id, a).unwrap();
+                assert!(pack_find(&pack, ja).is_some(), "{id} 语音包里没有：{ja}");
+            }
         }
     }
 

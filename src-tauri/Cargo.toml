@@ -1,6 +1,6 @@
 [package]
 name = "deskmate"
-version = "0.5.1"
+version = "0.6.0"
 description = "常驻桌面的萌系 AI 伙伴"
 edition = "2024"
 rust-version = "1.85"
@@ -39,6 +39,14 @@ png = "0.18"
 jpeg-encoder = "0.6"
 # 校验更新安装包（tauri 本来就依赖它）
 sha2 = "0.10"
+# 语音输入：麦克风采集 + 本机语音识别（中文模型第一次打开开关时才下载，不进安装包）
+cpal = "0.18"
+sherpa-onnx = "2"
+# 识别结果里的角色名纠正（「红利期」→「红莉栖」）：按读音比较，只用无声调拼音和多音字
+pinyin = { version = "0.11", default-features = false, features = ["plain", "heteronym"] }
+# 下载的模型是 tar.bz2：解出需要的两个文件
+tar = "0.4"
+bzip2 = "0.6"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

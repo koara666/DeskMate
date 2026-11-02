@@ -65,6 +65,10 @@ pub struct SettingsView {
     pub update: crate::update::UpdateSettings,
     pub web: crate::websearch::WebSettings,
     pub voice: crate::voice::VoiceSettings,
+    /// 语音输入（对着麦克风说话）
+    pub asr: crate::asr::AsrSettings,
+    /// 现在是哪个角色（声音页按角色分别保存 GPT-SoVITS 的设置）
+    pub character_id: String,
     /// 当前角色的预录语音有多少句（0 = 没有语音包）
     pub voice_pack: u32,
     /// 语音服务 Key 的末尾 4 位（没填是 None）：（Fish Audio，OpenAI 兼容）
@@ -137,6 +141,8 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         update: s.update.clone(),
         web: s.web.clone(),
         voice: s.voice.clone(),
+        asr: s.asr.clone(),
+        character_id: s.character_id.clone(),
         voice_pack: crate::voice::pack_count(&state),
         voice_keys: (
             voice_key_hint(&state, crate::voice::FISH_KEY_ID),

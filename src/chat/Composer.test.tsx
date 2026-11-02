@@ -73,3 +73,37 @@ describe('Composer 输入框', () => {
     expect(onStop).toHaveBeenCalled();
   });
 });
+
+describe('Composer 语音输入', () => {
+  it('没有 mic 属性时没有麦克风按钮', () => {
+    render(<Composer generating={false} onSend={vi.fn()} onStop={vi.fn()} />);
+    expect(screen.queryByLabelText('语音输入')).toBeNull();
+  });
+
+  it('点麦克风按钮触发 onToggle，状态写在 data-phase 上', () => {
+    const onToggle = vi.fn();
+    const { rerender } = render(
+      <Composer generating={false} onSend={vi.fn()} onStop={vi.fn()} mic={{ phase: 'idle', level: 0, onToggle }} />,
+    );
+    const btn = screen.getByLabelText('语音输入') as HTMLButtonElement;
+    expect(btn.dataset.phase).toBe('idle');
+    fireEvent.click(btn);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    rerender(<Composer generating={false} onSend={vi.fn()} onStop={vi.fn()} mic={{ phase: 'hearing', level: 0.5, onToggle }} />);
+    expect(btn.dataset.phase).toBe('hearing');
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+    // 正在识别时不能再点
+    rerender(<Composer generating={false} onSend={vi.fn()} onStop={vi.fn()} mic={{ phase: 'thinking', level: 0, onToggle }} />);
+    expect(btn.disabled).toBe(true);
+  });
+
+  it('识别出来的文字接在输入框已有内容后面', () => {
+    const { rerender } = render(<Composer generating={false} onSend={vi.fn()} onStop={vi.fn()} insert={{ text: '', n: 0 }} />);
+    const ta = screen.getByLabelText('输入消息') as HTMLTextAreaElement;
+    fireEvent.input(ta, { target: { value: '帮我' } });
+    rerender(<Composer generating={false} onSend={vi.fn()} onStop={vi.fn()} insert={{ text: '查一下天气', n: 1 }} />);
+    expect(ta.value).toBe('帮我 查一下天气');
+    rerender(<Composer generating={false} onSend={vi.fn()} onStop={vi.fn()} insert={{ text: '谢谢', n: 2 }} />);
+    expect(ta.value).toBe('帮我 查一下天气 谢谢');
+  });
+});

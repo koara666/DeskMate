@@ -1,7 +1,8 @@
 {
   "id": "nanami-chiaki",
   "name": "七海千秋",
-  "order": 6,
+  "aliases": ["千秋", "七海"],
+  "order": 1,
   "version": "1.0.0",
   "author": "DeskMate",
   "language": "zh-CN",

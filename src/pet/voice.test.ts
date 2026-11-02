@@ -117,3 +117,35 @@ describe('两句几乎同时到', () => {
     }
   });
 });
+
+describe('说话时带上表情候选', () => {
+  it('系统语音开口时把这句话的表情候选交给桌宠，念完清掉', () => {
+    class Utterance {
+      onstart: (() => void) | null = null;
+      onend: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      voice: unknown = null;
+      lang = '';
+      rate = 1;
+      pitch = 1;
+      volume = 1;
+      constructor(public text: string) {}
+    }
+    let last: Utterance | null = null;
+    vi.stubGlobal('SpeechSynthesisUtterance', Utterance);
+    vi.stubGlobal('speechSynthesis', {
+      getVoices: () => [{ name: 'Huihui', lang: 'zh-CN' }],
+      cancel: () => {},
+      speak: (u: Utterance) => (last = u),
+    });
+    const { api, say } = fakeApi();
+    const calls: [boolean, string[] | undefined][] = [];
+    startVoice(api, (on, poses) => calls.push([on, poses]));
+    say({ text: '头好晕……', lang: 'zh', poses: ['dizzy'] });
+    last!.onstart!();
+    last!.onend!();
+    expect(calls.at(-2)).toEqual([true, ['dizzy']]);
+    expect(calls.at(-1)?.[0]).toBe(false);
+  });
+});
+

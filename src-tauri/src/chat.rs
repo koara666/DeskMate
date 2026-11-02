@@ -615,10 +615,22 @@ pub async fn run_turn_with_notes(
                 let early = early_voice.clone();
                 let voice_max = settings.voice.max_chars as usize;
                 let (mut tried_ja, mut tried_zh, mut shown) = (false, false, String::new());
+                let mut tried_part = false;
                 let r = {
                     let marker = &mut marker;
                     let mut on_delta = move |s: &str| {
                         let mut visible = marker.push(s);
+                        // 日语还没写完，但第一句已经写好了：先开口，后面的句子写出来再接着念
+                        if !tried_ja
+                            && !tried_part
+                            && let Some(part) = marker.partial_ja()
+                            && crate::voice::lead_sentence(part).is_some()
+                        {
+                            tried_part = true;
+                            if crate::voice::on_chat_partial(&app2, part) {
+                                early.store(true, Ordering::SeqCst);
+                            }
+                        }
                         if !tried_ja && let Some(ja) = markers::ja_text(&marker.found) {
                             tried_ja = true;
                             if crate::voice::on_chat_stream(&app2, ja, true) {
@@ -656,6 +668,8 @@ pub async fn run_turn_with_notes(
                     )
                     .await
                 };
+                // 这一轮不会再有新句子了：边写边念的那条语音念完就收尾
+                crate::voice::finish_chat_stream(&app);
                 let rest = marker.finish();
                 if !rest.is_empty() {
                     let _ = channel.send(ChatEvent::Delta { text: rest });

@@ -85,7 +85,7 @@ pub fn encode_jpeg(rgb: &[u8], w: u32, h: u32) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(windows)]
-fn window_info(
+pub(crate) fn window_info(
     hwnd: windows_sys::Win32::Foundation::HWND,
 ) -> Option<(u32, String, String, String)> {
     use windows_sys::Win32::Foundation::CloseHandle;

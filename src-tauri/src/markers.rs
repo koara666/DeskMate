@@ -132,6 +132,14 @@ impl MarkerFilter {
         }
     }
 
+    /// `[[日语：` 已经写了一半时，到目前为止的内容（还没闭合）；没在写日语标记就是 None。
+    /// 用来在整行日语写完之前先念第一句。
+    pub fn partial_ja(&self) -> Option<&str> {
+        (self.inside == Some(MarkerKind::Ja))
+            .then(|| self.cur.trim_start_matches(['：', ':', ' ']))
+            .filter(|t| !t.is_empty())
+    }
+
     /// 结束：返回剩余可显示文本
     pub fn finish(&mut self) -> String {
         if let Some(kind) = self.inside.take() {
@@ -199,6 +207,26 @@ mod tests {
             kind: MarkerKind::Task,
             text: t.into(),
         }
+    }
+
+    #[test]
+    fn partial_ja_is_visible_while_the_marker_is_open() {
+        let mut f = MarkerFilter::default();
+        assert_eq!(f.partial_ja(), None);
+        f.push("[[日语：");
+        assert_eq!(f.partial_ja(), None);
+        f.push("ええ、そうよ。");
+        assert_eq!(f.partial_ja(), Some("ええ、そうよ。"));
+        f.push("もう少し]");
+        assert_eq!(f.partial_ja(), Some("ええ、そうよ。もう少し"));
+        f.push("]\n好的");
+        // 闭合后不再是「写了一半」，完整内容在 found 里
+        assert_eq!(f.partial_ja(), None);
+        assert_eq!(ja_text(&f.found), Some("ええ、そうよ。もう少し"));
+        // 别的标记不算
+        let mut g = MarkerFilter::default();
+        g.push("[[任务：整理文件");
+        assert_eq!(g.partial_ja(), None);
     }
 
     #[test]
