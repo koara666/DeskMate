@@ -10,6 +10,7 @@ pub mod canon;
 pub mod care;
 pub mod character;
 pub mod character_cmds;
+pub mod charpacks;
 pub mod chat;
 pub mod commands;
 pub mod companion;
@@ -58,7 +59,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tauri::{Manager, RunEvent, WindowEvent};
 
-/// 内置角色包目录：安装包里在资源目录下；开发时直接用仓库里的 characters/
+/// 安装包自带的资源目录（`_common` 通用台词、`_catalog` 预览图；角色本身是下载的，见 charpacks.rs）；开发时直接用仓库里的 characters/
 fn builtin_characters_dir(app: &tauri::App) -> Option<PathBuf> {
     let bundled = app.path().resource_dir().ok().map(|d| d.join("characters"));
     if let Some(d) = bundled.filter(|d| d.is_dir()) {
@@ -85,6 +86,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let (conn, recovery_note) = memory::backup::open_with_recovery(&paths.db(), &paths.backups())?;
     let builtin = builtin_characters_dir(app);
     let state = AppState::new(paths, conn, builtin, Box::new(secrets::KeyringStore));
+    // 全新安装（用户还没做过任何选择）：安装包里没有角色，要先去设置里挑一位下载（见 charpacks.rs）
+    let fresh_install = !state.settings().onboarded;
     // 第一次使用：桌宠出现后主动弹出气泡说明怎么用（只出现一次；测试实例不弹，免得干扰自动测试）
     // （测试实例设置 DESKMATE_TEST_ONBOARDING=1 时也弹，用来检查引导界面）
     let onboarding = (!paths::test_mode()
@@ -95,6 +98,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         log::warn!("{note}");
     }
     if onboarding {
+        if state.characters().is_empty() {
+            notes.push(
+                "还没有桌宠哦。在刚打开的设置里「角色」页选一位下载，选好就能陪你啦。".into(),
+            );
+        }
         notes.push(daily::onboarding_text(&state.settings().chat_backend));
         state.update_settings(|s| s.onboarded = true);
     }
@@ -135,6 +143,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     update::spawn_startup_check(&handle);
     // 语音：用本机 GPT-SoVITS 时先热一下模型，第一句话才不会晚到
     voice::warm_up(&handle);
+    // 角色包：全新安装去设置里挑；升级前用着的角色在后台下好（测试实例不做，由测试自己驱动）
+    if !paths::test_mode() {
+        charpacks::on_startup(&handle, fresh_install);
+    }
     if upgraded_from.is_some() {
         update::spawn_whats_new(&handle);
     }
@@ -291,6 +303,8 @@ pub fn run() {
             commands::update_install,
             commands::menu_open,
             commands::voice_audio,
+            voice::voice_skips,
+            voice::voice_report,
             settings_cmds::voice_save,
             settings_cmds::voice_set_key,
             settings_cmds::voice_clear_key,
@@ -317,6 +331,10 @@ pub fn run() {
             character_cmds::character_select,
             character_cmds::prefs_save,
             character_cmds::open_character_dir,
+            charpacks::charpack_list,
+            charpacks::charpack_download,
+            charpacks::charpack_cancel,
+            charpacks::charpack_remove,
             memory_cmds::memory_overview,
             memory_cmds::memory_list,
             memory_cmds::memory_update,

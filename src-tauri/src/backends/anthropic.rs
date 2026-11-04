@@ -94,7 +94,8 @@ impl Claude {
             .collect();
         let mut body = json!({
             "model": self.model,
-            "max_tokens": req.max_tokens,
+            // 自适应思考默认开着，思考也算在 max_tokens 里：给它留余量，正文才不会被截断
+            "max_tokens": with_thinking_room(req.max_tokens, &self.effort, true),
             "stream": true,
             "messages": messages,
         });

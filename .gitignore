@@ -119,3 +119,9 @@ __pycache__/
 # ===== 红莉栖：训练用的原声数据集、形象表情表（只留本机）=====
 /Kurisu_Voice/
 /牧濑*.png
+
+# 选角色页的预览图（构建时由 scripts/chibi/make_previews.py 从形象包里取）；文件夹本身要在，.gitkeep 占位
+/characters/_catalog/*.png
+
+# 本机打出来的角色包（scripts/chibi/build_character_pack.py），传到发布页，不进仓库
+/dist-packs/

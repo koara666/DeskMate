@@ -6,6 +6,7 @@
 // 注意：会短暂出现测试用的桌宠和设置窗口；运行前确认用户没有在全屏玩游戏。
 
 import { spawn, spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -19,6 +20,45 @@ const TASK_ROOT = existsSync('D:/') ? `D:/DeskMate-E2E-${Date.now()}` : join(tmp
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
+
+// ---------------- 角色包：本机假的发布页 ----------------
+// 软件本体不带任何角色，用户在设置里挑哪位就下载哪位（src-tauri/src/charpacks.rs）。
+// 测试里把下载地址指到本机，由这个小服务器把 dist-packs/ 里本机打好的包发出去（地址规则和 GitHub 发布页一样）。
+
+function startPackServer() {
+  const reg = JSON.parse(readFileSync(resolve('scripts/builtin_characters.json'), 'utf8'));
+  const routes = new Map();
+  for (const [id, c] of Object.entries(reg)) {
+    if (id.startsWith('_') || !c.pack) continue;
+    const file = resolve('dist-packs', `${id}.tar.bz2`);
+    if (!existsSync(file)) {
+      throw new Error(`没有 ${file}：先 python scripts/chibi/build_character_pack.py --all（形象和语音要先用 fetch_art.py / fetch_voice_pack.py 取到 characters/ 里）`);
+    }
+    routes.set(`/character-${c.short}-v${c.pack.version}/${id}.tar.bz2`, file);
+  }
+  const hits = [];
+  const server = createServer((req, res) => {
+    const file = routes.get(req.url ?? '');
+    hits.push(req.url);
+    if (!file) {
+      res.writeHead(404).end();
+      return;
+    }
+    const data = readFileSync(file);
+    res.writeHead(200, { 'Content-Length': data.length, 'Content-Type': 'application/octet-stream' });
+    // 分几次发，进度条才看得见在动
+    let sent = 0;
+    const step = Math.ceil(data.length / 8);
+    const tick = () => {
+      if (sent >= data.length) return res.end();
+      res.write(data.subarray(sent, sent + step));
+      sent += step;
+      setTimeout(tick, 60);
+    };
+    tick();
+  });
+  return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok({ port: server.address().port, hits, close: () => server.close() })));
+}
 
 // ---------------- CDP ----------------
 
@@ -216,8 +256,15 @@ async function main() {
   mkdirSync(DATA, { recursive: true });
   mkdirSync(TASK_ROOT, { recursive: true });
   console.log(`数据目录：${DATA}`);
+  // 安装包不带角色；以前构建留在 target/release/characters/ 里的旧文件会让「没有角色」的情况测不到
+  for (const id of ['nanami-chiaki', 'makise-kurisu']) {
+    const left = join(EXE, '..', 'characters', id);
+    if (existsSync(left)) throw new Error(`${left} 是以前的构建留下的，安装包里已经不带角色了：删掉它再测`);
+  }
+  const packs = await startPackServer();
+  console.log(`角色包假服务器：127.0.0.1:${packs.port}`);
   const child = spawn(EXE, ['--settings'], {
-    env: { ...process.env, DESKMATE_DATA_DIR: DATA, DESKMATE_CDP_PORT: String(PORT) },
+    env: { ...process.env, DESKMATE_DATA_DIR: DATA, DESKMATE_CDP_PORT: String(PORT), DESKMATE_PACK_URL_BASE: `http://127.0.0.1:${packs.port}` },
     stdio: 'ignore',
   });
   const pid = child.pid;
@@ -326,6 +373,34 @@ async function main() {
     });
 
     await settings.click('角色');
+    const packCard = (id) => `document.querySelector('.char-card[data-testid="pack-${id}"]')`;
+    const clickIn = (card, label) =>
+      settings.eval(`(() => { const b = [...${card}.querySelectorAll('button')].find(b => b.innerText.trim().startsWith(${JSON.stringify(label)})); if (!b) return false; b.click(); return true; })()`);
+    await test('角色：全新安装一个角色都没有，列出可下载的（带预览图和大小）；下载哪位就用哪位', async () => {
+      await settings.waitFor(`!!document.querySelector('[data-testid=no-character]')`, '提示还没有桌宠');
+      if (!(await pet.eval(`document.querySelector('.pet')?.classList.contains('placeholder') === true`))) throw new Error('一个角色都没有时，桌宠应该是占位形象');
+      await settings.waitFor(`document.querySelectorAll('.char-card[data-testid^="pack-"]').length === 2`, '两位可下载的角色');
+      const preview = await settings.eval(`${packCard('nanami-chiaki')}.querySelector('img')?.src ?? ''`);
+      if (!preview.startsWith('data:image/png;base64,')) throw new Error('下载前就该看到预览图（安装包里带的小预览）');
+      const size = await settings.eval(`${packCard('nanami-chiaki')}.innerText`);
+      if (!/下载（\d+\.\d MB）/.test(size)) throw new Error(`没有显示下载大小：${size}`);
+      await settings.shot('settings-角色-下载前.png');
+      if (!(await clickIn(packCard('nanami-chiaki'), '下载'))) throw new Error('找不到千秋的下载按钮');
+      // 下载中有进度条
+      await settings.waitFor(`!!${packCard('nanami-chiaki')}.querySelector('progress')`, '进度条', 8000).catch(() => {});
+      await settings.waitFor(`${packCard('nanami-chiaki')}.innerText.includes('已下载')`, '千秋下载完成', 30000);
+      // 原来选的（默认千秋）刚下好 → 直接用上，不用再点切换
+      await settings.waitFor(`!document.querySelector('[data-testid=no-character]')`, '提示消失');
+      await settings.waitFor(`[...document.querySelectorAll('.char-grid:not([data-testid=pack-grid]) .char-card')].some(c => c.innerText.includes('七海千秋') && c.innerText.includes('使用中'))`, '千秋自动成了使用中', 8000);
+      await pet.waitFor(`document.documentElement.dataset.skin === 'arcade'`, '桌宠换上千秋的皮肤', 8000);
+      if (!existsSync(join(DATA, 'packs', 'nanami-chiaki', 'voice', 'index.json'))) throw new Error('角色包里的预录语音没装到数据目录');
+      if (existsSync(join(DATA, 'packs', '.dl-nanami-chiaki'))) throw new Error('下载用的临时文件夹没清掉');
+      await settings.shot('settings-角色-下载后.png');
+      // 再下红莉栖：当前用着的不变
+      if (!(await clickIn(packCard('makise-kurisu'), '下载'))) throw new Error('找不到红莉栖的下载按钮');
+      await settings.waitFor(`${packCard('makise-kurisu')}.innerText.includes('已下载')`, '红莉栖下载完成', 30000);
+      await settings.waitFor(`document.querySelectorAll('.char-grid:not([data-testid=pack-grid]) .char-card').length === 2`, '上面列出两位已装好的角色');
+    });
     await test('角色：切换角色并保存禁词', async () => {
       await settings.waitFor(`document.querySelectorAll('.char-card').length >= 2`, '2 个内置角色');
       await settings.eval(`[...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('牧濑红莉栖')).querySelector('button.btn').click()`);
@@ -355,7 +430,7 @@ async function main() {
       rmSync(assets, { recursive: true, force: true });
       await settings.click('重新加载');
       // 删掉用户图片后回到内置形象：装了形象包是安装包内置的 PNG（不是刚才那张 1×1 的），否则是内置的 SVG
-      const bundledArt = existsSync(resolve('characters/makise-kurisu/assets/idle.png'));
+      const bundledArt = true; // 下载来的角色包一定带 Q 版形象
       await pet.waitFor(
         `(() => { const i = document.querySelector('.pet-img'); const s = i?.getAttribute('src') ?? ''; return ${bundledArt} ? (s.includes('/makise-kurisu/idle') && i.complete && i.naturalWidth > 1) : s.startsWith('data:image/svg+xml'); })()`,
         '删掉图片后回到内置形象',
@@ -653,7 +728,7 @@ async function main() {
       await settings.eval(`(() => { const c = [...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('七海千秋')); const b = c && [...c.querySelectorAll('button')].find(b => b.innerText.trim() === '切换'); if (b) b.click(); })()`);
       await pet.waitFor(`document.documentElement.dataset.skin === 'arcade'`, '桌宠皮肤', 6000);
       // 构建时放进了 Q 版形象包（scripts/chibi/fetch_art.py，DECISIONS #66）→ 必须是安装包内置的 PNG（走图片协议）；没放就是内置的 SVG
-      const bundledArt = existsSync(resolve('characters/nanami-chiaki/assets/idle.png'));
+      const bundledArt = true; // 下载来的角色包一定带 Q 版形象
       await pet.waitFor(`(() => { const s = document.querySelector('.pet-img')?.getAttribute('src') ?? ''; return ${bundledArt} ? (s.includes('deskmate-img') && s.includes('/nanami-chiaki/idle')) : s.startsWith('data:image/svg+xml'); })()`, bundledArt ? '千秋的 Q 版形象（安装包内置的 PNG）' : '千秋的 Q 版形象（内置 SVG）', 6000);
       console.log(`    （这次安装包里${bundledArt ? '带' : '没带'} Q 版形象包）`);
       await sleep(300);
@@ -676,7 +751,7 @@ async function main() {
     });
 
     // 构建时放进了预录语音包（scripts/voice/fetch_voice_pack.py）才测：声音页能选，包里的录音能被 WebView2 解码（只加载、不播放，不出声）
-    const packIndex = resolve('characters/nanami-chiaki/voice/index.json');
+    const packIndex = join(DATA, 'packs', 'nanami-chiaki', 'voice', 'index.json');
     if (existsSync(packIndex)) {
       await test('预录语音：声音页显示句数；包里的录音能取到并被 WebView2 解码', async () => {
         await settings.click('声音');
@@ -702,7 +777,7 @@ async function main() {
       await settings.waitFor(`document.body.innerText.includes('牧濑红莉栖')`, '角色列表');
       await settings.eval(`(() => { const c = [...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('牧濑红莉栖')); const b = c && [...c.querySelectorAll('button')].find(b => b.innerText.trim() === '切换'); if (b) b.click(); })()`);
       await pet.waitFor(`document.documentElement.dataset.skin === 'lab'`, '桌宠皮肤', 6000);
-      const bundledArt = existsSync(resolve('characters/makise-kurisu/assets/idle.png'));
+      const bundledArt = true; // 下载来的角色包一定带 Q 版形象
       await pet.waitFor(`(() => { const s = document.querySelector('.pet-img')?.getAttribute('src') ?? ''; return ${bundledArt} ? (s.includes('deskmate-img') && s.includes('/makise-kurisu/idle')) : s.startsWith('data:image/svg+xml'); })()`, bundledArt ? '红莉栖的 Q 版形象（安装包内置的 PNG）' : '红莉栖的 Q 版形象（内置 SVG）', 6000);
       console.log(`    （这次安装包里${bundledArt ? '带' : '没带'}红莉栖的 Q 版形象包）`);
       await sleep(300);
@@ -738,7 +813,7 @@ async function main() {
         menu.close();
       }
     });
-    const kurisuPackIndex = resolve('characters/makise-kurisu/voice/index.json');
+    const kurisuPackIndex = join(DATA, 'packs', 'makise-kurisu', 'voice', 'index.json');
     if (existsSync(kurisuPackIndex)) {
       await test('红莉栖的预录语音：声音页显示句数；包里的录音能被 WebView2 解码', async () => {
         await settings.click('声音');
@@ -758,6 +833,17 @@ async function main() {
         console.log(`    （红莉栖语音包 ${lines.length} 句，第一句 ${sec.toFixed(1)} 秒）`);
       });
     }
+
+    await test('角色：不用的角色可以删掉（正在用的不能删），删掉后又能重新下载', async () => {
+      await settings.click('角色');
+      await settings.waitFor(`!!${packCard('makise-kurisu')}`, '红莉栖的下载卡');
+      const cur = await settings.eval(`${packCard('makise-kurisu')}.innerText`);
+      if (!cur.includes('使用中，不能删除') || (await clickIn(packCard('makise-kurisu'), '删除'))) throw new Error(`正在用的角色不该能删：${cur}`);
+      if (!(await clickIn(packCard('nanami-chiaki'), '删除'))) throw new Error('找不到千秋的删除按钮');
+      await settings.waitFor(`${packCard('nanami-chiaki')}.innerText.includes('下载（')`, '千秋变回待下载', 8000);
+      if (existsSync(join(DATA, 'packs', 'nanami-chiaki'))) throw new Error('千秋的文件夹没有删掉');
+      await settings.waitFor(`document.querySelectorAll('.char-grid:not([data-testid=pack-grid]) .char-card').length === 1`, '上面只剩红莉栖');
+    });
 
     console.log('\n窗口关闭');
     await test('点设置窗口标题栏的 ✕（WM_CLOSE）能关掉设置窗口', async () => {
@@ -791,6 +877,7 @@ async function main() {
       p?.close();
     }
     spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    packs.close();
     await sleep(500);
     try {
       rmSync(DATA, { recursive: true, force: true });

@@ -662,10 +662,17 @@ fn build_menu(app: &AppHandle, for_tray: bool) -> tauri::Result<Menu<Wry>> {
             None::<&str>,
         )?);
     }
-    let char_refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = char_items
+    let mut char_refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = char_items
         .iter()
         .map(|i| i as &dyn tauri::menu::IsMenuItem<Wry>)
         .collect();
+    // 软件不带角色，要用哪位得先下载：菜单里留一个去下载的入口（一个角色都没有时它是唯一的一项）
+    let char_sep = PredefinedMenuItem::separator(app)?;
+    let char_more = MenuItem::with_id(app, "char_download", "下载更多角色…", true, None::<&str>)?;
+    if !char_refs.is_empty() {
+        char_refs.push(&char_sep);
+    }
+    char_refs.push(&char_more);
     let characters = Submenu::with_id_and_items(app, "characters", "切换角色", true, &char_refs)?;
 
     let corners = Submenu::with_id_and_items(
@@ -792,6 +799,7 @@ fn handle_menu_now(app: &AppHandle, id: &str) {
             }
             "settings" => open_settings(app)?,
             "reminders" => open_settings_tab(app, Some("reminders".into()))?,
+            "char_download" => open_settings_tab(app, Some("characters".into()))?,
             "games" => {
                 show_chat(app, true)?;
                 let _ = app.emit_to("chat", "chat-open-games", ());

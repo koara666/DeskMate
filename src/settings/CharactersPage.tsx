@@ -1,8 +1,10 @@
-// 角色设置：选择角色、放自己的角色图片、禁词与自定义要求（全局 + 每个角色）。
+// 角色设置：下载并选择角色、放自己的角色图片、禁词与自定义要求（全局 + 每个角色）。
+// 软件本体不带任何角色：选了哪位才下载哪位（登记表编在程序里，没下载也能看到名字、简介和大小）。
 // 角色设定（persona）本身是只读的，这里不能修改。
 import { useEffect, useState } from 'preact/hooks';
+import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { SettingsApi } from '../lib/ipc';
-import type { CharacterItem, CharacterPrefs, CharactersView } from '../lib/types';
+import type { CharacterItem, CharacterPrefs, CharactersView, PackView } from '../lib/types';
 import { StatusLine, useStatus } from './SettingsApp';
 
 export const STATE_LABELS: Record<string, string> = {
@@ -14,6 +16,8 @@ export const STATE_LABELS: Record<string, string> = {
   sleep: '睡觉',
 };
 
+const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
+
 const toText = (list: string[]) => list.join('\n');
 const toList = (text: string) =>
   text
@@ -23,6 +27,7 @@ const toList = (text: string) =>
 
 export function CharactersPage({ api }: { api: SettingsApi }) {
   const [view, setView] = useState<CharactersView | null>(null);
+  const [packs, setPacks] = useState<PackView[]>([]);
   const [editing, setEditing] = useState('');
   const { status, run } = useStatus();
 
@@ -30,9 +35,39 @@ export function CharactersPage({ api }: { api: SettingsApi }) {
     setView(v);
     setEditing((cur) => (cur && v.list.some((c) => c.id === cur) ? cur : v.current));
   };
+  const loadPacks = () =>
+    Promise.resolve(api.charpackList?.())
+      .then((p) => p && setPacks(p))
+      .catch(() => {});
 
   useEffect(() => {
-    api.characters().then(apply).catch(() => {});
+    let alive = true;
+    const offs: UnlistenFn[] = [];
+    const reload = () => {
+      api.characters().then((v) => alive && apply(v)).catch(() => {});
+      if (alive) loadPacks();
+    };
+    reload();
+    const keep = (p?: Promise<UnlistenFn>) =>
+      p?.then((u) => (alive ? offs.push(u) : u())).catch(() => {});
+    // 下载进度：只更新那一张卡；下完（或失败、取消）后整页重新读一遍
+    keep(
+      api.onCharpackProgress?.((p) => {
+        if (!alive) return;
+        setPacks((ps) =>
+          ps.map((x) =>
+            x.id === p.id ? { ...x, running: p.running, done: p.done, total: p.total || x.total, error: p.error } : x,
+          ),
+        );
+        if (!p.running) reload();
+      }),
+    );
+    // 下好以后程序会自己切到刚下好的角色（原来选的那位还没下载时）
+    keep(api.onCharacterChanged?.(reload));
+    return () => {
+      alive = false;
+      offs.forEach((u) => u());
+    };
   }, [api]);
 
   if (!view) return <div class="muted">加载中…</div>;
@@ -42,11 +77,26 @@ export function CharactersPage({ api }: { api: SettingsApi }) {
     run(() => api.selectCharacter(id), '已切换').then(async (ok) => {
       if (ok) apply(await api.characters());
     });
+  const download = (id: string) => run(() => api.charpackDownload(id)).then(loadPacks);
+  const cancel = (id: string) => run(() => api.charpackCancel(id));
+  const remove = (id: string) =>
+    run(() => api.charpackRemove(id), '已删除').then(async (ok) => {
+      if (ok) {
+        apply(await api.characters());
+        loadPacks();
+      }
+    });
 
   return (
     <section>
       <h1>角色</h1>
-      <p class="muted">点卡片查看和设置；「切换」后桌面上的角色会马上换成 TA。</p>
+      {view.list.length === 0 ? (
+        <p class="callout" data-testid="no-character">
+          还没有桌宠。从下面挑一位下载吧——选哪位就下载哪位，下好就能用。
+        </p>
+      ) : (
+        <p class="muted">点卡片查看和设置；「切换」后桌面上的角色会马上换成 TA。</p>
+      )}
       <div class="char-grid">
         {view.list.map((c) => (
           <div
@@ -70,8 +120,94 @@ export function CharactersPage({ api }: { api: SettingsApi }) {
       </div>
       <StatusLine status={status} />
 
+      {packs.length > 0 && (
+        <>
+          <h2>下载角色</h2>
+          <p class="muted">
+            软件本体不带角色，用哪位就下载哪位（每位约 5 MB，含 Q 版形象和预录语音）。不想要的可以随时删掉。
+          </p>
+          <div class="char-grid" data-testid="pack-grid">
+            {packs.map((p) => (
+              <PackCard
+                key={p.id}
+                p={p}
+                current={p.id === view.current}
+                onDownload={download}
+                onCancel={cancel}
+                onRemove={remove}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
       {current && <CharacterDetail key={current.id} api={api} view={view} c={current} onUpdated={apply} />}
     </section>
+  );
+}
+
+interface PackCardProps {
+  p: PackView;
+  current: boolean;
+  onDownload: (id: string) => void;
+  onCancel: (id: string) => void;
+  onRemove: (id: string) => void;
+}
+
+/** 一位可下载的角色：没下载 → 下载；下载中 → 进度和取消；下好了 → 已下载（可更新、可删除） */
+function PackCard({ p, current, onDownload, onCancel, onRemove }: PackCardProps) {
+  return (
+    <div
+      class="char-card"
+      data-testid={`pack-${p.id}`}
+      style={p.color ? ({ '--accent': p.color } as Record<string, string>) : undefined}
+    >
+      <div class="char-main static">
+        {p.preview && <img src={p.preview} alt="" />}
+        <span class="char-name">{p.name}</span>
+      </div>
+      <span class="muted small pack-desc">{p.description}</span>
+      {p.running ? (
+        <>
+          <progress value={p.done} max={Math.max(p.total, 1)} aria-label={`${p.name} 的下载进度`} />
+          <span class="muted small">
+            {mb(p.done)} / {mb(p.total)}
+          </span>
+          <button type="button" class="btn btn-small" onClick={() => onCancel(p.id)}>
+            取消
+          </button>
+        </>
+      ) : (
+        <>
+          {p.error && (
+            <span class="action-err small" role="alert">
+              {p.error}
+            </span>
+          )}
+          {!p.installed || p.error ? (
+            <button type="button" class="btn btn-small btn-primary" onClick={() => onDownload(p.id)}>
+              {p.error ? '重试' : `下载（${mb(p.size)}）`}
+            </button>
+          ) : (
+            <>
+              <span class="tag">{p.update ? '有新版本' : '已下载'}</span>
+              {p.update && (
+                <button type="button" class="btn btn-small btn-primary" onClick={() => onDownload(p.id)}>
+                  更新
+                </button>
+              )}
+              {current ? (
+                <span class="muted small">使用中，不能删除</span>
+              ) : (
+                <button type="button" class="btn btn-small" onClick={() => onRemove(p.id)}>
+                  删除
+                </button>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

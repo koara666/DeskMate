@@ -165,6 +165,24 @@ describe('ChatApp 流式显示', () => {
     expect(document.querySelector('.messages b')).toBeNull();
     expect(assistantText()).toContain('<img src=x');
   });
+
+  it('模型一次能写的长度用完（finish=length）：写明这句话没说完，正常结束的没有这行', async () => {
+    const f = await mount();
+    await sendText('hi');
+    f.emit({ type: 'delta', text: '嗯……你好像' });
+    f.emit({ type: 'done', text: '嗯……你好像', finish: 'length' });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByTestId('truncated').textContent).toContain('没说完');
+    await sendText('再来');
+    f.emit({ type: 'delta', text: '好的' });
+    f.emit({ type: 'done', text: '好的', finish: 'stop' });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getAllByTestId('truncated')).toHaveLength(1);
+  });
 });
 
 describe('ChatApp 停止生成', () => {

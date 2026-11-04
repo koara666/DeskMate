@@ -523,3 +523,21 @@ input[type='search'] {
   font-size: 13px;
   color: var(--text-weak);
 }
+
+/* —— 角色页：可下载的角色 —— */
+.char-main.static {
+  cursor: default;
+}
+.char-card .pack-desc {
+  text-align: center;
+  line-height: 1.5;
+}
+.char-card progress {
+  width: 100%;
+}
+.callout {
+  padding: 10px 12px;
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  background: var(--panel);
+}

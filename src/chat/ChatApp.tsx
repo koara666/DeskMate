@@ -55,6 +55,8 @@ export interface UiMessage {
   note?: string;
   /** 有新版本 */
   update?: UpdateView;
+  /** 模型一次能写的长度用完了，这句话没写完 */
+  truncated?: boolean;
 }
 
 let seq = 0;
@@ -307,6 +309,7 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
           finishWith({
             text: e.text || w.text(),
             status: e.finish === 'cancelled' ? 'stopped' : 'done',
+            truncated: e.finish === 'length' || undefined,
             actions,
             reminder: e.reminder,
             reminderForm: e.reminder_form || undefined,
@@ -675,6 +678,11 @@ const Message = memo(function Message({
       )}
       {msg.status === 'stopped' && <div class="note">（已停止）</div>}
       {msg.note && <div class="note msg-note">{msg.note}</div>}
+      {msg.truncated && (
+        <div class="note msg-note" data-testid="truncated">
+          {bare ? '（没说完）' : '（这句话没说完——模型一次能写的长度用完了，可以点「重新生成」）'}
+        </div>
+      )}
       {msg.update && updateApi && <UpdateCard api={updateApi} view={msg.update} />}
       {msg.choices && onChoose && (
         <div class="choices">

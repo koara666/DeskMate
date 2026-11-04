@@ -2,7 +2,7 @@
 //!
 //! - 只读精简后的部分（`condense`：去掉括号里的动作、表情符号、网址和代码，取开头一两句，默认 40 字以内）。
 //! - 引擎（可扩展，新增一个就是 `synth` 里多一个分支 + 设置页多一张卡片）：
-//!   - `pack`：预录语音（随安装包带的千秋声音，只念事先写好的台词；不合成、不联网，装完即用）；
+//!   - `pack`：预录语音（角色包里自带的她的声音，下载角色时一起装好，只念事先写好的台词；不合成、不联网）；
 //!   - `system`：Windows 自带的语音（浏览器的 Web Speech，免费、离线；声音不像她，但开箱就能用）；
 //!   - `fish`：Fish Audio（云端，社区里有现成的七海千秋声音模型；有免费档 `s2.1-pro-free`）；
 //!   - `sovits`：GPT-SoVITS（用户自己在本机运行的服务，`api_v2.py` 的 `/tts`）；
@@ -496,7 +496,22 @@ pub struct VoiceState {
     ja: Mutex<VecDeque<(String, String)>>,
     /// 回复里的日语还没写完就先开口的那一句：后面写出来的句子往这里送
     stream: Mutex<Option<StreamCtx>>,
+    /// 最近几句没念出来的话和原因（设置页「声音」里显示，分得清是没有录音还是出了故障）
+    skips: Mutex<VecDeque<Skip>>,
 }
+
+/// 一句没念出来的话
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct Skip {
+    /// 时间（Unix 秒）
+    pub at: i64,
+    /// 那句话的开头
+    pub text: String,
+    pub reason: String,
+}
+
+/// 最多留几条
+const SKIPS_KEEP: usize = 8;
 
 /// 日语还在写时已经开口的那条聊天语音
 struct StreamCtx {
@@ -516,6 +531,59 @@ impl VoiceState {
     fn stream(&self) -> std::sync::MutexGuard<'_, Option<StreamCtx>> {
         self.stream.lock().unwrap_or_else(|e| e.into_inner())
     }
+
+    fn skips(&self) -> std::sync::MutexGuard<'_, VecDeque<Skip>> {
+        self.skips.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// 记下一句没念出来的话（同时写日志）。声音总开关关着的时候不记——那是用户自己关的。
+fn note_skip(st: &AppState, text: &str, reason: &str) {
+    let shown: String = text.trim().chars().take(24).collect();
+    log::info!("没念：{reason}（「{shown}」）");
+    let at = crate::memory::now_secs();
+    let mut g = st.voice.skips();
+    // 同一轮里反复触发的同一个原因只记一次
+    if let Some(last) = g.front_mut()
+        && last.reason == reason
+        && last.text == shown
+    {
+        last.at = at;
+        return;
+    }
+    g.push_front(Skip {
+        at,
+        text: shown,
+        reason: reason.to_string(),
+    });
+    g.truncate(SKIPS_KEEP);
+}
+
+/// 设置页看的：最近没念出来的话（新的在前）
+pub fn recent_skips(st: &AppState) -> Vec<Skip> {
+    st.voice.skips().iter().cloned().collect()
+}
+
+/// 为什么现在不出声（纯函数；`should_speak` 为 false 时用来说明原因）
+pub fn why_silent(
+    s: &VoiceSettings,
+    scene: Scene,
+    dnd: bool,
+    fullscreen: bool,
+) -> Option<&'static str> {
+    if !s.enabled || s.engine.is_empty() {
+        return None;
+    }
+    if !scene.on(&s.scenes) {
+        return Some("这类场合的声音关着了（设置 → 声音 → 什么时候出声）");
+    }
+    if dnd && scene == Scene::Proactive {
+        return Some("勿扰模式开着，她主动说的话不出声");
+    }
+    if fullscreen && !(s.fullscreen_voice && scene == Scene::Proactive) {
+        return Some("现在是全屏状态，不出声（设置里可以让她全屏时只用声音说主动的话）");
+    }
+    None
 }
 
 /// 句末符号
@@ -844,9 +912,16 @@ pub fn toggle(app: &AppHandle) -> bool {
     let saved = st.update_settings(|s| s.voice.enabled = on).voice.enabled;
     if !saved {
         interrupt(app);
+    } else {
+        warm_audio(app);
     }
     crate::desktop::broadcast_settings_changed(app);
     saved
+}
+
+/// 叫桌宠窗口先把声音设备唤醒：第一次出声要多等约半秒（设备刚打开），先放一段静音，真正的第一句话就不晚了
+pub fn warm_audio(app: &AppHandle) {
+    let _ = app.emit_to("pet", "voice-warm", ());
 }
 
 /// 系统语音：让桌宠窗口自己合成
@@ -887,17 +962,31 @@ pub fn should_speak(s: &VoiceSettings, scene: Scene, dnd: bool, fullscreen: bool
 pub fn on_line(app: &AppHandle, text: &str, scene: Scene) {
     let st = app.state::<AppState>();
     let s = st.settings();
-    if !should_speak(&s.voice, scene, s.dnd, st.daily.is_fullscreen()) {
+    let fullscreen = st.daily.is_fullscreen();
+    if !should_speak(&s.voice, scene, s.dnd, fullscreen) {
+        if let Some(why) = why_silent(&s.voice, scene, s.dnd, fullscreen) {
+            note_skip(&st, text, why);
+        }
         return;
     }
     let v = s.voice.for_character(&s.character_id);
     let p = plan(&st, &v, text);
     if p == Plan::Silent {
+        note_skip(
+            &st,
+            text,
+            if v.engine == "pack" {
+                "预录语音里没有这句（预录语音只念事先写好的台词，现想的话不念；想让每句都出声要换 GPT-SoVITS）"
+            } else {
+                "这句里没有可念的文字（只有动作或表情）"
+            },
+        );
         return;
     }
     let now = crate::desktop::now_ms();
     // 排号：太密的小插话、有更重要的话正在说时，这句不念
     let Some(ticket) = st.voice.slot().accept(scene, now) else {
+        note_skip(&st, text, "太密了，或者有更重要的话正在说，这句跳过");
         return;
     };
     match p {
@@ -931,6 +1020,11 @@ pub fn on_chat_stream(app: &AppHandle, line: &str, ja: bool) -> bool {
     let v = s.voice.for_character(&s.character_id);
     // 预录语音不念聊天回复：有意不念，回复写完后也不用再试
     if v.engine == "pack" {
+        note_skip(
+            &st,
+            line,
+            "聊天里现想的话预录语音不念（只有事先写好的台词有录音）；想让每句都出声要换 GPT-SoVITS",
+        );
         return true;
     }
     // 第一句在日语还没写完时就开口了：把剩下的送给同一条语音，不另起一条
@@ -1121,6 +1215,7 @@ fn speak(
             match pack_dir(&st).and_then(|d| pack_find(&d, &text)) {
                 Some((id, ms)) => (Some(id), ms),
                 None => {
+                    note_skip(&st, &zh, "语音包里缺这句的录音（语音包没装好？）");
                     st.voice.slot().release(ticket);
                     return;
                 }
@@ -1132,6 +1227,7 @@ fn speak(
                 || crate::desktop::now_ms() - born > scene.max_age_ms()
         };
         if stale(&st) {
+            note_stale(&st, &zh, ticket, born);
             st.voice.slot().release(ticket);
             return;
         }
@@ -1140,6 +1236,7 @@ fn speak(
         if wait > 0 && wait <= WAIT_PREV_MS {
             tokio::time::sleep(std::time::Duration::from_millis(wait as u64 + BREATH_MS)).await;
             if stale(&st) {
+                note_stale(&st, &zh, ticket, born);
                 st.voice.slot().release(ticket);
                 return;
             }
@@ -1220,6 +1317,7 @@ fn speak_chunks(
                     Ok(id) => id,
                     Err(e) => {
                         log::info!("语音合成失败：{e}");
+                        note_skip(&st, &text, &format!("合成失败：{e}"));
                         st.voice.slot().release(ticket);
                         return;
                     }
@@ -1232,6 +1330,7 @@ fn speak_chunks(
                     || (played == 0 && crate::desktop::now_ms() - born > scene.max_age_ms())
             };
             if stale(&st) {
+                note_stale(&st, &text, ticket, born);
                 st.voice.slot().release(ticket);
                 return;
             }
@@ -1240,6 +1339,7 @@ fn speak_chunks(
             if wait > 0 && (played > 0 || wait <= WAIT_PREV_MS) {
                 tokio::time::sleep(std::time::Duration::from_millis(wait as u64 + BREATH_MS)).await;
                 if stale(&st) {
+                    note_stale(&st, &text, ticket, born);
                     st.voice.slot().release(ticket);
                     return;
                 }
@@ -1257,6 +1357,18 @@ fn speak_chunks(
     });
 }
 
+/// 这句没念是因为过期了（等太久）才记；被更新的一句顶掉是正常的，不算
+fn note_stale(st: &AppState, text: &str, ticket: u64, born: i64) {
+    if st.voice.slot().is_current(ticket) {
+        let waited = (crate::desktop::now_ms() - born).max(0) / 1000;
+        note_skip(
+            st,
+            text,
+            &format!("等了 {waited} 秒才准备好，文字早就看完了，不念了"),
+        );
+    }
+}
+
 /// 缓存里这段音频念多久
 fn cached_ms(st: &AppState, id: &str) -> Option<i64> {
     let bytes = std::fs::read(cache_dir(st).join(format!("{id}.audio"))).ok()?;
@@ -1265,33 +1377,50 @@ fn cached_ms(st: &AppState, id: &str) -> Option<i64> {
 
 /// 启动后预热本机的 GPT-SoVITS：第一句要等模型加载（实测约 20 秒），先合成一小句，之后第一句话就不会晚到。
 /// 只在用 GPT-SoVITS、总开关开着时做；合成的结果也进缓存。
+/// 语音服务是用户自己开的，常常比 DeskMate 启动得晚：连不上就隔半分钟再试，最多试 10 次（约 5 分钟）。
+/// 以前只试一次，服务晚开的话第一句话要等 20 秒加载，早就过期被丢掉——表现就是「第一次不出声」。
 pub fn warm_up(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(8)).await;
-        let st = app.state::<AppState>();
-        let s = st.settings();
-        let v = s.voice.for_character(&s.character_id);
-        if !v.enabled || v.engine != "sovits" || v.sovits_ref_audio.is_empty() {
-            return;
-        }
-        let (text, lang) = if v.lang == "ja" {
-            ("うん。", "ja")
-        } else {
-            ("嗯。", "zh")
-        };
-        let _gate = st.voice.gate.lock().await;
-        match synth_cached(&st, &v, text, lang).await {
-            Ok(_) => log::info!("语音预热完成"),
-            Err(e) => log::info!("语音预热没成功：{e}"),
+        for attempt in 0..WARM_TRIES {
+            let st = app.state::<AppState>();
+            let s = st.settings();
+            let v = s.voice.for_character(&s.character_id);
+            if attempt == 0 && v.enabled && !v.engine.is_empty() {
+                warm_audio(&app);
+            }
+            if !v.enabled || v.engine != "sovits" || v.sovits_ref_audio.is_empty() {
+                return;
+            }
+            let (text, lang) = if v.lang == "ja" {
+                ("うん。", "ja")
+            } else {
+                ("嗯。", "zh")
+            };
+            {
+                let _gate = st.voice.gate.lock().await;
+                match synth_cached(&st, &v, text, lang).await {
+                    Ok(_) => {
+                        log::info!("语音预热完成");
+                        return;
+                    }
+                    Err(e) => log::info!("语音预热没成功（第 {} 次）：{e}", attempt + 1),
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(WARM_RETRY_SECS)).await;
         }
     });
 }
 
+/// 预热最多试几次、两次之间隔几秒
+const WARM_TRIES: u32 = 10;
+const WARM_RETRY_SECS: u64 = 30;
+
 // ---------------- 预录语音 ----------------
 
 /// 预录语音包放在角色包的 `voice/` 文件夹：`index.json`（每句多长）+ 每句一个 `<id>.opus`。
-/// 构建安装包时从发布页放进来（`scripts/chibi/fetch_voice_pack.py`），不进代码仓库。
+/// 随角色包下载（`charpacks.rs`；角色包由 `scripts/chibi/build_character_pack.py` 打），不进代码仓库。
 const PACK_INDEX_MAX_BYTES: u64 = 1024 * 1024;
 const PACK_AUDIO_MAX_BYTES: u64 = 1024 * 1024;
 
@@ -1601,6 +1730,19 @@ async fn synth(
         return Err("音频太大了".into());
     }
     Ok(bytes.to_vec())
+}
+
+/// 设置页：最近没念出来的话和原因
+#[tauri::command]
+pub fn voice_skips(state: tauri::State<'_, AppState>) -> Vec<Skip> {
+    recent_skips(&state)
+}
+
+/// 桌宠窗口播放失败时报告（浏览器那边出的错，后台看不见）
+#[tauri::command]
+pub fn voice_report(state: tauri::State<'_, AppState>, detail: String) {
+    let d: String = detail.chars().take(120).collect();
+    note_skip(&state, "", &format!("播放失败：{d}"));
 }
 
 /// 设置页「试听」：返回错误说明（成功时由桌宠窗口出声）
@@ -2434,5 +2576,94 @@ mod tests {
             }
             p => panic!("{p:?}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod skip_tests {
+    use super::*;
+
+    fn on() -> VoiceSettings {
+        VoiceSettings {
+            enabled: true,
+            engine: "pack".into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn explains_why_a_line_is_silent_only_when_the_user_wants_sound() {
+        // 总开关关着 / 没选引擎：用户自己关的，不算「没念出来」
+        assert_eq!(
+            why_silent(&VoiceSettings::default(), Scene::Chat, false, false),
+            None
+        );
+        let mut v = on();
+        assert_eq!(why_silent(&v, Scene::Chat, false, false), None);
+        assert!(
+            why_silent(&v, Scene::Proactive, true, false)
+                .unwrap()
+                .contains("勿扰")
+        );
+        assert!(
+            why_silent(&v, Scene::Reaction, false, true)
+                .unwrap()
+                .contains("全屏")
+        );
+        v.fullscreen_voice = true;
+        assert_eq!(why_silent(&v, Scene::Proactive, false, true), None);
+        v.scenes.reactions = false;
+        assert!(
+            why_silent(&v, Scene::Reaction, false, false)
+                .unwrap()
+                .contains("关着")
+        );
+        // 和 should_speak 一致：说得出原因 ⇔ 不出声
+        for scene in [
+            Scene::Reaction,
+            Scene::Proactive,
+            Scene::Chat,
+            Scene::Game,
+            Scene::GameMoment,
+        ] {
+            for (dnd, fs) in [(false, false), (true, false), (false, true), (true, true)] {
+                for fsv in [false, true] {
+                    let mut v = on();
+                    v.fullscreen_voice = fsv;
+                    assert_eq!(
+                        why_silent(&v, scene, dnd, fs).is_some(),
+                        !should_speak(&v, scene, dnd, fs),
+                        "{scene:?} dnd={dnd} fs={fs} fsv={fsv}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn skips_keep_the_latest_few_and_collapse_repeats() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = crate::state::test_state(dir.path());
+        note_skip(&st, "你好呀", "原因一");
+        note_skip(&st, "你好呀", "原因一");
+        assert_eq!(recent_skips(&st).len(), 1, "同一句同一个原因只记一次");
+        for i in 0..20 {
+            note_skip(&st, &format!("第 {i} 句"), "原因二");
+        }
+        let all = recent_skips(&st);
+        assert_eq!(all.len(), SKIPS_KEEP);
+        assert_eq!(all[0].text, "第 19 句", "新的在前");
+        // 很长的话只留开头
+        note_skip(&st, &"啊".repeat(100), "太长");
+        assert_eq!(recent_skips(&st)[0].text.chars().count(), 24);
+    }
+
+    #[test]
+    fn pack_engine_stays_silent_for_lines_without_a_recording() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = crate::state::test_state(dir.path());
+        let v = on();
+        // 没有记过日语的话（聊天里现想的）：预录语音里不会有
+        assert_eq!(plan(&st, &v, "今天天气不错呢，出去走走吧。"), Plan::Silent);
     }
 }

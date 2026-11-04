@@ -697,9 +697,12 @@ pub fn voice_save(
     state: State<'_, AppState>,
     voice: crate::voice::VoiceSettings,
 ) -> CmdResult<crate::voice::VoiceSettings> {
+    let was_enabled = state.settings().voice.enabled;
     let saved = state.update_settings(|s| s.voice = voice.sanitize()).voice;
     if !saved.enabled {
         crate::voice::interrupt(&app);
+    } else if !was_enabled {
+        crate::voice::warm_audio(&app);
     }
     desktop::broadcast_settings_changed(&app);
     Ok(saved)

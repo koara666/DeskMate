@@ -55,6 +55,7 @@ impl DataPaths {
             self.backups(),
             self.logs(),
             self.characters(),
+            self.packs(),
             self.tasks(),
         ] {
             std::fs::create_dir_all(d)?;
@@ -74,6 +75,10 @@ impl DataPaths {
     /// 用户自己的角色包 / 角色图片
     pub fn characters(&self) -> PathBuf {
         self.root.join("characters")
+    }
+    /// 下载来的官方角色包（每个角色一个文件夹，和安装包里自带的角色同一个格式；见 `charpacks.rs`）
+    pub fn packs(&self) -> PathBuf {
+        self.root.join("packs")
     }
     /// 任务执行记录（每个任务一个 jsonl）
     pub fn tasks(&self) -> PathBuf {

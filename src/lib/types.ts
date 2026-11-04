@@ -598,6 +598,45 @@ export interface CharacterItem {
   prefs: CharacterPrefs;
 }
 
+/** 可下载的角色（软件里不带任何角色，选了哪位才下载哪位；登记表编在程序里，没下载也能看到） */
+export interface PackView {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  /** 下载大小（字节） */
+  size: number;
+  /** 安装包自带的小预览图（data URL），没有就是空 */
+  preview: string;
+  installed: boolean;
+  installed_version: number;
+  latest_version: number;
+  /** 装的是旧版本，有新的可以更新 */
+  update: boolean;
+  running: boolean;
+  done: number;
+  total: number;
+  error: string;
+}
+
+/** 一句没念出来的话和原因（设置页「声音」里显示） */
+export interface VoiceSkip {
+  /** 时间（Unix 秒） */
+  at: number;
+  /** 那句话的开头 */
+  text: string;
+  reason: string;
+}
+
+/** 下载进度事件（charpack-progress） */
+export interface PackProgress {
+  id: string;
+  running: boolean;
+  done: number;
+  total: number;
+  error: string;
+}
+
 export interface CharactersView {
   current: string;
   list: CharacterItem[];

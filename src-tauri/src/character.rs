@@ -357,8 +357,14 @@ pub fn load_common_lines(builtin_root: Option<&Path>) -> Arc<LinePool> {
 
 /// 扫描内置目录和用户目录，返回全部可用角色（按 id 排序）。坏掉的角色包记日志后跳过。
 pub fn load_all(builtin_root: Option<&Path>, user_root: &Path) -> Vec<Character> {
+    load_all_in(&builtin_root.into_iter().collect::<Vec<_>>(), user_root)
+}
+
+/// 同上，内置角色可以放在好几个目录里（安装包自带的、下载来的官方角色包）；
+/// 后面的目录里同 id 的角色盖过前面的。下载来的和自带的是同一个格式，都算内置角色。
+pub fn load_all_in(builtin_roots: &[&Path], user_root: &Path) -> Vec<Character> {
     let mut map: BTreeMap<String, Character> = BTreeMap::new();
-    if let Some(root) = builtin_root {
+    for root in builtin_roots {
         for dir in subdirs(root) {
             match load_pack(&dir) {
                 Ok((manifest, persona)) => {
@@ -422,8 +428,8 @@ fn subdirs(root: &Path) -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = rd
         .flatten()
         .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
-        // `_` 开头的是程序自己的资料（比如通用台词 `_common`），不是角色
-        .filter(|e| !e.file_name().to_string_lossy().starts_with('_'))
+        // `_` 开头的是程序自己的资料（比如通用台词 `_common`），`.` 开头的是下载到一半的临时文件夹，都不是角色
+        .filter(|e| !e.file_name().to_string_lossy().starts_with(['_', '.']))
         .map(|e| e.path())
         .collect();
     v.sort();
@@ -485,7 +491,7 @@ fn find_user_image(user_dir: &Path, name: &str) -> Option<UserImage> {
     find_image_in(&user_dir.join("assets"), name)
 }
 
-/// 这个角色用哪张图：用户自己放的永远优先；没有就用安装包里自带的图片（比如千秋的 Q 版形象包，DECISIONS #66）。
+/// 这个角色用哪张图：用户自己放的永远优先；没有就用角色包里自带的图片（比如千秋的 Q 版形象包，DECISIONS #66）。
 /// 内置的 SVG 不走这里（是另一套，见 `builtin_set`）。
 fn find_char_image(c: &Character, name: &str) -> Option<UserImage> {
     find_user_image(&c.user_dir, name).or_else(|| {

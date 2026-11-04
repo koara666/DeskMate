@@ -745,6 +745,12 @@ pub async fn run_turn_with_notes(
                 out.usage.output_tokens,
                 out.finish
             );
+            if out.finish == FinishReason::Length {
+                log::warn!(
+                    "回复被截断：输出长度用完了（只写出 {} 个字）",
+                    out.text.chars().count()
+                );
+            }
             emit_pet_state(
                 &app,
                 if out.finish == FinishReason::Cancelled {

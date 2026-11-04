@@ -53,6 +53,9 @@ import type {
   Memory,
   MemoryFilter,
   MemoryOverview,
+  PackProgress,
+  PackView,
+  VoiceSkip,
   PetInit,
   PetState,
   SettingsView,
@@ -244,6 +247,10 @@ export interface VoiceApi {
   onPlay(cb: (e: PlayEvent) => void): Promise<UnlistenFn>;
   onStop(cb: () => void): Promise<UnlistenFn>;
   audio(id: string): Promise<ArrayBuffer>;
+  /** 后台叫桌宠先把声音设备唤醒（第一句话不会晚到） */
+  onWarm?(cb: () => void): Promise<UnlistenFn>;
+  /** 播放失败了告诉后台（只有这边看得到浏览器的报错），设置页「最近没出声的原因」里会显示 */
+  report?(detail: string): Promise<unknown>;
 }
 
 export const voiceApi: VoiceApi = {
@@ -251,6 +258,8 @@ export const voiceApi: VoiceApi = {
   onPlay: (cb) => listen<PlayEvent>('voice-play', (e) => cb(e.payload)),
   onStop: (cb) => listen('voice-stop', () => cb()),
   audio: (id) => invoke<ArrayBuffer>('voice_audio', { id }),
+  onWarm: (cb) => listen('voice-warm', () => cb()),
+  report: (detail) => invoke('voice_report', { detail }),
 };
 
 /** 头顶气泡菜单（单独的透明小窗口） */
@@ -310,6 +319,7 @@ export const settingsApi = {
   voiceClearKey: (which: 'fish' | 'openai') => invoke('voice_clear_key', { which }),
   voiceTest: () => invoke('voice_test'),
   voiceClearCache: () => invoke<number>('voice_clear_cache'),
+  voiceSkips: () => invoke<VoiceSkip[]>('voice_skips'),
   asrSave: (asr: AsrSettings) => invoke<AsrSettings>('asr_save', { asr }),
   asrStatus: () => invoke<AsrStatus>('asr_status'),
   asrDownload: () => invoke('asr_download'),
@@ -334,6 +344,12 @@ export const settingsApi = {
   savePrefs: (global: CharacterPrefs, characterId: string, prefs: CharacterPrefs) =>
     invoke('prefs_save', { global, characterId, prefs }),
   openCharacterDir: (id: string) => invoke('open_character_dir', { id }),
+  charpackList: () => invoke<PackView[]>('charpack_list'),
+  charpackDownload: (id: string) => invoke('charpack_download', { id }),
+  charpackCancel: (id: string) => invoke('charpack_cancel', { id }),
+  charpackRemove: (id: string) => invoke('charpack_remove', { id }),
+  onCharpackProgress: (cb: (p: PackProgress) => void) =>
+    listen<PackProgress>('charpack-progress', (e) => cb(e.payload)),
   onOpenTab: (cb: (tab: string) => void) => listen<string>('settings-tab', (e) => cb(e.payload)),
   // 换了角色：设置页里和角色有关的内容（比如这个角色有没有预录语音）要跟着刷新
   onCharacterChanged: (cb: () => void) => listen('character-changed', () => cb()),

@@ -162,3 +162,44 @@ describe('声音设置', () => {
     expect(saved.at(-1)?.engine).toBe('sovits');
   });
 });
+
+describe('最近没出声的话', () => {
+  const stubs = {
+    voiceSave: async (v: VoiceSettings) => v,
+    voiceSetKey: async () => '',
+    voiceClearKey: async () => {},
+    voiceTest: async () => {},
+    voiceClearCache: async () => 0,
+  };
+  const enabledView = () => {
+    const v = testView();
+    return { ...v, voice: { ...v.voice, enabled: true, engine: 'pack' } };
+  };
+
+  it('开着声音时列出没念的话和原因，分得清是没有录音还是出了故障', async () => {
+    const api = {
+      ...stubs,
+      voiceSkips: async () => [
+        { at: 1_800_000_100, text: '今天天气不错', reason: '预录语音里没有这句' },
+        { at: 1_800_000_000, text: '', reason: '播放失败：NotAllowedError' },
+      ],
+    };
+    render(<VoicePage api={api} view={enabledView()} />);
+    await flush();
+    const card = screen.getByTestId('voice-skips');
+    expect(card.textContent).toContain('「今天天气不错」预录语音里没有这句');
+    expect(card.textContent).toContain('播放失败：NotAllowedError');
+  });
+
+  it('一条都没有、或者声音没开，就不显示这一块', async () => {
+    const none = { ...stubs, voiceSkips: async () => [] };
+    render(<VoicePage api={none} view={enabledView()} />);
+    await flush();
+    expect(screen.queryByTestId('voice-skips')).toBeNull();
+    cleanup();
+    const some = { ...stubs, voiceSkips: async () => [{ at: 1, text: 'x', reason: 'y' }] };
+    render(<VoicePage api={some} view={testView()} />);
+    await flush();
+    expect(screen.queryByTestId('voice-skips')).toBeNull();
+  });
+});

@@ -12,6 +12,7 @@
     "allow-pet-menu",
     "allow-pet-touch",
     "allow-menu-open",
-    "allow-voice-audio"
+    "allow-voice-audio",
+    "allow-voice-report"
   ]
 }

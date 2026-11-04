@@ -442,6 +442,23 @@ pub fn default_configs() -> Vec<BackendConfig> {
     kinds().iter().map(BackendConfig::from_kind).collect()
 }
 
+/// 思考（推理）用掉的 token 也算在接口的输出长度上限里：上限只给正文留的话，模型一思考就把它吃光，
+/// 回复写到一半被截断（2026-11 实测：Gemini 思考强度 low，25% 的聊天回复只有几个字就停了）。
+/// 所以给思考另外留一份余量。这只是上限，不是用量——模型想得少，就只花想得少的钱。
+/// `on_by_default`：思考强度留空时接口是不是默认就在思考。
+pub fn with_thinking_room(max_tokens: u32, level: &str, on_by_default: bool) -> u32 {
+    let room = match level.trim() {
+        "" if on_by_default => 3072,
+        "" | "disabled" | "none" | "off" => 0,
+        "minimal" => 512,
+        "low" => 1536,
+        "medium" => 3072,
+        // high / xhigh / max 之类
+        _ => 6144,
+    };
+    max_tokens.saturating_add(room)
+}
+
 /// 粗略估算 token 数：中日韩字符约 1 token/字，ASCII 约 4 字符/token。
 /// 只用于预算控制，不用于计费（计费以后端返回的 usage 为准）。
 pub fn estimate_tokens(s: &str) -> usize {
@@ -493,6 +510,19 @@ mod tests {
             BackendError::from_status(400, "x".into()).kind(),
             "bad_request"
         );
+    }
+
+    #[test]
+    fn thinking_room_is_added_on_top_of_visible_budget() {
+        assert_eq!(with_thinking_room(600, "low", true), 600 + 1536);
+        assert_eq!(with_thinking_room(600, "minimal", true), 600 + 512);
+        assert_eq!(with_thinking_room(600, "high", false), 600 + 6144);
+        // 留空：看接口默认思不思考
+        assert_eq!(with_thinking_room(600, "", true), 600 + 3072);
+        assert_eq!(with_thinking_room(600, "", false), 600);
+        // 明确关掉的不加
+        assert_eq!(with_thinking_room(600, "disabled", true), 600);
+        assert_eq!(with_thinking_room(u32::MAX, "low", true), u32::MAX);
     }
 
     #[test]

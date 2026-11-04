@@ -5,7 +5,7 @@
 //! - 写了「关键词」行的片段和往事（`canon.rs`）一样：用户这句话提到关键词时才带，每轮最多 2 段、约 300 token。
 //!   只被角色上一句回复命中的不带（语气参考跟着用户的话走就够了）。
 //!
-//! 千秋的台词库随安装包发布（`characters/nanami-chiaki/quotes.md`）；用户数据目录里的同名文件
+//! 千秋的台词库放在她的角色包里（`characters/nanami-chiaki/quotes.md`，下载角色时一起装好）；用户数据目录里的同名文件
 //! （`%APPDATA%\DeskMate\characters\<id>\quotes.md`）优先。只读：程序没有任何写入台词库的接口。
 //!
 //! 文件格式和 canon.md 相同（第一个 `## ` 之前是给人看的说明，程序忽略）：

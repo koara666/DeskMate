@@ -1,17 +1,19 @@
 // 设置「声音」页（v2.1 P14）：选引擎、填 Key、试听、哪些场合出声、音量语速。默认关闭。
 import { useEffect, useState } from 'preact/hooks';
 import type { SettingsApi } from '../lib/ipc';
-import type { SettingsView, VoiceSettings } from '../lib/types';
+import type { SettingsView, VoiceSettings, VoiceSkip } from '../lib/types';
 import { StatusLine, useStatus } from './SettingsApp';
 import { AsrCard, type AsrApi } from './AsrCard';
 
-type Api = Pick<SettingsApi, 'voiceSave' | 'voiceSetKey' | 'voiceClearKey' | 'voiceTest' | 'voiceClearCache'> & Partial<AsrApi>;
+type Api = Pick<SettingsApi, 'voiceSave' | 'voiceSetKey' | 'voiceClearKey' | 'voiceTest' | 'voiceClearCache'> &
+  Partial<AsrApi> &
+  Partial<Pick<SettingsApi, 'voiceSkips'>>;
 
 const ENGINES: { id: string; name: string; desc: string }[] = [
   {
     id: 'pack',
     name: '预录语音（她自己的声音，装好就能用）',
-    desc: '安装包里自带的她的录音（七海千秋、牧濑红莉栖），免费、不联网、不用装任何东西。只念事先写好的台词（问候、播报、摸头、提醒、小游戏……）；聊天里现场说的话不出声。想要每句话都出声，用下面的 GPT-SoVITS。',
+    desc: '下载角色时一起装好的她的录音（七海千秋、牧濑红莉栖），免费、不联网、不用另外装任何东西。只念事先写好的台词（问候、播报、摸头、提醒、小游戏……）；聊天里现场说的话不出声。想要每句话都出声，用下面的 GPT-SoVITS。',
   },
   {
     id: 'sovits',
@@ -39,6 +41,43 @@ const FISH_PRESETS = [
   { id: 'd5e032724f8149629ec6d03735ec4c85', name: '七海千秋（日语配音风格）' },
   { id: '3d3bed2283b249a684cd8cd79dafe3e8', name: '七海千秋（英语配音风格）' },
 ];
+
+const hhmmss = (secs: number) => new Date(secs * 1000).toTimeString().slice(0, 8);
+
+/** 最近没念出来的话和原因：分得清是「这句本来就没有录音」还是「有但播放出了故障」 */
+function SkipsCard({ api }: { api: Api }) {
+  const [list, setList] = useState<VoiceSkip[]>([]);
+  useEffect(() => {
+    if (!api.voiceSkips) return;
+    let alive = true;
+    const load = () =>
+      api
+        .voiceSkips?.()
+        .then((l) => alive && setList(l))
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 4000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [api]);
+  if (list.length === 0) return null;
+  return (
+    <div class="card" data-testid="voice-skips">
+      <h2>最近没出声的话</h2>
+      <p class="muted">她说了、但声音没念的话，和没念的原因（最近 {list.length} 句，新的在前）。</p>
+      <ul class="plain">
+        {list.map((s) => (
+          <li key={`${s.at}-${s.text}-${s.reason}`}>
+            <span class="muted mono">{hhmmss(s.at)}</span> {s.text && <>「{s.text}」</>}
+            {s.reason}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
   const [v, setV] = useState<VoiceSettings>(view.voice);
@@ -305,6 +344,8 @@ export function VoicePage({ api, view }: { api: Api; view: SettingsView }) {
           {keyFor === 'fish' && <p class="muted small">怎么拿：fish.audio 注册登录 → 右上角头像 → API Keys → 新建一个，复制过来。</p>}
         </div>
       )}
+
+      {v.enabled && <SkipsCard api={api} />}
 
       {v.engine && (
         <div class="card">

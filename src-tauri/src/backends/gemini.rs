@@ -78,7 +78,10 @@ impl Gemini {
                 }
             })
             .collect();
-        let mut gen_cfg = json!({"maxOutputTokens": req.max_tokens});
+        // maxOutputTokens 把思考也算进去：不给思考留余量，正文会被截断
+        let mut gen_cfg = json!({
+            "maxOutputTokens": with_thinking_room(req.max_tokens, &self.reasoning, true)
+        });
         if let Some(t) = req.temperature {
             gen_cfg["temperature"] = json!(t);
         }
@@ -278,7 +281,8 @@ mod tests {
         assert_eq!(b["systemInstruction"]["parts"][0]["text"], "你是猫");
         assert_eq!(b["contents"][1]["role"], "model");
         assert_eq!(b["contents"][2]["parts"][0]["text"], "在干嘛");
-        assert_eq!(b["generationConfig"]["maxOutputTokens"], 100);
+        // 思考强度 low：正文 100 + 给思考留的 1536
+        assert_eq!(b["generationConfig"]["maxOutputTokens"], 100 + 1536);
         assert_eq!(
             b["generationConfig"]["thinkingConfig"]["thinkingLevel"],
             "low"

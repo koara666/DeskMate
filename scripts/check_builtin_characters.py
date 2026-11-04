@@ -1,13 +1,15 @@
 """检查内置完整角色是不是都按同一套做法打包（CI 里自动跑；本机推送 / 打标签前也可以跑）。
 
   python scripts/check_builtin_characters.py            离线检查（登记表、角色文件夹、文档、流水线、仓库里没有版权图和录音）
-  python scripts/check_builtin_characters.py --online   再去 GitHub 发布页核对三个包是否已经传好、校验值是否对得上
+  python scripts/check_builtin_characters.py --online   再去 GitHub 发布页核对包是否已经传好、校验值是否对得上
 
 规则（每个有 Q 版形象 + 日语声音的角色都一样，登记在 scripts/builtin_characters.json）：
-  1. 形象包、预录语音包放发布页，构建时下载进安装包（用户零步骤）；声音模型也放发布页，但不进安装包
-  2. 图和录音不进代码仓库，仓库里只有代码画的 SVG 兜底和日语台词
-  3. 有日语台词（zh || ja）的角色必须登记，登记了就必须三个包齐全
-  4. docs/VOICE.md 里列出每个角色的模型发布页和校验值
+  1. 软件本体不带任何角色：每个角色打成「角色包」放发布页，用户在软件里选了哪位就下载哪位；
+     登记表里的校验值编进程序，下载下来对不上就不装
+  2. 形象包、预录语音包是打角色包的原料，也放发布页；声音模型也放发布页，不在角色包里
+  3. 图和录音不进代码仓库，仓库里只有代码画的 SVG 兜底和日语台词
+  4. 有日语台词（zh || ja）的角色必须登记，登记了就必须四个包齐全
+  5. docs/VOICE.md 里列出每个角色的模型发布页和校验值
 """
 
 import hashlib
@@ -44,7 +46,7 @@ def offline():
             bad(f"{where}：short（短名）要全是小写字母")
         if not c.get("label"):
             bad(f"{where}：缺少 label（显示名）")
-        for kind in bc.KINDS:
+        for kind in bc.ALL_KINDS:
             p = c.get(kind) or {}
             if not isinstance(p.get("version"), int) or p["version"] < 1:
                 bad(f"{where}：{kind}.version 要是 ≥1 的整数")
@@ -52,6 +54,19 @@ def offline():
                 bad(f"{where}：{kind}.sha256 要是 64 位小写十六进制")
             if p.get("version") and re.match(r"v\d", bc.tag(c["short"], kind, p["version"])):
                 bad(f"{where}：{kind} 的标签不能以 v 加数字开头")
+        # 选角色页在下载之前就要显示名字、简介、大小，这些编进程序，必须和角色文件夹里的一致
+        pk = c.get("pack") or {}
+        if not isinstance(pk.get("size"), int) or not 0 < pk["size"] < 64 * 1024 * 1024:
+            bad(f"{where}：pack.size 要是下载大小（字节，小于 64 MB）")
+        if not c.get("name") or not c.get("description"):
+            bad(f"{where}：缺少 name / description（scripts/chibi/build_character_pack.py --update-registry 会从 character.json 写进来）")
+        cj = os.path.join(chars_dir, cid, "character.json")
+        if os.path.isfile(cj):
+            import json
+            m = json.load(open(cj, encoding="utf-8"))
+            for key in ("name", "description", "color"):
+                if c.get(key) != m.get(key, ""):
+                    bad(f"{where}：{key} 和 characters/{cid}/character.json 对不上——改完角色设定要重新打包并 --update-registry")
         d = os.path.join(chars_dir, cid)
         if not os.path.isdir(d):
             bad(f"{where}：characters/{cid}/ 不存在")
@@ -83,15 +98,18 @@ def offline():
         if t not in voice_doc or m["sha256"] not in voice_doc:
             bad(f"docs/VOICE.md 里没有 {c['label']} 的模型发布页（{t}）或校验值")
 
-    # 流水线：两个包都 --require
+    # 流水线：预览图要有、角色包必须真的传好了（否则发出去的软件里选了角色下载不下来）
     rel = read(".github", "workflows", "release.yml")
-    for script in ("scripts/chibi/fetch_art.py --require", "scripts/voice/fetch_voice_pack.py --require"):
+    for script in ("scripts/chibi/fetch_art.py --require", "scripts/chibi/make_previews.py", "scripts/check_builtin_characters.py --online"):
         if script not in rel:
             bad(f"release.yml 里没有 `python {script}`（缺包时发布要失败，保证下载版 = 本机版）")
+    conf = read("src-tauri", "tauri.conf.json")
+    if '"../characters/": ' in conf or "../characters/nanami" in conf or "../characters/makise" in conf:
+        bad("tauri.conf.json 的 resources 里不能带角色文件夹：安装包不带任何角色，角色是用户选了才下载的")
 
     # .gitignore：图和录音不进仓库
     ign = read(".gitignore")
-    for pat in ("characters/*/assets/*.png", "/characters/*/voice/"):
+    for pat in ("characters/*/assets/*.png", "/characters/*/voice/", "/characters/_catalog/*.png", "/dist-packs/"):
         if pat not in ign:
             bad(f".gitignore 里没有 {pat}")
 
@@ -115,9 +133,9 @@ def get(url, byte_range=False):
 
 def online():
     for cid, c in bc.registry().items():
-        for kind in bc.KINDS:
+        for kind in bc.ALL_KINDS:
             v = c[kind]["version"]
-            url = f"{bc.BASE}/{bc.tag(c['short'], kind, v)}/{bc.filename(c['short'], kind, v)}"
+            url = f"{bc.BASE}/{bc.tag(c['short'], kind, v)}/{bc.filename(c['short'], kind, v, cid)}"
             try:
                 if kind == "model":
                     get(url, byte_range=True)  # 304 MB，只确认传上去了
@@ -127,9 +145,9 @@ def online():
                     if sha != c[kind]["sha256"]:
                         bad(f"{url} 校验值对不上：期望 {c[kind]['sha256']}，实际 {sha}")
                     else:
-                        print(f"  有  {c['label']}·{'形象包' if kind == 'art' else '语音包'}  校验通过")
+                        print(f"  有  {c['label']}·{ {'pack': '角色包', 'art': '形象包'}.get(kind, '语音包') }  校验通过")
             except urllib.error.HTTPError as e:
-                bad(f"发布页上还没有 {url}（{e.code}）——先传好三个发布页再推 v* 标签")
+                bad(f"发布页上还没有 {url}（{e.code}）——先传好四个发布页再推 v* 标签")
             except Exception as e:
                 bad(f"访问 {url} 失败：{e}")
 

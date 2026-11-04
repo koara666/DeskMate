@@ -57,6 +57,16 @@ pub struct AppState {
     pub voice: crate::voice::VoiceState,
     /// 语音输入：识别器、正在录的这一轮、模型下载
     pub asr: crate::asr::AsrState,
+    /// 角色包的下载进度
+    pub packs: crate::charpacks::PackState,
+}
+
+/// 内置角色放在哪些目录：安装包自带的（现在只有通用台词和占位图；开发时是仓库里的 characters/）+ 下载来的官方角色包
+fn roots<'a>(
+    bundled: Option<&'a std::path::Path>,
+    packs: &'a std::path::Path,
+) -> Vec<&'a std::path::Path> {
+    bundled.into_iter().chain(std::iter::once(packs)).collect()
 }
 
 impl AppState {
@@ -67,8 +77,11 @@ impl AppState {
         secrets: Box<dyn SecretStore>,
     ) -> Self {
         let settings = settings::load(&conn);
-        let characters =
-            character::load_all(builtin_characters_dir.as_deref(), &paths.characters());
+        let packs = paths.packs();
+        let characters = character::load_all_in(
+            &roots(builtin_characters_dir.as_deref(), &packs),
+            &paths.characters(),
+        );
         let common_lines = character::load_common_lines(builtin_characters_dir.as_deref());
         Self {
             paths,
@@ -97,6 +110,7 @@ impl AppState {
             radial: Default::default(),
             voice: Default::default(),
             asr: Default::default(),
+            packs: Default::default(),
         }
     }
 
@@ -141,8 +155,9 @@ impl AppState {
     }
 
     pub fn reload_characters(&self) {
-        let list = character::load_all(
-            self.builtin_characters_dir.as_deref(),
+        let packs = self.paths.packs();
+        let list = character::load_all_in(
+            &roots(self.builtin_characters_dir.as_deref(), &packs),
             &self.paths.characters(),
         );
         *self.characters.write().unwrap_or_else(|e| e.into_inner()) = list;

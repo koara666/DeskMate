@@ -33,7 +33,8 @@ impl Default for PromptBudget {
         Self {
             memory_tokens: 800,
             history_tokens: 3000,
-            max_output_tokens: 600,
+            // 正文的上限（含开着日语语音时回复开头的 [[日语：…]]）；思考另外留余量，见 backends::with_thinking_room
+            max_output_tokens: 800,
         }
     }
 }

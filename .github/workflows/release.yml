@@ -43,11 +43,15 @@ jobs:
           test "v$v" = "${GITHUB_REF_NAME}" || { echo "标签 ${GITHUB_REF_NAME} 和版本 v$v 不一致"; exit 1; }
       # 不再在这里重跑测试：推送前本机 `npm run check` 已经全过，推送到 main 的 CI 也会再跑一遍；
       # 这里重跑只是白白多花十来分钟（DECISIONS #66）。
-      # 下面两个包放在发布页上，找不到就让发布失败（--require）：保证下载到的安装包和开发机上的一样
-      - name: 放进内置角色的 Q 版形象包（千秋、红莉栖）
-        run: python scripts/chibi/fetch_art.py --require
-      - name: 放进内置角色的预录语音包（千秋、红莉栖）
-        run: python scripts/voice/fetch_voice_pack.py --require
+      # 安装包不带任何角色：用户在软件里选了哪位才下载哪位的角色包（校验值编在程序里）。
+      # 所以发布前必须确认每个角色包都已经在发布页上、校验值对得上，缺了就让发布失败，保证下载到的软件选了角色下得下来。
+      - name: 核对每个角色包都已经传到发布页
+        run: python scripts/check_builtin_characters.py --online
+      # 选角色页在下载之前要能看到角色长什么样：取形象包，做预览图（很小，随安装包带）
+      - name: 做选角色页的预览图
+        run: |
+          python scripts/chibi/fetch_art.py --require
+          python scripts/chibi/make_previews.py
       - name: 构建安装包
         run: npx tauri build
       - name: 计算 SHA-256

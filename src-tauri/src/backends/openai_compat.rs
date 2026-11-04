@@ -80,7 +80,8 @@ impl OpenAiCompat {
             "messages": messages,
             "stream": true,
             "stream_options": {"include_usage": true},
-            "max_tokens": req.max_tokens,
+            // 开了思考（reasoning_effort）的模型，思考也算在 max_tokens 里
+            "max_tokens": with_thinking_room(req.max_tokens, &self.reasoning, false),
         });
         if let Some(t) = req.temperature {
             body["temperature"] = json!(t);

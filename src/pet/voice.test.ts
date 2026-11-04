@@ -149,3 +149,81 @@ describe('说话时带上表情候选', () => {
   });
 });
 
+
+describe('预录 / 合成语音的播放', () => {
+  function audioApi(over: Partial<VoiceApi> = {}) {
+    let play: ((e: { id: string; volume: number }) => void) | null = null;
+    let warm: (() => void) | null = null;
+    const reports: string[] = [];
+    const api = {
+      onSay: () => Promise.resolve(() => {}),
+      onPlay: (cb: (e: { id: string; volume: number }) => void) => {
+        play = cb;
+        return Promise.resolve(() => {});
+      },
+      onStop: () => Promise.resolve(() => {}),
+      onWarm: (cb: () => void) => {
+        warm = cb;
+        return Promise.resolve(() => {});
+      },
+      audio: async () => new ArrayBuffer(8),
+      report: async (d: string) => {
+        reports.push(d);
+      },
+      ...over,
+    } as unknown as VoiceApi;
+    return { api, play: (id = 'a') => play!({ id, volume: 1 }), warm: () => warm!(), reports };
+  }
+
+  function fakeAudio(playImpl: () => Promise<void>) {
+    const made: { src: string }[] = [];
+    class A {
+      volume = 1;
+      onplay: (() => void) | null = null;
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      error: { message: string; code: number } | null = null;
+      constructor(public src: string) {
+        made.push(this);
+      }
+      pause() {}
+      play = playImpl;
+    }
+    vi.stubGlobal('Audio', A);
+    vi.stubGlobal('URL', { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} });
+    return made;
+  }
+
+  it('浏览器不让播（比如没有用户操作）：把原因告诉后台，不再悄悄没声音', async () => {
+    fakeAudio(() => Promise.reject(Object.assign(new Error('play() failed'), { name: 'NotAllowedError' })));
+    const { api, play, reports } = audioApi();
+    startVoice(api, () => {});
+    play();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toContain('NotAllowedError');
+  });
+
+  it('取音频失败也报告', async () => {
+    fakeAudio(() => Promise.resolve());
+    const { api, play, reports } = audioApi({
+      audio: async () => {
+        throw new Error('找不到音频');
+      },
+    });
+    startVoice(api, () => {});
+    play();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(reports[0]).toContain('找不到音频');
+  });
+
+  it('后台说要唤醒声音设备时放一小段静音，只放一次', async () => {
+    const made = fakeAudio(() => Promise.resolve());
+    const { api, warm } = audioApi();
+    startVoice(api, () => {});
+    await new Promise((r) => setTimeout(r, 0));
+    warm();
+    warm();
+    expect(made).toHaveLength(1);
+  });
+});
