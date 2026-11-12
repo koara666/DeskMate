@@ -23,6 +23,8 @@ use tauri::{AppHandle, Emitter, Manager};
 pub enum Kind {
     /// 用户设定的提醒（含补提醒）
     Reminder,
+    /// 计划的监督：分心时提一句、晚上问一句、专注计时到了（频率由计划自己管，不看冷却；勿扰、安静时段照样挡）
+    Plan,
     /// 日常关怀
     Care,
     /// 每日播报
@@ -169,6 +171,8 @@ pub struct Gate {
     pub user_away: bool,
     /// 在玩游戏 / 看视频 / 开会：关怀和播报等一等
     pub deep_focus: bool,
+    /// 正在专注计时（计划）：闲聊和活动评论不说，关怀和播报等一等
+    pub focusing: bool,
     /// 本地时间：一天中的第几分钟
     pub minute_of_day: u32,
 }
@@ -212,12 +216,23 @@ pub fn decide(kind: Kind, s: &CompanionSettings, g: &Gate, p: &Pace, now: i64) -
     if !s.enabled || g.dnd || g.private_foreground || s.in_quiet(g.minute_of_day) {
         return Decision::Drop;
     }
+    if kind == Kind::Plan {
+        // 计划的监督：要的就是在玩游戏时提醒，所以不看「在忙」；全屏、离开、正在回复时等一等
+        return if g.fullscreen || g.user_away || g.generating {
+            Decision::Wait
+        } else {
+            Decision::Speak
+        };
+    }
+    if g.focusing && matches!(kind, Kind::Activity | Kind::Random) {
+        return Decision::Drop;
+    }
     if p.said_today >= s.daily_cap(kind) {
         return Decision::Drop;
     }
     // 关怀和播报可以等（等用户退出全屏、回到电脑前）；活动评论和小事件过了那个时机就没意义了
     let can_wait = matches!(kind, Kind::Care | Kind::Briefing);
-    if g.fullscreen || g.user_away || (g.deep_focus && can_wait) {
+    if g.fullscreen || g.user_away || ((g.deep_focus || g.focusing) && can_wait) {
         return if can_wait {
             Decision::Wait
         } else {
@@ -430,6 +445,7 @@ pub fn current_gate(app: &AppHandle) -> Gate {
         generating: st.chat.is_generating(),
         user_away: crate::daily::system_idle_secs() >= 300,
         deep_focus,
+        focusing: crate::plans::supervise::focusing(&st),
         minute_of_day: now.hour() * 60 + now.minute(),
     }
 }
@@ -592,6 +608,49 @@ mod tests {
     }
 
     const NOW: i64 = 1_800_000_000;
+
+    #[test]
+    fn plan_nudges_ignore_busy_and_cooldown_but_respect_dnd() {
+        let p = Pace {
+            last_spoke: NOW - 60,
+            ..Default::default()
+        };
+        let gaming = Gate {
+            deep_focus: true,
+            ..free()
+        };
+        assert_eq!(decide(Kind::Plan, &s(), &gaming, &p, NOW), Decision::Speak);
+        let dnd = Gate {
+            dnd: true,
+            ..free()
+        };
+        assert_eq!(decide(Kind::Plan, &s(), &dnd, &p, NOW), Decision::Drop);
+        let fs = Gate {
+            fullscreen: true,
+            ..free()
+        };
+        assert_eq!(decide(Kind::Plan, &s(), &fs, &p, NOW), Decision::Wait);
+        let mut quiet = s();
+        quiet.quiet_enabled = true;
+        quiet.quiet_start = "14:00".into();
+        quiet.quiet_end = "16:00".into();
+        assert_eq!(decide(Kind::Plan, &quiet, &free(), &p, NOW), Decision::Drop);
+        // 专注计时的时候：闲聊不说，关怀等一等
+        let focus = Gate {
+            focusing: true,
+            ..free()
+        };
+        let idle = Pace::default();
+        assert_eq!(
+            decide(Kind::Random, &s(), &focus, &idle, NOW),
+            Decision::Drop
+        );
+        assert_eq!(decide(Kind::Care, &s(), &focus, &idle, NOW), Decision::Wait);
+        assert_eq!(
+            decide(Kind::Plan, &s(), &focus, &idle, NOW),
+            Decision::Speak
+        );
+    }
 
     #[test]
     fn quiet_hours_cross_midnight() {

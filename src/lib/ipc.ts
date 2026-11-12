@@ -3,6 +3,7 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type {
+  AgendaEntry,
   AsrDownload,
   AsrSettings,
   AsrStateEvent,
@@ -62,6 +63,31 @@ import type {
   Placement,
   TestResult,
   UsageView,
+  GoalDraft,
+  GoalFull,
+  GoalMilestone,
+  GoalQa,
+  GoalSummary,
+  GoalView,
+  GoalViz,
+  MilestoneStatus,
+  PlanThink,
+  Plan,
+  PlanBoot,
+  PlanDoneEffect,
+  PlanDraft,
+  PlanFixed,
+  PlanFocus,
+  PlanItem,
+  PlanNote,
+  PlanPreview,
+  PlanSettings,
+  PlanStats,
+  PlanStatus,
+  PlanSummary,
+  PlanTask,
+  PlanToday,
+  PlanView,
 } from './types';
 
 export interface ChatApi {
@@ -98,6 +124,10 @@ export interface ChatApi {
   onReminderForm?(cb: (text: string) => void): Promise<UnlistenFn>;
   /** 语音输入（对着麦克风说话）；不传时输入框没有麦克风按钮 */
   asr?: AsrChatApi;
+  /** 气泡里点了「记成做完」（计划里的一项） */
+  planDone?(taskId: number): Promise<unknown>;
+  /** 打开计划窗口（new:<一句话> = 新建计划并填好） */
+  openPlans?(view: string): Promise<void>;
 }
 
 /** 语音输入：聊天窗口这一侧（开始 / 停止、状态、识别出来的文字） */
@@ -188,6 +218,8 @@ export const chatApi: ChatApi = {
   update: updateApi,
   onReminderForm: (cb) => listen<string>('chat-reminder-form', (e) => cb(e.payload)),
   asr: asrChatApi,
+  planDone: (taskId) => invoke('plan_task_done', { id: taskId, spent: null, finished: null }),
+  openPlans: (view) => invoke('plans_open', { view }),
 };
 
 export interface PetApi {
@@ -203,6 +235,8 @@ export interface PetApi {
   onChanged(cb: () => void): Promise<UnlistenFn[]>;
   /** 反应时短暂换一张图（摸头、甩晕、躲起来、输赢……） */
   onPose?(cb: (p: { pose: string; ms: number }) => void): Promise<UnlistenFn>;
+  /** 专注计时开始 / 结束（计划） */
+  onFocus?(cb: (f: PlanFocus | null) => void): Promise<UnlistenFn>;
 }
 
 export const petApi: PetApi = {
@@ -214,6 +248,7 @@ export const petApi: PetApi = {
   startDrag: () => getCurrentWindow().startDragging(),
   onState: (cb) => listen<PetState>('pet-state', (e) => cb(e.payload)),
   onPose: (cb) => listen<{ pose: string; ms: number }>('pet-pose', (e) => cb(e.payload)),
+  onFocus: (cb) => listen<PlanFocus | null>('plan-focus', (e) => cb(e.payload)),
   onChanged: (cb) =>
     Promise.all([
       listen('settings-changed', () => cb()),
@@ -291,6 +326,7 @@ export function newRequestId(): string {
 
 export const settingsApi = {
   get: () => invoke<SettingsView>('settings_get'),
+  plansOpen: (view?: string) => invoke('plans_open', { view: view ?? null }),
   saveGeneral: (general: General) => invoke('settings_save_general', { general }),
   saveBackend: (config: BackendConfig) => invoke('backend_save', { config }),
   addBackend: (kind: string) => invoke<string>('backend_add', { kind }),
@@ -401,3 +437,65 @@ export const taskSettingsApi = {
   list: () => invoke<TaskRecord[]>('task_list'),
   openLog: (taskId: string) => invoke('task_open_log', { taskId }),
 };
+
+/** 计划窗口用的接口 */
+export const plansApi = {
+  boot: () => invoke<PlanBoot>('plan_boot'),
+  today: () => invoke<PlanToday>('plan_today'),
+  list: () => invoke<PlanSummary[]>('plan_list'),
+  get: (id: number) => invoke<PlanView>('plan_get', { id }),
+  stats: () => invoke<PlanStats>('plan_stats'),
+  agendaRange: (from: string, to: string) => invoke<AgendaEntry[]>('agenda_range', { from, to }),
+  agendaSave: (entry: AgendaEntry) => invoke<AgendaEntry>('agenda_save', { entry }),
+  agendaDelete: (id: number) => invoke<void>('agenda_delete', { id }),
+  agendaDone: (id: number, done: boolean) => invoke<void>('agenda_done', { id, done }),
+  draft: (text: string, fixed: PlanFixed) => invoke<PlanDraft>('plan_draft', { text, fixed }),
+  replan: (id: number, text: string) => invoke<PlanDraft>('plan_replan', { id, text }),
+  preview: (plan: Plan, items: PlanItem[]) => invoke<PlanPreview>('plan_preview', { plan, items }),
+  /** 保存计划（id = 0 是新建）；items 为 null = 内容不变 */
+  apply: (plan: Plan, items: PlanItem[] | null) => invoke<number>('plan_apply', { plan, items }),
+  setStatus: (id: number, status: PlanStatus) => invoke('plan_set_status', { id, status }),
+  remove: (id: number) => invoke('plan_delete', { id }),
+  saveTask: (task: PlanTask) => invoke<number>('plan_task_save', { task }),
+  doneTask: (id: number, spent: number | null, finished: boolean | null) =>
+    invoke<PlanDoneEffect>('plan_task_done', { id, spent, finished }),
+  taskStatus: (id: number, status: 'todo' | 'skipped') => invoke('plan_task_status', { id, status }),
+  moveTask: (id: number, day: string) => invoke('plan_task_move', { id, day }),
+  deleteTask: (id: number) => invoke('plan_task_delete', { id }),
+  addNote: (note: Pick<PlanNote, 'plan_id' | 'day' | 'content'>) => invoke<number>('plan_note_add', { note }),
+  deleteNote: (id: number) => invoke('plan_note_delete', { id }),
+  saveSettings: (settings: PlanSettings) => invoke<PlanSettings>('plan_settings_save', { settings }),
+  focusStart: (taskId: number, minutes: number | null) => invoke<PlanFocus>('plan_focus_start', { taskId, minutes }),
+  focusStop: (done: boolean) => invoke('plan_focus_stop', { done }),
+  focusState: () => invoke<PlanFocus | null>('plan_focus_state'),
+  onFocus: (cb: (f: PlanFocus | null) => void) => listen<PlanFocus | null>('plan-focus', (e) => cb(e.payload)),
+  openSettings: () => invoke('open_settings'),
+  /** 计划有变化（她那边记了完成、换了一天……） */
+  onChanged: (cb: () => void) => listen('plans-changed', () => cb()),
+  /** 别处要求跳到某一页 */
+  onView: (cb: (view: string) => void) => listen<string>('plans-view', (e) => cb(e.payload)),
+  onCharacterChanged: (cb: () => void) => listen('character-changed', () => cb()),
+  /** 让她来安排：简单的计划 / 先问几个问题 / 计划书。answers 为 null = 第一次（允许先问）；complex 为 null = 让她判断 */
+  think: (text: string, fixed: PlanFixed, answers: GoalQa[] | null, complex: boolean | null) =>
+    invoke<PlanThink>('plan_think', { text, fixed, answers, complex }),
+  /** 她在想哪一步（「画路线图…」） */
+  onThinking: (cb: (stage: string) => void) => listen<string>('plans-thinking', (e) => cb(e.payload)),
+  goalList: () => invoke<GoalSummary[]>('goal_list'),
+  goalGet: (id: number) => invoke<GoalView>('goal_get', { id }),
+  /** 草稿改了之后重新推算 */
+  goalPreview: (full: GoalFull) => invoke<GoalViz>('goal_preview', { full }),
+  /** 保存整个计划书（goal.id <= 0 是新建）；withItems = false 时不动内容条目 */
+  goalApply: (full: GoalFull, withItems: boolean) => invoke<number>('goal_apply', { full, withItems }),
+  goalSetStatus: (id: number, status: PlanStatus) => invoke('goal_set_status', { id, status }),
+  goalDelete: (id: number) => invoke('goal_delete', { id }),
+  milestoneCheck: (id: number, status: MilestoneStatus, result: string | null) =>
+    invoke<GoalMilestone>('goal_milestone_check', { id, status, result }),
+  /** 调整下周（调一次模型），结果是草稿 */
+  goalExpand: (id: number, text: string) => invoke<GoalDraft>('goal_expand', { id, text }),
+  /** 按改过的原文重新理解（调一次模型），结果是草稿 */
+  goalRethink: (id: number, doc: string) => invoke<GoalDraft>('goal_rethink', { id, doc }),
+  /** 按现在的计划书重新生成原文（本地） */
+  goalRenderDoc: (full: GoalFull) => invoke<string>('goal_render_doc', { full }),
+};
+
+export type PlansApi = typeof plansApi;

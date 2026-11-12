@@ -9,7 +9,7 @@ type Api = Pick<SettingsApi, 'reminderList' | 'reminderSave' | 'reminderDelete' 
 
 const STATUS: Record<string, string> = { active: '', paused: '已暂停', done: '已完成' };
 
-export function RemindersPage({ api }: { api: Api }) {
+export function RemindersPage({ api, onOpenPlans }: { api: Api; onOpenPlans?: () => void }) {
   const [list, setList] = useState<ReminderView[] | null>(null);
   /** 正在编辑的：0 = 新建 */
   const [editing, setEditing] = useState<Reminder | null>(null);
@@ -38,6 +38,18 @@ export function RemindersPage({ api }: { api: Api }) {
         在聊天里说「半小时后提醒我收衣服」「每周五晚上提醒我倒垃圾」「明天开机时提醒我交作业」，她会复述一遍，你点「好」就设好了。
         电脑关着的时候错过的提醒，下次开机时会补上。玩游戏、看全屏视频时到了的提醒会改发系统通知（可以在「陪伴」页关掉）。
       </p>
+
+      {onOpenPlans && (
+        <div class="card callout">
+          <b>长期要做的事，放进「计划」更合适</b>
+          <p class="muted small">
+            学习、备考、读书、健身打卡……写下想做什么，她会帮你拆成每天能做完的小块，到点提醒、陪你打卡，没做完的自动往后排。
+          </p>
+          <button type="button" class="btn btn-small" onClick={onOpenPlans}>
+            打开计划
+          </button>
+        </div>
+      )}
 
       <div class="card">
         {editing && editing.id === 0 ? (

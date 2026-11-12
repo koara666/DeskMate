@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import type { PetApi, VoiceApi } from '../lib/ipc';
 import { startVoice } from './voice';
-import type { PetInit, PetState } from '../lib/types';
+import type { PetInit, PetState, PlanFocus } from '../lib/types';
 import { applyTheme } from '../lib/theme';
 
 const DRAG_THRESHOLD = 4;
@@ -290,7 +290,42 @@ export function Pet({ api, voice, random = Math.random }: Props) {
       )}
       {state === 'sleep' && <div class="pet-zzz">z z</div>}
       {init?.dnd && <div class="pet-dnd" title="勿扰模式" />}
+      {api.onFocus && <FocusBadge api={api} initial={init?.focus ?? null} />}
       {src && <img key={`pat-${patted}`} class={`pet-img ${patted ? 'patted' : ''}`} src={src} alt={name} draggable={false} />}
+    </div>
+  );
+}
+
+/** 专注计时（计划）：桌宠脚下一个小牌子写着还剩几分钟。15 秒更新一次，不用每秒重画。 */
+function FocusBadge({ api, initial }: { api: PetApi; initial: PlanFocus | null }) {
+  const [focus, setFocus] = useState<PlanFocus | null>(initial);
+  /** 后端时钟 - 本地时钟（秒） */
+  const skew = useRef(0);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    setFocus(initial);
+    if (initial) skew.current = initial.now - Date.now() / 1000;
+  }, [initial]);
+  useEffect(() => {
+    const off = api.onFocus?.((f) => {
+      if (f) skew.current = f.now - Date.now() / 1000;
+      setFocus(f);
+    });
+    return () => {
+      off?.then((u) => u()).catch(() => {});
+    };
+  }, [api]);
+  useEffect(() => {
+    if (!focus) return;
+    const t = setInterval(() => tick((x) => x + 1), 15_000);
+    return () => clearInterval(t);
+  }, [focus]);
+  if (!focus) return null;
+  const left = Math.max(0, focus.ends_at - (Date.now() / 1000 + skew.current));
+  const m = Math.ceil(left / 60);
+  return (
+    <div class="pet-focus" title={`专注中：${focus.title}`} aria-label={`专注中，还剩 ${m} 分钟`}>
+      🍅 {m > 0 ? `${m} 分` : '快到了'}
     </div>
   );
 }

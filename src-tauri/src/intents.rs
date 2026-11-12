@@ -76,10 +76,77 @@ pub enum Intent {
     ListReminders,
     /// 取消内容里有这些字的提醒（空 = 刚才那个）
     CancelReminder(String),
+    /// 今天的计划还有什么（`explicit`：说了「计划」两个字；没说的话今天没有安排就交给普通聊天）
+    PlansToday {
+        explicit: bool,
+    },
+    /// 打开计划窗口
+    OpenPlans,
+    /// 想做个新计划（原话，打开计划窗口时填进去）
+    NewPlan(String),
 }
+
+/// 「帮我做个计划」这类说法
+const NEW_PLAN_WORDS: &[&str] = &[
+    "做个计划",
+    "做一个计划",
+    "定个计划",
+    "定一个计划",
+    "制定计划",
+    "制定一个计划",
+    "订个计划",
+    "排个计划",
+    "安排一个计划",
+    "帮我规划",
+    "帮我做计划",
+    "做个学习计划",
+    "做一个学习计划",
+];
 
 fn has_any(t: &str, ks: &[&str]) -> bool {
     ks.iter().any(|k| t.contains(k))
+}
+
+/// 「做个计划」前面可以是什么：没有、称呼加逗号（「千秋，做个计划」），或者以请求的说法结尾（帮我 / 我想 / 能不能……）
+const NEW_PLAN_ASK: &[&str] = &[
+    "帮我",
+    "给我",
+    "替我",
+    "帮忙",
+    "我想",
+    "想",
+    "我要",
+    "想要",
+    "请",
+    "来",
+    "一起",
+    "咱们",
+    "我们",
+    "能不能",
+    "可以",
+    "可不可以",
+];
+
+/// 是在请她做个新计划吗（`t` 已去掉空白、转小写）。
+/// 「昨天我做个计划结果没完成」「公司要做一个计划书」这种是在聊天；「帮我规划一下去京都的路线」是问路线，都交给普通聊天。
+fn asks_new_plan(t: &str) -> bool {
+    if has_any(t, &["不用", "不想", "不要"]) {
+        return false;
+    }
+    if t.contains("帮我规划") && has_any(t, &["路线", "行程", "怎么走", "导航", "旅游", "旅行"])
+    {
+        return false;
+    }
+    NEW_PLAN_WORDS.iter().any(|w| {
+        t.match_indices(w).any(|(i, _)| {
+            let before = &t[..i];
+            if before.chars().count() > 8 {
+                return false;
+            }
+            let vocative = before.ends_with(['，', ',', '、', '！', '!', '~', '～']);
+            before.is_empty() || vocative || NEW_PLAN_ASK.iter().any(|k| before.ends_with(k))
+        })
+    })
 }
 
 /// 认一认这句话是不是要她做点什么（纯函数）。拿不准就返回 None，交给普通聊天。
@@ -90,9 +157,74 @@ pub fn detect(text: &str) -> Option<Intent> {
         .collect::<String>()
         .to_lowercase();
     let n = t.chars().count();
+    // 「帮我做个计划：……」后面可能写得很长，在长度限制之前认
+    if asks_new_plan(&t) {
+        return Some(Intent::NewPlan(text.trim().chars().take(500).collect()));
+    }
     if n == 0 || n > 40 {
         // 长句多半是在聊天，不是吩咐
         return None;
+    }
+    // —— 计划 ——
+    if has_any(
+        &t,
+        &[
+            "打开计划",
+            "计划窗口",
+            "看看我的计划",
+            "看看计划",
+            "打开我的计划",
+        ],
+    ) {
+        return Some(Intent::OpenPlans);
+    }
+    let asking = n <= 10
+        || has_any(
+            &t,
+            &[
+                "看看",
+                "哪些",
+                "什么",
+                "吗",
+                "呢",
+                "?",
+                "？",
+                "说说",
+                "告诉我",
+                "多少",
+            ],
+        );
+    if asking
+        && has_any(
+            &t,
+            &[
+                "今天的计划",
+                "今天计划",
+                "今日计划",
+                "我的计划",
+                "今天的安排",
+            ],
+        )
+    {
+        return Some(Intent::PlansToday { explicit: true });
+    }
+    if has_any(
+        &t,
+        &[
+            "今天要做什么",
+            "今天还要做什么",
+            "今天要干什么",
+            "今天还要干什么",
+            "今天有什么任务",
+            "今天还有什么任务",
+            "今天的任务",
+            "今天还有什么要做",
+            "还有什么没做",
+            "还剩什么没做",
+            "还有哪些没做",
+        ],
+    ) {
+        return Some(Intent::PlansToday { explicit: false });
     }
     // 否定、回忆、问能力的，不算
     let negative = has_any(
@@ -367,6 +499,43 @@ pub async fn handle(
         }
         Intent::ListReminders => list_reminders(&st),
         Intent::CancelReminder(k) => cancel_reminder(app, &st, &k),
+        Intent::PlansToday { explicit } => match crate::plans::supervise::today_answer(&st) {
+            Some(a) => a,
+            None if explicit => line(
+                &st,
+                "plan.today_none",
+                &[],
+                "今天还没有安排哦。想做计划的话跟我说「帮我做个计划」，或者右键我点「计划」。"
+                    .into(),
+            ),
+            None => return false,
+        },
+        Intent::OpenPlans => {
+            after = Some(Box::new(|app: AppHandle| {
+                crate::desktop::open_plans_async(&app, Some("today".into()));
+            }));
+            line(&st, "plan.open", &[], "好，帮你打开了。".into())
+        }
+        Intent::NewPlan(text) => {
+            let bare = NEW_PLAN_WORDS.iter().any(|w| {
+                text.trim_end_matches(['吧', '。', '！', '!', '~', '～'])
+                    .ends_with(w)
+            });
+            let view = if bare {
+                "new".to_string()
+            } else {
+                format!("new:{text}")
+            };
+            after = Some(Box::new(move |app: AppHandle| {
+                crate::desktop::open_plans_async(&app, Some(view));
+            }));
+            line(
+                &st,
+                "plan.new_open",
+                &[],
+                "好呀！计划窗口打开了，把想做的写进去，我来帮你排到每天。".into(),
+            )
+        }
     };
     // 记进聊天记录：之后聊天时她知道刚才做了什么
     chat::record_exchange(&st, Some(text), &say);
@@ -463,6 +632,62 @@ fn cancel_reminder(app: &AppHandle, st: &AppState, keyword: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plan_intents() {
+        assert_eq!(detect("打开计划"), Some(Intent::OpenPlans));
+        assert_eq!(
+            detect("今天的计划呢"),
+            Some(Intent::PlansToday { explicit: true })
+        );
+        assert_eq!(
+            detect("今天还要做什么？"),
+            Some(Intent::PlansToday { explicit: false })
+        );
+        assert_eq!(
+            detect("帮我做个计划：一个月学完 Python 基础，每天一小时，周末休息，最后两天做个小项目练手"),
+            Some(Intent::NewPlan(
+                "帮我做个计划：一个月学完 Python 基础，每天一小时，周末休息，最后两天做个小项目练手".into()
+            ))
+        );
+        assert_eq!(
+            detect("帮我做个计划吧"),
+            Some(Intent::NewPlan("帮我做个计划吧".into()))
+        );
+        // 聊天里顺口提到的不算
+        assert_eq!(
+            detect("我的计划是周末去爬山，你觉得怎么样我觉得会很好玩"),
+            None
+        );
+        assert_eq!(detect("我不想做计划了，好累"), None);
+        // 请求的各种说法都认
+        for ask in [
+            "千秋，帮我做个计划",
+            "红莉栖，做个计划吧",
+            "能帮我定个计划吗",
+            "我想做一个学习计划",
+            "做个计划",
+            "我们来排个计划",
+            "帮我规划一下期末复习",
+        ] {
+            assert!(
+                matches!(detect(ask), Some(Intent::NewPlan(_))),
+                "{ask} 应该打开新建计划"
+            );
+        }
+        // 在讲自己的事、在问别的，不弹窗口
+        for chat in [
+            "昨天我做个计划结果没完成",
+            "公司要做一个计划书",
+            "帮我规划一下去京都的路线",
+            "你会做个计划吗",
+        ] {
+            assert!(
+                !matches!(detect(chat), Some(Intent::NewPlan(_))),
+                "{chat} 不该打开新建计划"
+            );
+        }
+    }
 
     #[test]
     fn games() {

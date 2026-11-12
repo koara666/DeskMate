@@ -3,6 +3,7 @@ import '../styles/base.css';
 import '../styles/pet.css';
 import '../styles/skins/arcade.css';
 import '../styles/skins/lab.css';
+import '../styles/skins/detective.css';
 import { petApi, voiceApi } from '../lib/ipc';
 import { Pet } from './Pet';
 

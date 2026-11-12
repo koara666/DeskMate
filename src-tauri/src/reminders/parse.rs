@@ -502,6 +502,14 @@ fn find_activity(c: &[char]) -> Option<(Span, &'static str)> {
     None
 }
 
+/// 一句话里说的钟点（「每天晚上8点半」→ 20:30），计划的开始时间用
+pub fn clock_in(text: &str) -> Option<(u32, u32)> {
+    let c: Vec<char> = normalize(text).chars().collect();
+    let (_, h, m) = find_clock(&c)?;
+    let p = find_period(&c).map(|(_, p)| p);
+    Some((hour_with_period(h, p), m))
+}
+
 fn hour_with_period(h: u32, p: Option<Period>) -> u32 {
     match p {
         Some(Period::Afternoon | Period::Dusk | Period::Evening) if h < 12 => h + 12,

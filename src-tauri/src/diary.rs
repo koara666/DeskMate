@@ -121,6 +121,8 @@ pub struct Material {
     /// 一起玩的小游戏：（游戏，用户赢，用户输，平）
     pub games: Vec<(String, i64, i64, i64)>,
     pub mood: i32,
+    /// 那天的计划做得怎么样（没有安排、或设置里关掉了「聊天时她知道今天的计划」就是 None）
+    pub plans: Option<crate::plans::diary_note::DaySummary>,
 }
 
 impl Material {
@@ -129,10 +131,12 @@ impl Material {
             && self.chat_count == 0
             && self.reminders.is_empty()
             && self.games.is_empty()
+            && self.plans.is_none()
     }
 }
 
-pub fn material(db: &Connection, day: NaiveDate, character_id: &str) -> Material {
+/// `with_plans`：要不要带上那天的计划情况（设置里「聊天时她知道今天的计划」）
+pub fn material(db: &Connection, day: NaiveDate, character_id: &str, with_plans: bool) -> Material {
     let d = day.to_string();
     let start = crate::reminders::from_local(day.and_hms_opt(5, 0, 0).unwrap_or_default());
     let end = start + 86400;
@@ -170,6 +174,9 @@ pub fn material(db: &Connection, day: NaiveDate, character_id: &str) -> Material
         reminders,
         games: crate::games::day_summary(db, start, end),
         mood: crate::companion::load(db, character_id).mood_now(end),
+        plans: with_plans
+            .then(|| crate::plans::diary_note::day_summary(db, day))
+            .flatten(),
     }
 }
 
@@ -200,6 +207,17 @@ fn games_text(g: &[(String, i64, i64, i64)]) -> String {
         .join("、")
 }
 
+/// 模板日记里说计划的一句（代码里的兜底文字，不走台词池）
+fn plan_line(done: usize, total: usize) -> String {
+    if done == 0 {
+        "今天计划里的事还一项没动，明天我们再慢慢来。".into()
+    } else if done >= total {
+        format!("今天你把计划里的 {total} 项都做完了，我也替你开心。")
+    } else {
+        format!("今天计划里的 {total} 项，你做完了 {done} 项，很不错。")
+    }
+}
+
 /// 没有模型时：模板拼一篇短日记
 pub fn template(st: &AppState, day: NaiveDate, m: &Material) -> String {
     let mut parts: Vec<String> = Vec::new();
@@ -218,6 +236,9 @@ pub fn template(st: &AppState, day: NaiveDate, m: &Material) -> String {
     }
     if !m.games.is_empty() {
         parts.push(format!("我们玩了{}。", games_text(&m.games)));
+    }
+    if let Some(p) = &m.plans {
+        parts.push(plan_line(p.done, p.total));
     }
     if let Some(c) = st.line("diary.close", &[]) {
         parts.push(c);
@@ -262,6 +283,12 @@ async fn by_model(st: &AppState, day: NaiveDate, m: &Material) -> Option<String>
     }
     if !m.games.is_empty() {
         facts.push(format!("你们一起玩了：{}", games_text(&m.games)));
+    }
+    if let Some(p) = &m.plans {
+        facts.push(format!(
+            "用户这天的计划情况（可以自然地提一句，不要逐条罗列，不要说教）：{}",
+            p.text
+        ));
     }
     facts.push(format!(
         "你这天结束时的心情：{}",
@@ -317,7 +344,8 @@ pub async fn maybe_write(st: &AppState) {
     if get(&st.db(), &d, &c.manifest.id).is_some() {
         return;
     }
-    let m = material(&st.db(), day, &c.manifest.id);
+    let with_plans = st.settings().plans.chat_context;
+    let m = material(&st.db(), day, &c.manifest.id, with_plans);
     if m.is_empty() {
         return;
     }
@@ -373,5 +401,95 @@ mod tests {
             )
             .unwrap();
         assert_eq!(n, 0);
+    }
+
+    fn plan_task(db: &Connection, day: NaiveDate, title: &str, status: &str) {
+        crate::plans::save_task(
+            db,
+            &crate::plans::Task {
+                day: day.to_string(),
+                title: title.into(),
+                status: status.into(),
+                spent: if status == "done" { 30 } else { 0 },
+                ..Default::default()
+            },
+            0,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn material_carries_plans_only_when_allowed() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = crate::state::test_state(dir.path());
+        let day = NaiveDate::from_ymd_opt(2026, 11, 10).unwrap();
+        // 没有安排：不带
+        assert!(
+            material(&st.db(), day, "nanami-chiaki", true)
+                .plans
+                .is_none()
+        );
+        plan_task(&st.db(), day, "背单词", "done");
+        plan_task(&st.db(), day, "跑步", "todo");
+        let on = material(&st.db(), day, "nanami-chiaki", true);
+        let p = on.plans.as_ref().unwrap();
+        assert_eq!((p.done, p.total), (1, 2));
+        assert!(p.text.contains("背单词") && p.text.contains("没做的：跑步"));
+        // 只做了计划、别的什么都没有的一天也值得写
+        assert!(!on.is_empty());
+        // 设置里关掉「聊天时她知道今天的计划」：不带，也就没东西可写
+        let off = material(&st.db(), day, "nanami-chiaki", false);
+        assert!(off.plans.is_none());
+        assert!(off.is_empty());
+    }
+
+    #[test]
+    fn template_mentions_the_plan() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = crate::state::test_state(dir.path());
+        let day = NaiveDate::from_ymd_opt(2026, 11, 10).unwrap();
+        for t in ["背单词", "线代第3章", "交实验报告"] {
+            plan_task(&st.db(), day, t, "done");
+        }
+        // template 里会取台词（要拿数据库锁），所以先把素材取出来、放掉锁再调
+        let mat = |with_plans: bool| material(&st.db(), day, "nanami-chiaki", with_plans);
+        let m = mat(true);
+        let all = template(&st, day, &m);
+        assert!(all.contains("你把计划里的 3 项都做完了"), "{all}");
+        plan_task(&st.db(), day, "跑步", "todo");
+        let m = mat(true);
+        let part = template(&st, day, &m);
+        assert!(part.contains("计划里的 4 项，你做完了 3 项"), "{part}");
+        // 关掉时模板里没有计划那句
+        let m = mat(false);
+        let off = template(&st, day, &m);
+        assert!(
+            !off.contains("你做完了") && !off.contains("都做完了"),
+            "{off}"
+        );
+        assert_eq!(
+            plan_line(0, 2),
+            "今天计划里的事还一项没动，明天我们再慢慢来。"
+        );
+    }
+
+    #[tokio::test]
+    async fn plan_only_day_gets_a_diary_and_the_switch_turns_it_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let st = crate::state::test_state(dir.path());
+        st.update_settings(|s| s.character_id = "nanami-chiaki".into());
+        let today = crate::briefing::briefing_day(crate::reminders::now_local());
+        let y = today - Duration::days(1);
+        plan_task(&st.db(), y, "背单词", "done");
+        // 关掉开关：那天只有计划，没素材，不写
+        st.update_settings(|s| s.plans.chat_context = false);
+        maybe_write(&st).await;
+        assert!(list(&st.db(), "nanami-chiaki", 10).is_empty());
+        // 打开：只做了计划的一天也写
+        st.update_settings(|s| s.plans.chat_context = true);
+        maybe_write(&st).await;
+        let v = list(&st.db(), "nanami-chiaki", 10);
+        assert_eq!(v.len(), 1);
+        assert!(v[0].content.contains("你把计划里的 1 项都做完了"));
     }
 }

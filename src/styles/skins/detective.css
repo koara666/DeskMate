@@ -1,0 +1,319 @@
+/* 皮肤「detective」：侦探笔记本风（橘雪莉）。
+   全部写在 :root[data-skin='detective'] 下面，别的角色不受影响；颜色取角色包里的 --t-*，没写就用这里的默认值。
+   只用细边框、左侧色条、衬线字、淡淡的横线笔记本底这些静态样式，不加任何常驻动画；不打包字体（衬线字用系统自带的）。 */
+:root[data-skin='detective'] {
+  --accent: var(--t-accent, #2f5fd0);
+  --accent-2: var(--t-accent-2, #1d2a4d);
+  --panel: var(--t-panel, #f7f9fe);
+  --panel-2: var(--t-panel-2, #e9eef9);
+  --text: var(--t-text, #222a3e);
+  --text-weak: var(--t-text-weak, #69718a);
+  --border: var(--t-border, #cdd6ec);
+  --user-bg: var(--t-user-bg, #dfe8fb);
+  --radius: 8px;
+  --soft: 0 2px 10px color-mix(in srgb, var(--accent-2) 22%, transparent);
+  --shadow: var(--soft);
+  --font-hud: 'Georgia', 'Palatino Linotype', 'Songti SC', 'SimSun', serif;
+  /* 淡淡的横线，像侦探笔记本 */
+  --grid: repeating-linear-gradient(0deg, transparent 0 21px, color-mix(in srgb, var(--accent) 9%, transparent) 21px 22px);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin='detective']:not([data-theme='light']) {
+    --panel: var(--t-dark-panel, #141a30);
+    --panel-2: color-mix(in srgb, var(--t-dark-panel, #141a30) 80%, #ffffff);
+    --text: var(--t-dark-text, #e9eefb);
+    --text-weak: color-mix(in srgb, var(--t-dark-text, #e9eefb) 62%, transparent);
+    --border: color-mix(in srgb, var(--accent-2) 60%, #ffffff);
+    --user-bg: color-mix(in srgb, var(--accent) 32%, var(--t-dark-panel, #141a30));
+    --soft: 0 2px 12px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ———————— 聊天窗口 ———————— */
+[data-skin='detective'] .panel {
+  border: 1px solid var(--accent-2);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  background-image: var(--grid);
+  box-shadow: var(--soft);
+}
+[data-skin='detective'] .panel::after {
+  border: 1px solid var(--accent-2);
+}
+[data-skin='detective'] .panel.tail-right::after {
+  border-left: none;
+  border-bottom: none;
+  right: -7px;
+}
+[data-skin='detective'] .panel.tail-left::after {
+  border-right: none;
+  border-top: none;
+  left: -9px;
+  border-left: none;
+  border-bottom: 1px solid var(--accent);
+}
+[data-skin='detective'] .panel-header {
+  margin: 0 0 4px;
+  padding: 2px 4px 2px 10px;
+  min-height: 26px;
+  background: var(--accent-2);
+  border-bottom: 2px solid var(--accent);
+}
+[data-skin='detective'] .panel-header .name {
+  color: #fff;
+  font-family: var(--font-hud), var(--font);
+  letter-spacing: 1px;
+}
+[data-skin='detective'] .panel-header .name::before {
+  content: '▌';
+  color: var(--accent);
+  margin-right: 2px;
+}
+[data-skin='detective'] .panel-header .name::after {
+  content: ' · 名侦探';
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: color-mix(in srgb, #ffffff 60%, transparent);
+}
+[data-skin='detective'] .icon-btn {
+  color: color-mix(in srgb, #ffffff 80%, var(--accent-2));
+  border-radius: 2px;
+}
+[data-skin='detective'] .icon-btn:hover {
+  background: color-mix(in srgb, #ffffff 16%, transparent);
+  color: #fff;
+}
+[data-skin='detective'] .messages .msg-user {
+  border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  border-right: 3px solid var(--accent);
+}
+[data-skin='detective'] .messages .msg-assistant {
+  padding-left: 9px;
+  border-left: 2px solid var(--accent-2);
+}
+[data-skin='detective'] .time-sep {
+  font-family: var(--font-hud), var(--font);
+  letter-spacing: 1px;
+}
+[data-skin='detective'] .time-sep::before {
+  content: '— ';
+}
+[data-skin='detective'] .time-sep::after {
+  content: ' —';
+}
+[data-skin='detective'] .composer {
+  border-top: 1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);
+}
+[data-skin='detective'] .composer textarea {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  font-family: var(--font);
+}
+[data-skin='detective'] .composer textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+[data-skin='detective'] .btn {
+  border-radius: 2px;
+  border: 1px solid var(--accent-2);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+[data-skin='detective'] .btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+[data-skin='detective'] .btn-send,
+[data-skin='detective'] .btn-small {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+[data-skin='detective'] .btn-plain {
+  background: var(--panel);
+  color: var(--text);
+}
+[data-skin='detective'] .thinking span {
+  border-radius: 0;
+  background: var(--accent);
+  width: 6px;
+  height: 6px;
+}
+[data-skin='detective'] .reminder-card,
+[data-skin='detective'] .update-card {
+  border: 1px solid var(--accent-2);
+  border-left: 3px solid var(--accent);
+  border-radius: 2px;
+}
+
+/* 「她说的话」= 终端窗口：深色底、左侧红条、名牌、闪烁光标位置的 ▌ */
+[data-skin='detective'] .panel.speech {
+  background: var(--accent-2);
+  background-image: none;
+  border-color: color-mix(in srgb, #ffffff 25%, var(--accent-2));
+  border-left: 4px solid var(--accent);
+}
+[data-skin='detective'] .panel.speech::after {
+  background: var(--accent-2);
+}
+[data-skin='detective'] .speech-area {
+  padding: 22px 16px 14px;
+  color: #f4f1ee;
+}
+[data-skin='detective'] .speech-area .note {
+  color: color-mix(in srgb, #ffffff 66%, transparent);
+}
+[data-skin='detective'] .speech-area .link-btn {
+  color: #f6c3bd;
+}
+[data-skin='detective'] .speech-name {
+  display: block;
+  position: absolute;
+  top: 3px;
+  left: 10px;
+  padding: 0 8px;
+  border-radius: 2px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-hud), var(--font);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 1px;
+}
+[data-skin='detective'] .speech-hint {
+  font-size: 0;
+  opacity: 1;
+}
+[data-skin='detective'] .speech-hint::after {
+  content: '▌';
+  font-size: 12px;
+  color: var(--accent);
+}
+
+/* ———————— 小游戏 ———————— */
+[data-skin='detective'] .game-title,
+[data-skin='detective'] .game-score {
+  font-family: var(--font-hud), var(--font);
+  letter-spacing: 1px;
+}
+[data-skin='detective'] .game-line {
+  border-radius: 2px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-2);
+  color: #fff;
+}
+[data-skin='detective'] .game-pick {
+  border: 1px solid var(--accent-2);
+  border-left: 3px solid var(--accent-2);
+  border-radius: 2px;
+}
+[data-skin='detective'] .game-pick:hover {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+[data-skin='detective'] .game-pick b::before {
+  content: '▸ ';
+  color: var(--accent);
+  font-family: var(--font-hud), var(--font);
+}
+[data-skin='detective'] .rps-hand,
+[data-skin='detective'] .ttt-cell,
+[data-skin='detective'] .bj-card,
+[data-skin='detective'] .llm-input {
+  border: 1px solid var(--accent-2);
+  border-radius: 2px;
+}
+[data-skin='detective'] .rps-hand:hover,
+[data-skin='detective'] .ttt-cell:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+[data-skin='detective'] .ttt-cell.hit {
+  background: color-mix(in srgb, var(--accent) 30%, var(--panel));
+}
+[data-skin='detective'] .ttt-diff {
+  border: 1px solid var(--accent-2);
+  border-radius: 2px;
+}
+[data-skin='detective'] .ttt-diff button.on {
+  background: var(--accent-2);
+}
+[data-skin='detective'] .bj-card.back {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--accent-2) 0 3px,
+    color-mix(in srgb, var(--accent-2) 70%, #ffffff) 3px 6px
+  );
+  color: transparent;
+}
+[data-skin='detective'] .llm-puzzle,
+[data-skin='detective'] .llm-entry {
+  border-radius: 2px;
+}
+[data-skin='detective'] .hud {
+  border: 1px solid var(--accent-2);
+  border-left: 3px solid var(--accent);
+  border-radius: 2px;
+  background: var(--panel);
+  font-family: var(--font-hud), var(--font);
+}
+[data-skin='detective'] .game-result b {
+  letter-spacing: 1px;
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--accent-2) 30%, transparent);
+}
+
+/* ———————— 头顶气泡菜单：像仪表盘上的旋钮 ———————— */
+[data-skin='detective'] .bubble {
+  border: 1px solid var(--accent-2);
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow:
+    inset 0 0 0 3px var(--panel),
+    inset 0 0 0 4px color-mix(in srgb, var(--accent-2) 35%, transparent),
+    var(--soft);
+}
+[data-skin='detective'] .bubble-label {
+  border-radius: 2px;
+  background: var(--accent-2);
+  color: #fff;
+  font-family: var(--font-hud), var(--font);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+[data-skin='detective'] .bubble.hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  box-shadow:
+    inset 0 0 0 3px color-mix(in srgb, var(--accent) 18%, var(--panel)),
+    inset 0 0 0 4px var(--accent),
+    var(--soft);
+}
+[data-skin='detective'] .bubble.hover .bubble-label {
+  background: var(--accent);
+}
+[data-skin='detective'] .bubble.on {
+  background: color-mix(in srgb, var(--accent-2) 22%, var(--panel));
+}
+
+/* ———————— 桌宠的小装饰 ———————— */
+[data-skin='detective'] .pet-thinking {
+  border-radius: 2px;
+  border: 1px solid var(--accent-2);
+  border-left: 3px solid var(--accent);
+}
+[data-skin='detective'] .pet-thinking span {
+  border-radius: 0;
+  background: var(--accent);
+}
+[data-skin='detective'] .pet-zzz {
+  color: var(--accent-2);
+  font-family: var(--font-hud), var(--font);
+}
+[data-skin='detective'] .pet-dnd {
+  border-radius: 1px;
+  background: var(--accent);
+}

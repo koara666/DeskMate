@@ -126,6 +126,10 @@ pub enum Interaction {
     GameDraw,
     Rainy,
     Sunny,
+    /// 做完了计划里的一项
+    PlanDone,
+    /// 今天的计划全做完了
+    PlanAllDone,
 }
 
 /// 各种互动对心情和亲密度的影响：（心情变化，加分，每天最多几次）
@@ -143,6 +147,8 @@ fn effect(i: Interaction, competitive: bool) -> (f64, i64, u32, &'static str) {
         Interaction::GameDraw => (1.0, 2, 5, "game"),
         Interaction::Rainy => (-5.0, 0, 0, "weather"),
         Interaction::Sunny => (3.0, 0, 0, "weather"),
+        Interaction::PlanDone => (3.0, 1, 6, "plan"),
+        Interaction::PlanAllDone => (8.0, 2, 2, "plan_all"),
     }
 }
 
@@ -307,6 +313,17 @@ pub struct Choice {
     pub question: String,
     pub options: Vec<String>,
     pub replies: Vec<String>,
+    /// 选了某一项之后程序要做的事（和 options 一一对应；随机小事件没有）
+    pub actions: Vec<ChoiceAction>,
+}
+
+/// 选项背后的动作
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum ChoiceAction {
+    #[default]
+    None,
+    /// 计划：晚上那一问、分心提醒、专注计时到了
+    Plan(crate::plans::supervise::PlanChoice),
 }
 
 /// 摸头的台词场景（纯函数）：20 秒内第 3 次换一组，30 秒内 8 次以上「头发要乱了」
@@ -385,6 +402,9 @@ pub fn pose_for(scene: &str) -> Option<(&'static str, u32)> {
         // 小游戏的事件是从用户的角度说的：用户赢了 = 她输了
         "game.win" => ("lose", 3500),
         "game.lose" => ("win", 3500),
+        // 计划：全做完了是得意的样子；分心被抓到时她鼓起脸
+        "plan.all_done" | "plan.finished" => ("win", 3500),
+        "plan.nudge" => ("pout", 2600),
         _ => return None,
     })
 }
@@ -491,6 +511,7 @@ pub fn parse_choice(line: &str) -> Option<Choice> {
         question,
         options,
         replies,
+        actions: Vec::new(),
     })
 }
 
@@ -583,6 +604,9 @@ pub fn choose(app: &AppHandle, id: u64, index: usize) -> Result<String, String> 
     let reply = ch.replies[index].clone();
     crate::chat::record_exchange(&st, Some(&opt), &reply);
     interact(app, Interaction::Engaged);
+    if let Some(ChoiceAction::Plan(a)) = ch.actions.get(index) {
+        crate::plans::supervise::on_choice(app, a);
+    }
     Ok(reply)
 }
 

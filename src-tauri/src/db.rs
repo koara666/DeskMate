@@ -164,6 +164,153 @@ pub const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX voice_ja_ts ON voice_ja(ts);
     "#,
+    // v11：计划（见 plans/mod.rs）。日期一律是 YYYY-MM-DD 的本地「计划日」（凌晨 5 点前算前一天）；
+    // week_minutes：周一到周日每天能用多少分钟（JSON 数组，0 = 那天不排）；off_days：请假的日子（JSON 数组）
+    r#"
+    CREATE TABLE plans (
+        id           INTEGER PRIMARY KEY,
+        title        TEXT NOT NULL,
+        goal         TEXT NOT NULL DEFAULT '',
+        emoji        TEXT NOT NULL DEFAULT '',
+        mode         TEXT NOT NULL DEFAULT 'content' CHECK (mode IN ('content', 'habit')),
+        start_day    TEXT NOT NULL,
+        end_day      TEXT NOT NULL DEFAULT '',
+        week_minutes TEXT NOT NULL DEFAULT '[60,60,60,60,60,60,60]',
+        off_days     TEXT NOT NULL DEFAULT '[]',
+        pace         TEXT NOT NULL DEFAULT 'even' CHECK (pace IN ('even', 'asap')),
+        remind_at    TEXT NOT NULL DEFAULT '',
+        supervise    INTEGER NOT NULL DEFAULT 1,
+        strategy     TEXT NOT NULL DEFAULT '',
+        status       TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'done', 'archived')),
+        sort         INTEGER NOT NULL DEFAULT 0,
+        arranged_day TEXT NOT NULL DEFAULT '',
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL
+    );
+    CREATE TABLE plan_items (
+        id      INTEGER PRIMARY KEY,
+        plan_id INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+        title   TEXT NOT NULL,
+        detail  TEXT NOT NULL DEFAULT '',
+        minutes INTEGER NOT NULL DEFAULT 0,
+        status  TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'done', 'skipped')),
+        sort    INTEGER NOT NULL DEFAULT 0,
+        done_at INTEGER
+    );
+    CREATE INDEX plan_items_plan ON plan_items(plan_id, sort);
+    CREATE TABLE plan_tasks (
+        id         INTEGER PRIMARY KEY,
+        plan_id    INTEGER REFERENCES plans(id) ON DELETE CASCADE,
+        item_id    INTEGER REFERENCES plan_items(id) ON DELETE SET NULL,
+        day        TEXT NOT NULL,
+        orig_day   TEXT NOT NULL DEFAULT '',
+        title      TEXT NOT NULL,
+        minutes    INTEGER NOT NULL DEFAULT 0,
+        start      TEXT NOT NULL DEFAULT '',
+        status     TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'done', 'skipped')),
+        spent      INTEGER NOT NULL DEFAULT 0,
+        finishes   INTEGER NOT NULL DEFAULT 0,
+        note       TEXT NOT NULL DEFAULT '',
+        source     TEXT NOT NULL DEFAULT 'user' CHECK (source IN ('auto', 'user')),
+        sort       INTEGER NOT NULL DEFAULT 0,
+        reminded   INTEGER NOT NULL DEFAULT 0,
+        done_at    INTEGER,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX plan_tasks_day ON plan_tasks(day);
+    CREATE INDEX plan_tasks_plan ON plan_tasks(plan_id, day);
+    CREATE TABLE plan_notes (
+        id         INTEGER PRIMARY KEY,
+        plan_id    INTEGER REFERENCES plans(id) ON DELETE CASCADE,
+        day        TEXT NOT NULL,
+        content    TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX plan_notes_plan ON plan_notes(plan_id, day);
+    CREATE INDEX plan_notes_day ON plan_notes(day);
+    "#,
+    // v12：计划书（复杂的长期计划，见 plans/goal.rs）。一个计划书（goals）下面有几条并行的「线」——每条线就是一个 plans，
+    // 原来的单个计划 goal_id 为空，照旧用。阶段（goal_phases）：日期范围、目标、完成标准（JSON 数组）、这个阶段每天的时间
+    // （JSON [7]，空 = 用计划书的）、各条线的份额（JSON {线的 id: 份额}）。节点（goal_milestones）：日期 + 标准，当天问达标没有。
+    // 缓冲期、学习资源、自查清单、先问的问题和回答是 JSON 数组。内容条目加了所属阶段、最早哪天开始、截止、钉在哪天、是不是粗的（还没细化）
+    r#"
+    CREATE TABLE goals (
+        id             INTEGER PRIMARY KEY,
+        title          TEXT NOT NULL,
+        emoji          TEXT NOT NULL DEFAULT '',
+        summary        TEXT NOT NULL DEFAULT '',
+        source         TEXT NOT NULL DEFAULT '',
+        doc            TEXT NOT NULL DEFAULT '',
+        strategy       TEXT NOT NULL DEFAULT '',
+        start_day      TEXT NOT NULL,
+        end_day        TEXT NOT NULL DEFAULT '',
+        week_minutes   TEXT NOT NULL DEFAULT '[60,60,60,60,60,90,90]',
+        off_days       TEXT NOT NULL DEFAULT '[]',
+        buffers        TEXT NOT NULL DEFAULT '[]',
+        resources      TEXT NOT NULL DEFAULT '[]',
+        checklist      TEXT NOT NULL DEFAULT '[]',
+        answers        TEXT NOT NULL DEFAULT '[]',
+        remind_at      TEXT NOT NULL DEFAULT '',
+        review_day     INTEGER NOT NULL DEFAULT 6,
+        status         TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'done', 'archived')),
+        sort           INTEGER NOT NULL DEFAULT 0,
+        arranged_day   TEXT NOT NULL DEFAULT '',
+        expanded_until TEXT NOT NULL DEFAULT '',
+        created_at     INTEGER NOT NULL,
+        updated_at     INTEGER NOT NULL
+    );
+    CREATE TABLE goal_phases (
+        id           INTEGER PRIMARY KEY,
+        goal_id      INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+        title        TEXT NOT NULL,
+        start_day    TEXT NOT NULL,
+        end_day      TEXT NOT NULL,
+        objective    TEXT NOT NULL DEFAULT '',
+        criteria     TEXT NOT NULL DEFAULT '[]',
+        week_minutes TEXT NOT NULL DEFAULT '',
+        shares       TEXT NOT NULL DEFAULT '{}',
+        sort         INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX goal_phases_goal ON goal_phases(goal_id, sort);
+    CREATE TABLE goal_milestones (
+        id         INTEGER PRIMARY KEY,
+        goal_id    INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+        phase_id   INTEGER REFERENCES goal_phases(id) ON DELETE SET NULL,
+        plan_id    INTEGER REFERENCES plans(id) ON DELETE SET NULL,
+        title      TEXT NOT NULL,
+        day        TEXT NOT NULL,
+        criteria   TEXT NOT NULL DEFAULT '',
+        status     TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'passed', 'missed', 'skipped')),
+        result     TEXT NOT NULL DEFAULT '',
+        checked_at INTEGER,
+        sort       INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX goal_milestones_goal ON goal_milestones(goal_id, day);
+    ALTER TABLE plans ADD COLUMN goal_id INTEGER REFERENCES goals(id) ON DELETE CASCADE;
+    ALTER TABLE plans ADD COLUMN share INTEGER NOT NULL DEFAULT 1;
+    CREATE INDEX plans_goal ON plans(goal_id);
+    ALTER TABLE plan_items ADD COLUMN phase_id INTEGER REFERENCES goal_phases(id) ON DELETE SET NULL;
+    ALTER TABLE plan_items ADD COLUMN after_day TEXT NOT NULL DEFAULT '';
+    ALTER TABLE plan_items ADD COLUMN due_day TEXT NOT NULL DEFAULT '';
+    ALTER TABLE plan_items ADD COLUMN pin_day TEXT NOT NULL DEFAULT '';
+    ALTER TABLE plan_items ADD COLUMN rough INTEGER NOT NULL DEFAULT 0;
+    "#,
+    // v13：日历（见 plans/agenda.rs）。提前知道的事（作业截止、某节课停课……）记在某一天上；
+    // reminded = 已经说过的那一档（7 / 3 / 1 / 0 天前，空 = 还没说过），done = 搞定了不再提醒
+    r#"
+    CREATE TABLE agenda (
+        id         INTEGER PRIMARY KEY,
+        day        TEXT NOT NULL,
+        title      TEXT NOT NULL,
+        note       TEXT NOT NULL DEFAULT '',
+        done       INTEGER NOT NULL DEFAULT 0,
+        done_at    INTEGER,
+        reminded   INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX agenda_day ON agenda(day);
+    "#,
 ];
 
 pub fn latest_version() -> i64 {

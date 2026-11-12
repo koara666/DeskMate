@@ -22,9 +22,13 @@ pub enum MarkerKind {
     Remind,
     Ja,
     Search,
+    /// 计划里的某一项做完了（气泡里出按钮，用户点了才记）
+    Checkin,
+    /// 想做一个新计划（按钮打开计划窗口，把这句话填好）
+    Plan,
 }
 
-const TAGS: [(&str, MarkerKind); 7] = [
+const TAGS: [(&str, MarkerKind); 9] = [
     ("[[任务", MarkerKind::Task),
     ("[[打开", MarkerKind::Open),
     ("[[读取", MarkerKind::Read),
@@ -32,6 +36,8 @@ const TAGS: [(&str, MarkerKind); 7] = [
     ("[[提醒", MarkerKind::Remind),
     ("[[日语", MarkerKind::Ja),
     ("[[搜索", MarkerKind::Search),
+    ("[[打卡", MarkerKind::Checkin),
+    ("[[计划", MarkerKind::Plan),
 ];
 const CLOSE: &str = "]]";
 const MAX_MARKER_CHARS: usize = 500;

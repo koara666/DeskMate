@@ -1,4 +1,5 @@
-//! 角色按需下载：安装包里不带任何角色，用户挑哪位就下载哪位（想要更多角色时软件本体也不会变大）。
+//! 角色按需下载：用户挑哪位就下载哪位（想要更多角色时软件本体也不会变大）。只有初始角色（登记表里 bundled: true，七海千秋）
+//! 的角色包随安装包带着，全新安装时直接装上（`install_bundled`），装好以后和下载来的一样：能删、有新版本会自动更新。
 //!
 //! - 目录：`scripts/builtin_characters.json` 是唯一的登记表，编译时嵌进程序——角色名、简介、
 //!   下载地址的版本和 SHA-256 都在里面，所以没下载之前也能列出来，下载的内容必须和登记的校验值一致。
@@ -50,6 +51,8 @@ pub struct Entry {
     pub version: u32,
     pub sha256: String,
     pub size: u64,
+    /// 初始角色：构建时把角色包放进安装包，全新安装时直接装上（见 `install_bundled`）
+    pub bundled: bool,
 }
 
 #[derive(Deserialize)]
@@ -65,6 +68,8 @@ struct RawEntry {
     color: String,
     #[serde(default)]
     order: i64,
+    #[serde(default)]
+    bundled: bool,
     pack: Option<RawPack>,
 }
 
@@ -97,6 +102,7 @@ fn parse_registry(text: &str) -> Vec<Entry> {
                 version: p.version,
                 sha256: p.sha256,
                 size: p.size,
+                bundled: r.bundled,
             })
         })
         .collect();
@@ -586,6 +592,70 @@ fn install(packs: &Path, e: &Entry, work: &Path) -> Result<(), String> {
     Ok(())
 }
 
+// ---------------- 安装包里带的初始角色 ----------------
+
+/// 初始角色（登记表里 `bundled: true` 的那位，现在是七海千秋）
+pub fn bundled_entry() -> Option<&'static Entry> {
+    catalog().iter().find(|e| e.bundled)
+}
+
+/// 安装包里那份角色包放在哪：`<内置角色目录>/_bundled/<id>.tar.bz2`（构建时由 scripts/chibi/bundle_default_pack.py 放进去）
+fn bundled_file(builtin: &Path, e: &Entry) -> PathBuf {
+    builtin.join("_bundled").join(format!("{}.tar.bz2", e.id))
+}
+
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let mut f = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut h = Sha256::new();
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = f.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        h.update(&buf[..n]);
+    }
+    Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// 从本机的一个角色包文件装进 `packs/<id>/`：校验值要和登记表里的一样，之后和下载来的完全一样走 `install`
+/// （所以装好以后照样能在设置里删掉、有新版本照样自动更新）
+fn install_local(packs: &Path, e: &Entry, archive: &Path) -> Result<(), String> {
+    let size = std::fs::metadata(archive)
+        .map_err(|_| "安装包里没有初始角色的角色包".to_string())?
+        .len();
+    if size > MAX_PACK_BYTES {
+        return Err("初始角色的角色包大得不正常".into());
+    }
+    if sha256_file(archive)? != e.sha256 {
+        return Err("初始角色的角色包校验没通过".into());
+    }
+    let work = packs.join(format!(".bundled-{}", e.id));
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).map_err(|e| format!("创建文件夹失败：{e}"))?;
+    let result = std::fs::copy(archive, work.join("pack.tar.bz2"))
+        .map_err(|e| format!("复制角色包失败：{e}"))
+        .and_then(|_| install(packs, e, &work));
+    let _ = std::fs::remove_dir_all(&work);
+    result
+}
+
+/// 全新安装时：把安装包里带的初始角色装上并选上它，打开就能看到桌宠（之后换角色、删掉都随用户）。
+/// 返回装上的角色 id；失败（开发版没放角色包、文件坏了）时调用方照旧打开「设置 → 角色」让用户自己挑。
+pub fn install_bundled(st: &AppState) -> Result<String, String> {
+    let e = bundled_entry().ok_or("登记表里没有初始角色")?;
+    let builtin = st
+        .builtin_characters_dir
+        .as_ref()
+        .ok_or("找不到安装目录里的角色文件夹")?;
+    let packs = st.paths.packs();
+    std::fs::create_dir_all(&packs).map_err(|e| format!("创建文件夹失败：{e}"))?;
+    install_local(&packs, e, &bundled_file(builtin, e))?;
+    st.reload_characters();
+    st.update_settings(|s| s.character_id = e.id.clone());
+    Ok(e.id.clone())
+}
+
 /// 删掉下载来的角色（释放磁盘）。正在用的不能删。
 pub fn remove(app: &AppHandle, id: &str) -> Result<(), String> {
     let st = app.state::<AppState>();
@@ -852,7 +922,52 @@ mod tests {
             version: 3,
             sha256: "0".repeat(64),
             size: 10,
+            bundled: false,
         }
+    }
+
+    #[test]
+    fn exactly_one_bundled_starter_and_it_is_the_default_character() {
+        let starters: Vec<&Entry> = catalog().iter().filter(|e| e.bundled).collect();
+        assert_eq!(starters.len(), 1, "安装包里只带一位初始角色");
+        assert_eq!(
+            starters[0].id,
+            crate::settings::Settings::default().character_id,
+            "初始角色就是默认选着的那位"
+        );
+        assert_eq!(
+            bundled_entry().map(|e| e.id.as_str()),
+            Some("nanami-chiaki")
+        );
+    }
+
+    #[test]
+    fn bundled_pack_installs_like_a_download_and_rejects_a_bad_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let packs = dir.path().join("packs");
+        std::fs::create_dir_all(&packs).unwrap();
+        let src = dir.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        let archive = write_pack(
+            &src,
+            &[("cat/character.json", MANIFEST), ("cat/persona.md", b"hi")],
+        );
+        let mut e = entry_for("cat");
+        // 校验值对不上：不装
+        assert!(install_local(&packs, &e, &archive).is_err());
+        assert!(!packs.join("cat").exists());
+        // 文件不在（开发版没放）：不装
+        assert!(install_local(&packs, &e, &src.join("missing.tar.bz2")).is_err());
+        // 对得上：装进 packs/cat，和下载来的一样有版本记号，临时文件夹清掉
+        e.sha256 = sha256_file(&archive).unwrap();
+        install_local(&packs, &e, &archive).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(packs.join("cat/persona.md")).unwrap(),
+            "hi"
+        );
+        assert_eq!(installed_version_in(&packs, "cat"), Some(3));
+        assert!(!packs.join(".bundled-cat").exists());
+        assert!(archive.exists(), "安装包里的原文件不动");
     }
 
     #[test]

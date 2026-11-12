@@ -493,6 +493,14 @@ pub async fn run_turn_with_notes(
     if let Some(n) = crate::companion::mood_line(&state) {
         notes.push(n);
     }
+    // 今天的计划：她知道你今天要做什么、做到哪了
+    if let Some(n) = crate::plans::supervise::chat_note(&state) {
+        notes.push(n);
+    }
+    // 日历上接下来几天的事（作业截止、停课……）
+    if let Some(n) = crate::plans::agenda::chat_note(&state) {
+        notes.push(n);
+    }
     crate::companion::interact(&app, crate::companion::Interaction::Chat);
     // 问天气：查好放进背景资料（问的是别的城市就查那个城市；失败就告诉角色没查到）
     let weather_answered = match crate::briefing::weather_note(&state, &user_text).await {
@@ -713,10 +721,12 @@ pub async fn run_turn_with_notes(
             } else {
                 None
             };
-            let actions: Vec<ActionView> = found
+            let mut actions: Vec<ActionView> = found
                 .iter()
                 .filter_map(|m| abilities::action_view(m, &advanced))
                 .collect();
+            // [[打卡：…]] / [[计划：…]]：按钮
+            actions.extend(crate::plans::supervise::chat_actions(&state, &found));
             // 模型兜底的动作标记：[[玩：游戏名]] → 打开游戏；[[提醒：一句吩咐]] → 提醒确认卡片
             let open_game = found
                 .iter()

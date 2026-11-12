@@ -245,6 +245,54 @@ async function test(name, fn) {
   }
 }
 
+// ---------------- 启动时的窗口竞态 ----------------
+// 后台还在预建菜单窗口时就右键（装完新版马上去点桌宠），以前会各建一个同名窗口：
+// 残留一个空白透明的盖在最上面，气泡上的点击全被它吞掉。另起一个隔离实例，启动后立刻连着开菜单，数菜单窗口。
+
+function countWindows(pid, which) {
+  const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', resolve('scripts/e2e/window.ps1'), '-ProcessId', String(pid)], { encoding: 'utf8' });
+  return (r.stdout ?? '').split(/\r?\n/).filter((l) => l.trim().startsWith(`${which}|`)).length;
+}
+
+async function menuStartupRace() {
+  const port = PORT + 1;
+  const data = join(tmpdir(), `deskmate-e2e-race-${Date.now()}`);
+  mkdirSync(data, { recursive: true });
+  const child = spawn(EXE, [], { env: { ...process.env, DESKMATE_DATA_DIR: data, DESKMATE_CDP_PORT: String(port) }, stdio: 'ignore' });
+  let pet;
+  try {
+    let tp;
+    for (let i = 0; i < 300 && !tp; i++) {
+      try {
+        tp = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((x) => x.url.includes('pet.html'));
+      } catch {}
+      await sleep(30);
+    }
+    if (!tp) throw new Error('第二个测试实例的桌宠页面没有出现');
+    pet = await Page.open('race-pet', tp.webSocketDebuggerUrl);
+    // 页面刚出现时 Tauri 的接口可能还没注入：等它好了再连着开（仍然远早于启动后 800ms 的菜单预建）
+    await pet.waitFor(`typeof window.__TAURI_INTERNALS__?.invoke === 'function'`, '第二个实例的 Tauri 接口', 5000);
+    const calls = [];
+    for (let i = 0; i < 60; i++) {
+      // 每一次都自己接住错误：没接住的失败会让整个测试进程直接退出
+      calls.push(pet.eval(`window.__TAURI_INTERNALS__.invoke('menu_open', { hold: false }).then(() => 'ok', (e) => 'ERR ' + e)`).catch((e) => `ERR ${e?.message ?? e}`));
+      await sleep(25);
+    }
+    const res = await Promise.all(calls);
+    if (res.some((r) => r !== 'ok')) throw new Error(`连开菜单出错：${res.find((r) => r !== 'ok')}`);
+    await sleep(1500);
+    const n = countWindows(child.pid, 'menu');
+    if (n !== 1) throw new Error(`菜单窗口应该只有 1 个，实际 ${n} 个`);
+  } finally {
+    pet?.close();
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    await sleep(300);
+    try {
+      rmSync(data, { recursive: true, force: true });
+    } catch {}
+  }
+}
+
 // ---------------- 主流程 ----------------
 
 async function main() {
@@ -257,7 +305,7 @@ async function main() {
   mkdirSync(TASK_ROOT, { recursive: true });
   console.log(`数据目录：${DATA}`);
   // 安装包不带角色；以前构建留在 target/release/characters/ 里的旧文件会让「没有角色」的情况测不到
-  for (const id of ['nanami-chiaki', 'makise-kurisu']) {
+  for (const id of ['nanami-chiaki', 'makise-kurisu', 'tachibana-sherry']) {
     const left = join(EXE, '..', 'characters', id);
     if (existsSync(left)) throw new Error(`${left} 是以前的构建留下的，安装包里已经不带角色了：删掉它再测`);
   }
@@ -269,6 +317,8 @@ async function main() {
   });
   const pid = child.pid;
   let settings, chat, pet;
+  /** 中途打开的窗口（计划窗口），结束时一起检查前端报错 */
+  const extraPages = [];
   try {
     const ts = await waitTarget('settings.html');
     const tp = await waitTarget('pet.html');
@@ -376,26 +426,22 @@ async function main() {
     const packCard = (id) => `document.querySelector('.char-card[data-testid="pack-${id}"]')`;
     const clickIn = (card, label) =>
       settings.eval(`(() => { const b = [...${card}.querySelectorAll('button')].find(b => b.innerText.trim().startsWith(${JSON.stringify(label)})); if (!b) return false; b.click(); return true; })()`);
-    await test('角色：全新安装一个角色都没有，列出可下载的（带预览图和大小）；下载哪位就用哪位', async () => {
-      await settings.waitFor(`!!document.querySelector('[data-testid=no-character]')`, '提示还没有桌宠');
-      if (!(await pet.eval(`document.querySelector('.pet')?.classList.contains('placeholder') === true`))) throw new Error('一个角色都没有时，桌宠应该是占位形象');
-      await settings.waitFor(`document.querySelectorAll('.char-card[data-testid^="pack-"]').length === 2`, '两位可下载的角色');
-      const preview = await settings.eval(`${packCard('nanami-chiaki')}.querySelector('img')?.src ?? ''`);
+    await test('角色：全新安装直接带着七海千秋（安装包里的初始角色，不用下载）；别的角色列出来可以下载（带预览图和大小）', async () => {
+      // 打开就是千秋：不是占位形象、不提示「还没有桌宠」、不从网上下载
+      await settings.waitFor(`[...document.querySelectorAll('.char-grid:not([data-testid=pack-grid]) .char-card')].some(c => c.innerText.includes('七海千秋') && c.innerText.includes('使用中'))`, '千秋已经是使用中', 8000);
+      if (await settings.eval(`!!document.querySelector('[data-testid=no-character]')`)) throw new Error('全新安装不该再提示「还没有桌宠」');
+      await pet.waitFor(`document.documentElement.dataset.skin === 'arcade' && !document.querySelector('.pet')?.classList.contains('placeholder')`, '桌宠一打开就是千秋', 8000);
+      if (!existsSync(join(DATA, 'packs', 'nanami-chiaki', 'voice', 'index.json'))) throw new Error('初始角色的预录语音没装到数据目录');
+      if (existsSync(join(DATA, 'packs', '.bundled-nanami-chiaki'))) throw new Error('装初始角色用的临时文件夹没清掉');
+      if (packs.hits.some((h) => String(h).includes('nanami-chiaki'))) throw new Error(`千秋应该是安装包里带的，不该去下载：${packs.hits.join(' ')}`);
+      // 千秋在「下载角色」里显示已装好（之后也能删掉），另外两位可以下载
+      await settings.waitFor(`document.querySelectorAll('.char-card[data-testid^="pack-"]').length === 3`, '三位角色都列出来');
+      await settings.waitFor(`${packCard('nanami-chiaki')}.innerText.includes('已下载')`, '千秋显示已装好', 5000);
+      const preview = await settings.eval(`${packCard('makise-kurisu')}.querySelector('img')?.src ?? ''`);
       if (!preview.startsWith('data:image/png;base64,')) throw new Error('下载前就该看到预览图（安装包里带的小预览）');
-      const size = await settings.eval(`${packCard('nanami-chiaki')}.innerText`);
+      const size = await settings.eval(`${packCard('makise-kurisu')}.innerText`);
       if (!/下载（\d+\.\d MB）/.test(size)) throw new Error(`没有显示下载大小：${size}`);
-      await settings.shot('settings-角色-下载前.png');
-      if (!(await clickIn(packCard('nanami-chiaki'), '下载'))) throw new Error('找不到千秋的下载按钮');
-      // 下载中有进度条
-      await settings.waitFor(`!!${packCard('nanami-chiaki')}.querySelector('progress')`, '进度条', 8000).catch(() => {});
-      await settings.waitFor(`${packCard('nanami-chiaki')}.innerText.includes('已下载')`, '千秋下载完成', 30000);
-      // 原来选的（默认千秋）刚下好 → 直接用上，不用再点切换
-      await settings.waitFor(`!document.querySelector('[data-testid=no-character]')`, '提示消失');
-      await settings.waitFor(`[...document.querySelectorAll('.char-grid:not([data-testid=pack-grid]) .char-card')].some(c => c.innerText.includes('七海千秋') && c.innerText.includes('使用中'))`, '千秋自动成了使用中', 8000);
-      await pet.waitFor(`document.documentElement.dataset.skin === 'arcade'`, '桌宠换上千秋的皮肤', 8000);
-      if (!existsSync(join(DATA, 'packs', 'nanami-chiaki', 'voice', 'index.json'))) throw new Error('角色包里的预录语音没装到数据目录');
-      if (existsSync(join(DATA, 'packs', '.dl-nanami-chiaki'))) throw new Error('下载用的临时文件夹没清掉');
-      await settings.shot('settings-角色-下载后.png');
+      await settings.shot('settings-角色-全新安装.png');
       // 再下红莉栖：当前用着的不变
       if (!(await clickIn(packCard('makise-kurisu'), '下载'))) throw new Error('找不到红莉栖的下载按钮');
       await settings.waitFor(`${packCard('makise-kurisu')}.innerText.includes('已下载')`, '红莉栖下载完成', 30000);
@@ -666,6 +712,7 @@ async function main() {
         menu.close();
       }
     });
+    await test('启动后马上连着右键：只会有一个菜单窗口（不会叠出残留的透明窗口盖住气泡）', menuStartupRace);
     await test('声音：选 Windows 自带的语音后出现试听；桌宠页面能拿到系统声音列表（不出声）', async () => {
       await settings.click('声音');
       await settings.waitFor(`document.querySelector('main h1')?.innerText === '声音'`, '声音页');
@@ -834,6 +881,54 @@ async function main() {
       });
     }
 
+    await test('雪莉：下载、切换后换上侦探笔记本风皮肤，带她自己的 Q 版形象；预录语音能被 WebView2 解码；删掉后切回红莉栖', async () => {
+      await settings.click('角色');
+      await settings.waitFor(`!!${packCard('tachibana-sherry')}`, '雪莉的下载卡');
+      if (!(await clickIn(packCard('tachibana-sherry'), '下载'))) throw new Error('找不到雪莉的下载按钮');
+      await settings.waitFor(`${packCard('tachibana-sherry')}.innerText.includes('已下载')`, '雪莉下载完成', 30000);
+      await settings.eval(`(() => { const c = [...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('橘雪莉') && !c.dataset.testid); const b = c && [...c.querySelectorAll('button')].find(b => b.innerText.trim() === '切换'); if (b) b.click(); })()`);
+      await pet.waitFor(`document.documentElement.dataset.skin === 'detective'`, '桌宠皮肤', 6000);
+      await pet.waitFor(`(() => { const s = document.querySelector('.pet-img')?.getAttribute('src') ?? ''; return s.includes('deskmate-img') && s.includes('/tachibana-sherry/idle'); })()`, '雪莉的 Q 版形象（下载来的 PNG）', 6000);
+      await sleep(300);
+      await pet.shot('pet-sherry.png');
+      await chat.waitFor(`document.documentElement.dataset.skin === 'detective'`, '聊天皮肤', 6000);
+      await petAt(0, 15);
+      await chat.waitFor(`!!document.querySelector('.panel.speech')`, '她说的话气泡', 6000);
+      await sleep(300);
+      await chat.shot('chat-speech-detective.png');
+      const src = await pet.eval(`document.querySelector('.pet-img').getAttribute('src')`);
+      await pet.shot('pet-sherry-pat.png');
+      if (!src.includes('/tachibana-sherry/pat')) throw new Error(`摸头时应该换成反应图（现在是 ${src.slice(0, 80)}）`);
+      await chat.click('[data-testid=speech]');
+      await chat.waitFor(`!!document.querySelector('textarea[aria-label="输入消息"]')`, '变成聊天框');
+      await chat.shot('chat-detective.png');
+      await chat.click('[aria-label="关闭"]');
+      const sherryPackIndex = join(DATA, 'packs', 'tachibana-sherry', 'voice', 'index.json');
+      if (!existsSync(sherryPackIndex)) throw new Error('角色包里的预录语音没装到数据目录');
+      await settings.click('声音');
+      await settings.waitFor(`document.querySelector('main h1')?.innerText === '声音'`, '声音页');
+      await settings.eval(`[...document.querySelectorAll('label.engine-choice')].find(l => l.innerText.includes('预录语音')).querySelector('input').click()`);
+      await settings.waitText('已装好');
+      await settings.shot('settings-预录语音-雪莉.png');
+      const lines = Object.keys(JSON.parse(readFileSync(sherryPackIndex, 'utf8')).lines ?? {});
+      if (lines.length < 100) throw new Error(`语音包里只有 ${lines.length} 句`);
+      const sec = await pet.eval(`(async () => {
+        const buf = await window.__TAURI_INTERNALS__.invoke('voice_audio', { id: '${lines[0]}' });
+        const a = new Audio(URL.createObjectURL(new Blob([buf])));
+        await new Promise((ok, no) => { a.onloadedmetadata = ok; a.onerror = () => no(new Error('WebView2 解码失败')); setTimeout(() => no(new Error('解码超时')), 5000); });
+        return a.duration;
+      })()`);
+      if (!(sec > 0.3 && sec < 20)) throw new Error(`录音时长不对：${sec}`);
+      console.log(`    （雪莉语音包 ${lines.length} 句，第一句 ${sec.toFixed(1)} 秒）`);
+      // 切回红莉栖，删掉雪莉（后面的测试仍按「千秋 + 红莉栖」来）
+      await settings.click('角色');
+      await settings.eval(`(() => { const c = [...document.querySelectorAll('.char-card')].find(c => c.innerText.includes('牧濑红莉栖') && !c.dataset.testid); const b = c && [...c.querySelectorAll('button')].find(b => b.innerText.trim() === '切换'); if (b) b.click(); })()`);
+      await pet.waitFor(`document.documentElement.dataset.skin === 'lab'`, '切回红莉栖', 6000);
+      if (!(await clickIn(packCard('tachibana-sherry'), '删除'))) throw new Error('找不到雪莉的删除按钮');
+      await settings.waitFor(`${packCard('tachibana-sherry')}.innerText.includes('下载（')`, '雪莉变回待下载', 8000);
+      if (existsSync(join(DATA, 'packs', 'tachibana-sherry'))) throw new Error('雪莉的文件夹没有删掉');
+    });
+
     await test('角色：不用的角色可以删掉（正在用的不能删），删掉后又能重新下载', async () => {
       await settings.click('角色');
       await settings.waitFor(`!!${packCard('makise-kurisu')}`, '红莉栖的下载卡');
@@ -843,6 +938,282 @@ async function main() {
       await settings.waitFor(`${packCard('nanami-chiaki')}.innerText.includes('下载（')`, '千秋变回待下载', 8000);
       if (existsSync(join(DATA, 'packs', 'nanami-chiaki'))) throw new Error('千秋的文件夹没有删掉');
       await settings.waitFor(`document.querySelectorAll('.char-grid:not([data-testid=pack-grid]) .char-card').length === 1`, '上面只剩红莉栖');
+    });
+
+    console.log('\n计划');
+    let plans = null;
+    // 她刚说了句反应时弹的是「她说的话」气泡（没有输入框）：点一下变成聊天框；聊天窗口关着就点她身体
+    const chatInput = async () => {
+      if (await chat.eval(`!!document.querySelector('textarea[aria-label="输入消息"]')`)) return;
+      if (await chat.eval(`!!document.querySelector('[data-testid=speech]')`)) await chat.click('[data-testid=speech]');
+      else await petAt(0, 150);
+      await chat.waitFor(`!!document.querySelector('textarea[aria-label="输入消息"]')`, '聊天输入框', 6000);
+    };
+    await test('计划：设置「提醒」页的入口打开计划窗口（第一次没有计划）', async () => {
+      await settings.click('提醒');
+      await settings.waitFor(`document.querySelector('main h1')?.innerText === '提醒'`, '提醒页');
+      await settings.click('打开计划');
+      const t = await waitTarget('plans.html', 10000);
+      if (!t) throw new Error('计划窗口没有打开');
+      plans = await Page.open('plans', t.webSocketDebuggerUrl);
+      extraPages.push(plans);
+      await plans.waitFor(`!!document.querySelector('.plans-nav') && document.body.innerText.includes('今天还没有安排')`, '计划窗口加载', 10000);
+      await waitVisible(pid, 'plans', true);
+      await plans.shot('plans-today-empty.png');
+    });
+    await test('计划：写一句话 → 她来安排（mock 用本地规则理解）→ 看一看 → 开始', async () => {
+      await plans.click('＋ 新建计划');
+      await plans.waitFor(`!!document.querySelector('textarea[aria-label="想做什么计划"]')`, '新建页');
+      await plans.input('textarea[aria-label="想做什么计划"]', '期末考试前复习线性代数第1-6章，每天1个半小时，周末2小时，晚上8点开始');
+      await plans.click('让她来安排');
+      await plans.waitText('看看这样排行不行', 15000);
+      const n = await plans.eval(`document.querySelectorAll('.item-list .item').length`);
+      if (n !== 6) throw new Error(`应该拆成 6 章，实际 ${n} 条`);
+      const remind = await plans.eval(`document.querySelector('input[aria-label="每天几点开始"]').value`);
+      if (remind !== '20:00') throw new Error(`开始时间没认出来：${remind}`);
+      const sat = await plans.eval(`document.querySelector('input[aria-label="周六多少分钟"]').value`);
+      if (sat !== '120') throw new Error(`周末的时间没认出来：${sat}`);
+      await plans.shot('plans-draft.png');
+      await plans.click('就这样，开始！');
+      await plans.waitFor(`[...document.querySelectorAll('[role=tab]')].some(t => t.innerText === '日历')`, '计划详情', 8000);
+      await plans.waitText('线性代数');
+      await plans.shot('plans-detail.png');
+      await plans.click('日历');
+      await plans.waitFor(`!!document.querySelector('.cal-grid')`, '日历');
+      await plans.shot('plans-calendar.png');
+    });
+    await test('计划：今天的事项能勾掉，桌宠有反应；聊天里问「今天还要做什么」直接回答', async () => {
+      await plans.click('☀ 今天');
+      await plans.waitFor(`document.querySelectorAll('.task-list .task').length > 0`, '今天的事项', 8000);
+      await plans.shot('plans-today.png');
+      const before = await chat.eval(`document.querySelector('.panel')?.innerText ?? ''`);
+      await plans.click('.task-list .task button.check');
+      await plans.waitFor(`document.querySelector('.task-list .task button.check')?.getAttribute('aria-checked') === 'true'`, '勾上了');
+      await chat.waitFor(`(document.querySelector('.panel')?.innerText ?? '') !== ${JSON.stringify(before)}`, '她说了一句', 8000);
+      await chat.shot('chat-plan-done.png');
+      await chatInput();
+      await chat.input('textarea[aria-label="输入消息"]', '今天还要做什么');
+      await chat.key('textarea[aria-label="输入消息"]', { key: 'Enter' });
+      await chat.waitFor(`[...document.querySelectorAll('.msg-assistant')].some(m => /今天.*(项|完成)/.test(m.innerText))`, '本地回答今天的计划', 8000);
+    });
+    await test('计划：随手加一件事、专注计时（桌宠脚下有倒计时），停下后消失', async () => {
+      await plans.input('input[aria-label="加一件事"]', '取快递');
+      await plans.input('input[aria-label="大概多少分钟"]', '15');
+      await plans.click('加上');
+      await plans.waitText('取快递');
+      await plans.click('button[aria-label="开始专注：取快递"]');
+      await plans.waitFor(`!!document.querySelector('.focus-bar')`, '计划窗口的专注条', 5000);
+      await pet.waitFor(`!!document.querySelector('.pet-focus')`, '桌宠脚下的倒计时', 5000);
+      await plans.shot('plans-focus.png');
+      await pet.shot('pet-focus.png');
+      await plans.click('停下');
+      await plans.waitFor(`!document.querySelector('.focus-bar')`, '专注条消失', 5000);
+      await pet.waitFor(`!document.querySelector('.pet-focus')`, '倒计时消失', 5000);
+    });
+    await test('计划：聊天气泡里的 [[计划：…]] 按钮打开计划窗口并填好那句话', async () => {
+      await chatInput();
+      await chat.input('textarea[aria-label="输入消息"]', '/mock plan 每天背50个单词');
+      await chat.key('textarea[aria-label="输入消息"]', { key: 'Enter' });
+      await chat.waitFor(`[...document.querySelectorAll('.action button')].some(b => b.innerText === '去安排')`, '「去安排」按钮', 8000);
+      await chat.shot('chat-plan-button.png');
+      await chat.click('去安排');
+      await plans.waitFor(`document.querySelector('textarea[aria-label="想做什么计划"]')?.value === '每天背50个单词'`, '新建页填好了那句话', 8000);
+      // 收起聊天窗口，后面的测试从「聊天窗口关着」开始
+      await chat.click('[aria-label="关闭"]');
+      await waitVisible(pid, 'chat', false);
+    });
+    await test('计划：她怎么陪你：切换监督强度马上保存', async () => {
+      await plans.click('.plans-nav > .nav-item:last-child');
+      await plans.waitFor(`document.querySelector('main h1')?.innerText.endsWith('怎么陪你')`, '监督设置页');
+      await plans.click('严格');
+      await plans.waitText('已保存');
+      await plans.shot('plans-settings.png');
+      const s = await plans.eval(`window.__TAURI_INTERNALS__.invoke('plan_boot').then(v => v.settings.strictness)`);
+      if (s !== 'strict') throw new Error(`设置里没存上「严格」：${s}`);
+    });
+    // 计划书（复杂的长期计划）：mock 用本地规则——复杂的先问，回答完出路线图，最近三周按要点拆开
+    const svgClick = (sel) => plans.eval(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return false; el.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; })()`);
+    const LONG_PLAN = [
+      '帮我做一份考证准备计划。',
+      '【我的背景】',
+      '- 某某大学 机械专业，明年7月毕业',
+      '- 英语四级，做过两个课程设计',
+      '【约束】',
+      '- 每天只能投入1〜2小时，周末可多一些；要准备期末考试',
+      '- 实习作为备选：每周最多1小时用于联系公司，2027年2月底前没有回应就放弃',
+      '【准备内容（按优先级）】',
+      '1. 吃透专业课，能讲清楚三个核心概念（最高优先级）',
+      '2. 刷历年真题：选择、计算、案例',
+      '3. 做一个小作品集：选题、实现、整理',
+      '【输出要求】',
+      '- 时间范围：2026年11月9日〜2027年6月30日',
+      '- 按阶段划分，有关键节点，最后附一个每周日自查清单；如有需要补充的信息，请先向我提问',
+    ].join('\n');
+    await test('计划书：写一份很长的计划 → 她先问几句 → 回答后出计划书（时间线）', async () => {
+      await plans.click('＋ 新建计划');
+      await plans.waitFor(`!!document.querySelector('textarea[aria-label="想做什么计划"]')`, '新建页');
+      await plans.input('textarea[aria-label="想做什么计划"]', LONG_PLAN);
+      await plans.click('让她来安排');
+      // 新建页的说明里也有「先问你几句」，等问题本身出来
+      await plans.waitFor(`document.querySelectorAll('.question').length > 0`, '她先问的问题', 15000);
+      const qs = await plans.eval(`document.querySelectorAll('.question').length`);
+      if (qs < 1 || qs > 3) throw new Error(`应该问 1~3 个问题，实际 ${qs} 个`);
+      await plans.click('1月中旬期末考试');
+      await plans.shot('plans-goal-questions.png');
+      await plans.click('回答好了，开始排');
+      await plans.waitText('计划书：看看这样排行不行', 20000);
+      await plans.waitFor(`!!document.querySelector('svg.viz.timeline')`, '时间线');
+      const lanes = await plans.eval(`[...document.querySelectorAll('.lane-label')].map(g => g.getAttribute('aria-label'))`);
+      for (const want of ['线：吃透专业课', '线：刷历年真题', '线：做一个小作品集', '线：联系公司']) {
+        if (!lanes.includes(want)) throw new Error(`时间线上没有「${want}」：${lanes.join('、')}`);
+      }
+      const phases = await plans.eval(`document.querySelectorAll('.phase-band').length`);
+      if (phases !== 3) throw new Error(`应该分 3 个阶段，实际 ${phases}`);
+      const buffers = await plans.eval(`document.querySelectorAll('.buffer').length`);
+      if (buffers !== 1) throw new Error(`回答里的期末考试应该变成一段缓冲，实际 ${buffers}`);
+      await plans.eval(`document.querySelector('.viz-card')?.scrollIntoView({ block: 'start' })`);
+      await plans.shot('plans-goal-draft.png');
+      // 点第一个阶段：下面出来阶段的编辑
+      if (!(await svgClick('.phase-band'))) throw new Error('点不到阶段');
+      await plans.waitFor(`[...document.querySelectorAll('.node-panel h2')].some(h => h.innerText.startsWith('阶段：打基础'))`, '阶段的编辑面板');
+      await plans.shot('plans-goal-phase.png');
+      await plans.click('就这样，开始！');
+      await plans.waitFor(`!!document.querySelector('.goal-stats') && [...document.querySelectorAll('[role=tab]')].some(t => t.innerText === '计划书')`, '计划书页', 10000);
+      await plans.waitFor(`!!document.querySelector('svg.viz.timeline')`, '计划书页的时间线');
+      await plans.eval(`document.querySelector('.viz-card')?.scrollIntoView({ block: 'start' })`);
+      await plans.shot('plans-goal.png');
+    });
+    await test('计划书：今天排了它的线；树状图、流程图；点节点能改', async () => {
+      const today = await plans.eval(`window.__TAURI_INTERNALS__.invoke('plan_today')`);
+      const mine = today.tasks.filter((t) => t.label.includes('·'));
+      if (!mine.length) throw new Error(`今天没有排计划书的线：${JSON.stringify(today.tasks.map((t) => t.label))}`);
+      await plans.click('树状图');
+      await plans.waitFor(`!!document.querySelector('svg.viz.tree')`, '树状图');
+      await plans.eval(`document.querySelector('.viz-card')?.scrollIntoView({ block: 'start' })`);
+      await plans.shot('plans-goal-tree.png');
+      await plans.click('流程图');
+      await plans.waitFor(`!!document.querySelector('svg.viz.flow')`, '流程图');
+      await plans.eval(`document.querySelector('.viz-card')?.scrollIntoView({ block: 'start' })`);
+      await plans.shot('plans-goal-flow.png');
+      if (!(await svgClick('.v-fnode.ms'))) throw new Error('流程图上没有节点');
+      await plans.waitFor(`[...document.querySelectorAll('.node-panel h2')].some(h => h.innerText.startsWith('节点：'))`, '节点的编辑面板');
+      await plans.click('时间线');
+      await plans.waitFor(`!!document.querySelector('svg.viz.timeline')`, '切回时间线');
+    });
+    await test('计划书：这周 → 调整下周（mock 按要点细化）→ 按这个改；原文是生成好的', async () => {
+      await plans.click('这周');
+      await plans.click('写一句要求');
+      await plans.input('textarea[aria-label="想怎么调整下周"]', '真题多练一点');
+      await plans.click('让她调整');
+      await plans.waitText('调整下周：', 15000);
+      await plans.shot('plans-goal-adjust.png');
+      await plans.click('按这个改');
+      await plans.waitText('已更新计划书', 8000);
+      await plans.click('原文');
+      const doc = await plans.eval(`document.querySelector('textarea[aria-label="计划书原文"]').value`);
+      if (!doc.includes('## 阶段1：打基础') || !doc.includes('## 每周固定的事')) throw new Error(`原文不对：${doc.slice(0, 200)}`);
+      await plans.shot('plans-goal-doc.png');
+      await plans.click('计划书');
+    });
+    await test('计划书：深色模式、窄窗口也能看', async () => {
+      await plans.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+      await sleep(300);
+      await plans.eval(`document.querySelector('.viz-card')?.scrollIntoView({ block: 'start' })`);
+      await plans.shot('plans-goal-dark.png');
+      await plans.send('Emulation.setEmulatedMedia', { features: [] });
+      await plans.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 600, deviceScaleFactor: 1, mobile: false });
+      await sleep(400);
+      const over = await plans.eval(`document.documentElement.scrollWidth - document.documentElement.clientWidth`);
+      await plans.shot('plans-goal-narrow.png');
+      await plans.send('Emulation.clearDeviceMetricsOverride');
+      if (over > 2) throw new Error(`窄窗口时整页横着溢出了 ${over}px（图应该在自己的框里横向滚动）`);
+    });
+    await test('计划：统计页（热力图、8 周柱状图、每个计划一行；深色、窄窗口；点计划名字跳过去）', async () => {
+      await plans.click('📊 统计');
+      await plans.waitFor(`document.querySelectorAll('.stat-heat [aria-label]').length > 0 && document.querySelectorAll('.bar-col').length === 8`, '热力图和 8 根柱子', 8000);
+      await plans.waitFor(`document.querySelectorAll('.stat-plans li').length > 0`, '每个计划一行', 5000);
+      await plans.shot('plans-stats.png');
+      await plans.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+      await sleep(300);
+      await plans.shot('plans-stats-dark.png');
+      await plans.send('Emulation.setEmulatedMedia', { features: [] });
+      await plans.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 600, deviceScaleFactor: 1, mobile: false });
+      await sleep(400);
+      const over = await plans.eval(`document.documentElement.scrollWidth - document.documentElement.clientWidth`);
+      await plans.shot('plans-stats-narrow.png');
+      await plans.send('Emulation.clearDeviceMetricsOverride');
+      if (over > 2) throw new Error(`统计页在窄窗口时横着溢出了 ${over}px`);
+      const stats = await plans.eval(`window.__TAURI_INTERNALS__.invoke('plan_stats')`);
+      if (!stats || !Array.isArray(stats.plans)) throw new Error(`plan_stats 返回不对：${JSON.stringify(stats)?.slice(0, 200)}`);
+      // 点单独那个计划的名字：跳到计划页
+      await plans.eval(`[...document.querySelectorAll('.stat-plans button, .stat-plans a')].find(b => b.innerText.includes('线性代数'))?.click()`);
+      await plans.waitFor(`[...document.querySelectorAll('[role=tab]')].some(t => t.innerText === '日历')`, '跳到了计划页', 5000);
+    });
+    await test('日历：点某一天写下要做的事 → 格子里有、能勾「搞定了」；明天的事出现在「今天」页', async () => {
+      const today = (await plans.eval(`window.__TAURI_INTERNALS__.invoke('plan_boot')`)).today;
+      await plans.click('📅 日历');
+      await plans.waitFor(`document.querySelectorAll('.agenda-grid .agenda-cell').length === 42`, '一个月 42 格', 8000);
+      // 下个月 25 号（一定在 7 天以外：提示里有 4 个提醒的日子）
+      await plans.click('button[aria-label="下个月"]');
+      const [y, m] = today.split('-').map(Number);
+      const next = m === 12 ? `${y + 1}-01-25` : `${y}-${String(m + 1).padStart(2, '0')}-25`;
+      await plans.waitFor(`!!document.querySelector('[data-day="${next}"]:not(.other)')`, '翻到下个月', 5000);
+      await plans.click(`[data-day="${next}"]`);
+      await plans.waitFor(`document.querySelector('[data-day="${next}"]')?.getAttribute('aria-pressed') === 'true'`, '选中那一天', 5000);
+      await plans.input('input[aria-label="这天有什么事"]', '数据结构作业截止');
+      await plans.click('记下');
+      await plans.waitFor(`document.querySelector('[data-day="${next}"]')?.innerText.includes('数据结构作业截止')`, '格子里有这一条', 8000);
+      const hint = await plans.eval(`document.querySelector('.agenda-day')?.innerText ?? ''`);
+      if (!/各提醒你一次/.test(hint) || (hint.match(/月\d+日/g) ?? []).length < 3 || !hint.includes('和当天')) throw new Error(`提醒的日子提示不对：${hint.slice(-120)}`);
+      await plans.shot('plans-calendar-month.png');
+      await plans.click('button[role=checkbox][aria-label="搞定了：数据结构作业截止"]');
+      await plans.waitFor(`document.querySelector('button[role=checkbox][aria-label="改回没搞定：数据结构作业截止"]')?.getAttribute('aria-checked') === 'true'`, '勾上了搞定了', 5000);
+      // 明天的事：「今天」页上有一张日历小卡片
+      await plans.click('回到今天');
+      const tomorrow = await plans.eval(`(() => { const d = new Date(${JSON.stringify(today)} + 'T00:00:00'); d.setDate(d.getDate() + 1); const p = (n) => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); })()`);
+      await plans.click(`[data-day="${tomorrow}"]`);
+      await plans.input('input[aria-label="这天有什么事"]', '线代课停一次');
+      await plans.click('记下');
+      await plans.waitFor(`document.querySelector('[data-day="${tomorrow}"]')?.innerText.includes('线代课停一次')`, '明天的格子里有', 8000);
+      const rows = await plans.eval(`window.__TAURI_INTERNALS__.invoke('agenda_range', { from: ${JSON.stringify(today)}, to: ${JSON.stringify(next)} })`);
+      if (!Array.isArray(rows) || rows.length !== 2 || !rows.find((r) => r.title === '数据结构作业截止')?.done) throw new Error(`agenda_range 返回不对：${JSON.stringify(rows)?.slice(0, 300)}`);
+      await plans.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+      await sleep(300);
+      await plans.shot('plans-calendar-dark.png');
+      await plans.send('Emulation.setEmulatedMedia', { features: [] });
+      await plans.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 600, deviceScaleFactor: 1, mobile: false });
+      await sleep(400);
+      const over = await plans.eval(`document.documentElement.scrollWidth - document.documentElement.clientWidth`);
+      await plans.shot('plans-calendar-narrow.png');
+      await plans.send('Emulation.clearDeviceMetricsOverride');
+      if (over > 2) throw new Error(`日历在窄窗口时横着溢出了 ${over}px`);
+      await plans.click('☀ 今天');
+      await plans.waitFor(`document.querySelector('.agenda-soon')?.innerText.includes('线代课停一次')`, '「今天」页的日历小卡片', 8000);
+      await plans.shot('plans-today-agenda.png');
+    });
+    await test('计划：计划窗口的命令都有授权，别的窗口的命令调不了', async () => {
+      const inv = (cmd, args = '') => plans.eval(`window.__TAURI_INTERNALS__.invoke('${cmd}'${args})`);
+      const list = await inv('plan_list');
+      // 单独的计划一个，计划书的线另外算
+      if (!Array.isArray(list) || list.filter((p) => !p.plan.goal_id).length !== 1) throw new Error(`plan_list 返回不对：${JSON.stringify(list)?.slice(0, 200)}`);
+      const goals = await inv('goal_list');
+      if (!Array.isArray(goals) || goals.length !== 1) throw new Error(`goal_list 返回不对：${JSON.stringify(goals)?.slice(0, 200)}`);
+      const gv = await inv('goal_get', `, { id: ${goals[0].goal.id} }`);
+      if (gv?.full?.phases?.length !== 3) throw new Error('goal_get 返回不对');
+      const today = await inv('plan_today');
+      if (!Array.isArray(today?.tasks)) throw new Error('plan_today 返回不对');
+      const ag = await inv('agenda_range', `, { from: '2026-01-01', to: '2026-02-01' }`);
+      if (!Array.isArray(ag)) throw new Error('agenda_range 返回不对');
+      const st = await inv('plan_focus_state');
+      if (st !== null) throw new Error(`没在专注时 plan_focus_state 应该是 null：${JSON.stringify(st)}`);
+      const denied = await plans.eval(`window.__TAURI_INTERNALS__.invoke('settings_get').then(() => 'ok', e => String(e))`);
+      if (!/not allowed/i.test(denied)) throw new Error(`计划窗口不该能读设置：${denied}`);
+    });
+    await test('计划：关掉计划窗口（WM_CLOSE）', async () => {
+      windows(pid, 'plans');
+      const end = Date.now() + 5000;
+      while (Date.now() < end && (await targets()).some((t) => t.url.includes('plans.html'))) await sleep(200);
+      if ((await targets()).some((t) => t.url.includes('plans.html'))) throw new Error('计划窗口没有关掉');
     });
 
     console.log('\n窗口关闭');
@@ -869,7 +1240,7 @@ async function main() {
     results.push({ name: '测试准备', ok: false, msg: String(e?.message ?? e) });
     console.log(`  ✗ 测试准备：${e?.message ?? e}`);
   } finally {
-    for (const p of [settings, chat, pet]) {
+    for (const p of [settings, chat, pet, ...extraPages]) {
       if (p && p.errors.length) {
         results.push({ name: `${p.name} 页面没有前端报错`, ok: false, msg: p.errors.slice(0, 5).join(' | ') });
         console.log(`  ✗ ${p.name} 页面有前端报错：${p.errors.slice(0, 5).join(' | ')}`);

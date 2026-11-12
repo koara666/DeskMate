@@ -337,7 +337,9 @@ pub fn action_view(m: &Marker, adv: &AdvancedSettings) -> Option<ActionView> {
         | MarkerKind::Game
         | MarkerKind::Remind
         | MarkerKind::Ja
-        | MarkerKind::Search => return None,
+        | MarkerKind::Search
+        | MarkerKind::Checkin
+        | MarkerKind::Plan => return None,
         MarkerKind::Open => match resolve_open(&m.text, &adv.programs) {
             Ok(t) => (format!("打开{}", t.describe()), None),
             Err(e) => (format!("打开 {}", m.text), Some(e)),

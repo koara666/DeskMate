@@ -36,7 +36,7 @@ pub struct CharacterView {
     pub theme: character::Theme,
 }
 
-fn character_view(state: &AppState) -> CharacterView {
+pub(crate) fn character_view(state: &AppState) -> CharacterView {
     state
         .current_character()
         .map(|c| CharacterView {
@@ -68,6 +68,8 @@ pub struct PetInit {
     pub mood: i32,
     pub idle_animation: bool,
     pub dnd: bool,
+    /// 正在专注计时（桌宠身上显示倒计时）
+    pub focus: Option<crate::plans::supervise::FocusView>,
 }
 
 #[tauri::command]
@@ -80,6 +82,7 @@ pub fn pet_init(state: State<'_, AppState>) -> PetInit {
         mood: crate::companion::current(&state).1,
         idle_animation: s.idle_animation,
         dnd: s.dnd,
+        focus: crate::plans::supervise::focus_view(&state),
     }
 }
 

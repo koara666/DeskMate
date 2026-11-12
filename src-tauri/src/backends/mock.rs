@@ -4,7 +4,8 @@
 //! - `/mock error key|balance|rate|network|timeout|server|bad` 模拟错误
 //! - `/mock long` 一段很长的回复（测试滚动）
 //! - `/mock slow` 很慢的回复（测试停止生成）
-//! - `/mock open <路径或网址>`、`/mock read <路径>`、`/mock task <要做的事>`：回复里带上对应的动作标记
+//! - `/mock open <路径或网址>`、`/mock read <路径>`、`/mock task <要做的事>`、`/mock checkin <事项>`、`/mock plan <一句话>`：
+//!   回复里带上对应的动作标记
 
 use super::*;
 use std::time::Duration;
@@ -142,6 +143,20 @@ pub fn reply_for(req: &ChatRequest) -> Result<(String, Duration), BackendError> 
             Duration::ZERO,
         ));
     }
+    if req
+        .system_text()
+        .contains(crate::plans::goal_ai::MARKER_ROADMAP)
+        || req
+            .system_text()
+            .contains(crate::plans::goal_ai::MARKER_EXPAND)
+    {
+        // 计划书：本地规则做的路线图（复杂的先问）、按要点拆开的细化
+        return Ok((crate::plans::goal_ai::mock_reply(req), Duration::ZERO));
+    }
+    if req.system_text().contains(crate::plans::ai::MARKER) {
+        // 计划安排：用本地解析的结果装成模型的回答
+        return Ok((crate::plans::ai::mock_reply(req), Duration::ZERO));
+    }
     if req.system_text().contains(crate::reminders::model::MARKER) {
         // 提醒解析：mock 不会真的理解，只说「是提醒但没听懂」
         return Ok((
@@ -173,11 +188,13 @@ pub fn reply_for(req: &ChatRequest) -> Result<(String, Duration), BackendError> 
                 }
                 return Ok((s, Duration::ZERO));
             }
-            (Some(tag @ ("open" | "read" | "task")), Some(_)) => {
+            (Some(tag @ ("open" | "read" | "task" | "checkin" | "plan")), Some(_)) => {
                 let arg = cmd[tag.len()..].trim();
                 let name = match tag {
                     "open" => "打开",
                     "read" => "读取",
+                    "checkin" => "打卡",
+                    "plan" => "计划",
                     _ => "任务",
                 };
                 return Ok((format!("好呀～\n[[{name}：{arg}]]"), Duration::ZERO));
@@ -230,7 +247,8 @@ impl ChatBackend for MockBackend {
                 .sum();
             let mut out = String::new();
             let chars: Vec<char> = reply.chars().collect();
-            for chunk in chars.chunks(2) {
+            // 很长的回答（计划书的路线图有好几千字）分成最多 100 来段，不然按 2 个字一段要等两分钟
+            for chunk in chars.chunks((chars.len() / 100).max(2)) {
                 if cancel.is_cancelled() {
                     return Ok(outcome(out, input_tokens, FinishReason::Cancelled));
                 }

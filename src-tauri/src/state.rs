@@ -59,6 +59,8 @@ pub struct AppState {
     pub asr: crate::asr::AsrState,
     /// 角色包的下载进度
     pub packs: crate::charpacks::PackState,
+    /// 计划：监督循环的唤醒、计划窗口要显示的页面
+    pub plans: crate::plans::supervise::PlanRuntime,
 }
 
 /// 内置角色放在哪些目录：安装包自带的（现在只有通用台词和占位图；开发时是仓库里的 characters/）+ 下载来的官方角色包
@@ -111,6 +113,7 @@ impl AppState {
             voice: Default::default(),
             asr: Default::default(),
             packs: Default::default(),
+            plans: Default::default(),
         }
     }
 

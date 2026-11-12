@@ -900,6 +900,16 @@ pub fn answer_ja(character_id: &str, answer: &str) -> Option<&'static str> {
             _ => return None,
         });
     }
+    if character_id == "tachibana-sherry" {
+        return Some(match answer {
+            "是" => "はい、そうですよ！",
+            "不是" => "いいえ、違いますよ！",
+            "无关" => "それは関係ないですね！",
+            "很接近" => "惜しい、かなり近いですよ！",
+            "不确定" => "うーん、どうでしょう？",
+            _ => return None,
+        });
+    }
     Some(match answer {
         "是" => "うん、そうだよ。",
         "不是" => "ううん、違うよ。",
@@ -1037,15 +1047,24 @@ mod tests {
     #[test]
     fn every_host_answer_has_japanese() {
         // answer_of 认得的回答，都要有日语（不然那一句会退回去翻译或念中文）
-        for id in ["nanami-chiaki", "makise-kurisu", "nailong"] {
+        for id in [
+            "nanami-chiaki",
+            "makise-kurisu",
+            "tachibana-sherry",
+            "nailong",
+        ] {
             for a in ["是", "不是", "无关", "很接近", "不确定"] {
                 assert!(answer_ja(id, a).is_some(), "{id} {a}");
             }
             assert!(answer_ja(id, "也许吧").is_none());
         }
-        // 红莉栖有自己的口吻
+        // 红莉栖、雪莉有自己的口吻
         assert_ne!(
             answer_ja("makise-kurisu", "是"),
+            answer_ja("nanami-chiaki", "是")
+        );
+        assert_ne!(
+            answer_ja("tachibana-sherry", "是"),
             answer_ja("nanami-chiaki", "是")
         );
     }

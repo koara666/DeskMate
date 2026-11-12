@@ -377,6 +377,15 @@ export function ChatApp({ api, taskApi, typewriterTickMs = 28 }: Props) {
       startStream((rid, onEvent) => api.read(a.target, rid, onEvent));
       return '';
     }
+    // 计划：记成做完 / 打开计划窗口新建
+    if (a.kind === 'checkin') {
+      await api.planDone?.(Number(a.target));
+      return '';
+    }
+    if (a.kind === 'plan') {
+      await api.openPlans?.(`new:${a.target}`);
+      return '';
+    }
     return api.open(a.target);
   };
   const onAction = useCallback((a: ActionView) => actionRef.current(a), []);
@@ -736,9 +745,17 @@ const Message = memo(function Message({
 });
 
 /** 一个动作按钮：说明要打开 / 读取什么，用户点了才做 */
+/** 每种动作按钮的图标、按钮上的字、点完之后的说明 */
+const ACTION_LOOK: Record<string, [string, string, string]> = {
+  read: ['📄', '读取', '正在读…'],
+  open: ['📂', '打开', '已打开'],
+  checkin: ['✅', '记下', '记好了'],
+  plan: ['📋', '去安排', '计划窗口打开了'],
+};
+
 function ActionChip({ action, onAction }: { action: ActionView; onAction: (a: ActionView) => Promise<string> }) {
   const [state, setState] = useState<{ done: boolean; text: string } | null>(null);
-  const icon = action.kind === 'read' ? '📄' : '📂';
+  const [icon, verb, after] = ACTION_LOOK[action.kind] ?? ACTION_LOOK.open;
   if (action.error) {
     return (
       <div class="action action-blocked" role="note">
@@ -750,7 +767,7 @@ function ActionChip({ action, onAction }: { action: ActionView; onAction: (a: Ac
   const run = async () => {
     try {
       await onAction(action);
-      setState({ done: true, text: action.kind === 'read' ? '正在读…' : '已打开' });
+      setState({ done: true, text: after });
     } catch (e) {
       setState({ done: false, text: String(e) });
     }
@@ -764,7 +781,7 @@ function ActionChip({ action, onAction }: { action: ActionView; onAction: (a: Ac
         <span class="action-note">{state.text}</span>
       ) : (
         <button type="button" class="btn btn-small" onClick={run}>
-          {action.kind === 'read' ? '读取' : '打开'}
+          {verb}
         </button>
       )}
       {state && !state.done && <div class="action-note action-err">{state.text}</div>}

@@ -36,6 +36,8 @@
     "allow-task-cancel",
     "allow-chat-task-report",
     "allow-asr-available",
-    "allow-asr-toggle"
+    "allow-asr-toggle",
+    "allow-plans-open",
+    "allow-plan-task-done"
   ]
 }

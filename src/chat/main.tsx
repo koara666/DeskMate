@@ -3,6 +3,7 @@ import '../styles/base.css';
 import '../styles/chat.css';
 import '../styles/skins/arcade.css';
 import '../styles/skins/lab.css';
+import '../styles/skins/detective.css';
 import { chatApi, taskApi } from '../lib/ipc';
 import { ChatApp } from './ChatApp';
 

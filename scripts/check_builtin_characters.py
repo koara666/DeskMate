@@ -4,8 +4,8 @@
   python scripts/check_builtin_characters.py --online   再去 GitHub 发布页核对包是否已经传好、校验值是否对得上
 
 规则（每个有 Q 版形象 + 日语声音的角色都一样，登记在 scripts/builtin_characters.json）：
-  1. 软件本体不带任何角色：每个角色打成「角色包」放发布页，用户在软件里选了哪位就下载哪位；
-     登记表里的校验值编进程序，下载下来对不上就不装
+  1. 每个角色打成「角色包」放发布页，用户在软件里选了哪位就下载哪位；登记表里的校验值编进程序，下载下来对不上就不装。
+     只有一位初始角色（bundled: true，七海千秋）的角色包随安装包带着，全新安装直接装上，之后换、删都随用户
   2. 形象包、预录语音包是打角色包的原料，也放发布页；声音模型也放发布页，不在角色包里
   3. 图和录音不进代码仓库，仓库里只有代码画的 SVG 兜底和日语台词
   4. 有日语台词（zh || ja）的角色必须登记，登记了就必须四个包齐全
@@ -100,16 +100,21 @@ def offline():
 
     # 流水线：预览图要有、角色包必须真的传好了（否则发出去的软件里选了角色下载不下来）
     rel = read(".github", "workflows", "release.yml")
-    for script in ("scripts/chibi/fetch_art.py --require", "scripts/chibi/make_previews.py", "scripts/check_builtin_characters.py --online"):
+    starters = [cid for cid, c in reg.items() if c.get("bundled")]
+    if len(starters) != 1:
+        bad(f"登记表里要正好有一位 bundled: true 的初始角色（随安装包带着），现在是 {starters}")
+    for script in ("scripts/chibi/fetch_art.py --require", "scripts/chibi/make_previews.py", "scripts/chibi/bundle_default_pack.py", "scripts/check_builtin_characters.py --online"):
         if script not in rel:
             bad(f"release.yml 里没有 `python {script}`（缺包时发布要失败，保证下载版 = 本机版）")
     conf = read("src-tauri", "tauri.conf.json")
     if '"../characters/": ' in conf or "../characters/nanami" in conf or "../characters/makise" in conf:
-        bad("tauri.conf.json 的 resources 里不能带角色文件夹：安装包不带任何角色，角色是用户选了才下载的")
+        bad("tauri.conf.json 的 resources 里不能带角色文件夹：角色是用户选了才下载的（初始角色以角色包的形式放在 characters/_bundled/）")
+    if '"../characters/_bundled/"' not in conf:
+        bad("tauri.conf.json 的 resources 里没有 characters/_bundled/：初始角色的角色包要随安装包带着")
 
     # .gitignore：图和录音不进仓库
     ign = read(".gitignore")
-    for pat in ("characters/*/assets/*.png", "/characters/*/voice/", "/characters/_catalog/*.png", "/dist-packs/"):
+    for pat in ("characters/*/assets/*.png", "/characters/*/voice/", "/characters/_catalog/*.png", "/characters/_bundled/*.tar.bz2", "/dist-packs/"):
         if pat not in ign:
             bad(f".gitignore 里没有 {pat}")
 

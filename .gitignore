@@ -123,5 +123,9 @@ __pycache__/
 # 选角色页的预览图（构建时由 scripts/chibi/make_previews.py 从形象包里取）；文件夹本身要在，.gitkeep 占位
 /characters/_catalog/*.png
 
+# 初始角色（七海千秋）的角色包：构建时由 scripts/chibi/bundle_default_pack.py 放进来随安装包，全新安装直接装上；不进仓库
+/characters/_bundled/*.tar.bz2
+/characters/_bundled/*.part
+
 # 本机打出来的角色包（scripts/chibi/build_character_pack.py），传到发布页，不进仓库
 /dist-packs/

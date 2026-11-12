@@ -107,6 +107,52 @@ pub const SCENES: &[(&str, &[&str])] = &[
     ("menu.voice_off", &["称呼"]),
     ("voice.test", &["称呼"]),
     ("update.whats_new", &["版本", "称呼"]),
+    ("plan.header_empty", &["称呼"]),
+    ("plan.header_start", &["数量", "称呼"]),
+    (
+        "plan.header_some",
+        &["数量", "完成", "剩下", "连续", "称呼"],
+    ),
+    ("plan.header_done", &["数量", "连续", "称呼"]),
+    ("plan.created", &["计划", "事项", "称呼"]),
+    ("plan.created_later", &["计划", "称呼"]),
+    ("plan.done", &["事项", "计划", "称呼"]),
+    ("plan.all_done", &["事项", "计划", "称呼"]),
+    ("plan.finished", &["事项", "计划", "称呼"]),
+    ("plan.start", &["事项", "时间", "称呼"]),
+    ("plan.start_later", &["称呼"]),
+    ("plan.open", &["称呼"]),
+    ("plan.new_open", &["称呼"]),
+    ("plan.nudge", &["事项", "活动", "称呼"]),
+    ("plan.nudge_ok", &["称呼"]),
+    ("plan.nudge_later", &["称呼"]),
+    ("plan.nudge_skip", &["称呼"]),
+    ("plan.checkin", &["剩下", "事项", "称呼"]),
+    ("plan.checkin_all", &["称呼"]),
+    ("plan.checkin_part", &["称呼"]),
+    ("plan.checkin_none", &["称呼"]),
+    ("plan.focus_start", &["事项", "时长", "称呼"]),
+    ("plan.focus_ack", &["称呼"]),
+    ("plan.focus_end", &["事项", "时长", "称呼"]),
+    ("plan.focus_done", &["事项", "称呼"]),
+    ("plan.focus_more", &["时长", "称呼"]),
+    ("plan.focus_rest", &["称呼"]),
+    ("plan.focus_distracted", &["事项", "活动", "称呼"]),
+    ("plan.today_list", &["数量", "事项", "称呼"]),
+    ("plan.today_all_done", &["数量", "称呼"]),
+    ("plan.today_none", &["称呼"]),
+    ("briefing.plans", &["数量", "事项", "称呼"]),
+    ("briefing.plans_night", &["数量", "完成", "称呼"]),
+    ("plan.goal_created", &["计划", "事项", "称呼"]),
+    ("plan.milestone_check", &["节点", "标准", "计划", "称呼"]),
+    ("plan.milestone_yes", &["节点", "称呼"]),
+    ("plan.milestone_no", &["节点", "称呼"]),
+    ("plan.milestone_later", &["节点", "称呼"]),
+    ("plan.milestone_passed", &["节点", "称呼"]),
+    ("plan.review", &["计划", "完成", "情况", "清单", "称呼"]),
+    ("plan.review_adjust", &["计划", "称呼"]),
+    ("plan.review_list", &["计划", "称呼"]),
+    ("plan.review_keep", &["计划", "称呼"]),
 ];
 
 /// 小游戏的场景：`game.<事件>`（通用）或 `game.<游戏>.<事件>`；抽签的解读是 `game.fortune.<签的等级>`
@@ -608,6 +654,26 @@ mod tests {
             .collect();
         assert!(missing.is_empty(), "缺日语版：{missing:?}");
         assert!(l.line_count() >= 240);
+    }
+
+    #[test]
+    fn voiced_characters_have_their_own_plan_lines() {
+        // 计划的场景三位都写了自己的（带日语、有预录语音）；新增 plan.* 场景时别只加进通用台词
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+        for id in crate::character::voiced_character_ids() {
+            let l = Lines::load_dir(&root.join(&id).join("lines"));
+            for (scene, _) in SCENES
+                .iter()
+                .filter(|(s, _)| s.starts_with("plan.") || s.starts_with("briefing.plans"))
+            {
+                let lines = l.scenes.get(*scene);
+                assert!(lines.is_some(), "{id} 没写 {scene}");
+                assert!(
+                    lines.unwrap().iter().all(|x| x.ja.is_some()),
+                    "{id} 的 {scene} 有句没日语"
+                );
+            }
+        }
     }
 
     #[test]

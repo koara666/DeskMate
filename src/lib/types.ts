@@ -41,6 +41,19 @@ export interface PetInit {
   mood?: number;
   idle_animation: boolean;
   dnd: boolean;
+  /** 正在专注计时（计划）：桌宠身上显示还剩多久 */
+  focus?: PlanFocus | null;
+}
+
+/** 专注计时（计划） */
+export interface PlanFocus {
+  task_id: number;
+  title: string;
+  /** 结束时间（Unix 秒） */
+  ends_at: number;
+  minutes: number;
+  /** 后端的「现在」（Unix 秒），用来对齐时钟 */
+  now: number;
 }
 
 export interface ChatMessage {
@@ -64,7 +77,7 @@ export interface ChatInit {
   notice: string | null;
 }
 
-export type MarkerKind = 'task' | 'open' | 'read';
+export type MarkerKind = 'task' | 'open' | 'read' | 'checkin' | 'plan';
 
 /** 气泡里的动作按钮（角色提议打开 / 读取，用户点了才做） */
 export interface ActionView {
@@ -75,7 +88,7 @@ export interface ActionView {
   error: string | null;
 }
 
-export type ProactiveKind = 'reminder' | 'care' | 'briefing' | 'activity' | 'random';
+export type ProactiveKind = 'reminder' | 'plan' | 'care' | 'briefing' | 'activity' | 'random';
 
 /** 角色主动说的话（经过调度器） */
 export interface ProactiveMessage {
@@ -598,7 +611,7 @@ export interface CharacterItem {
   prefs: CharacterPrefs;
 }
 
-/** 可下载的角色（软件里不带任何角色，选了哪位才下载哪位；登记表编在程序里，没下载也能看到） */
+/** 可下载的角色（选了哪位才下载哪位；初始角色七海千秋随安装包带着、全新安装直接装上；登记表编在程序里，没下载也能看到） */
 export interface PackView {
   id: string;
   name: string;
@@ -778,3 +791,490 @@ export interface SavedReminder {
   reminder: ReminderView;
   line: string;
 }
+
+// ---------------- 计划（src-tauri/src/plans） ----------------
+
+export type PlanMode = 'content' | 'habit';
+export type PlanPace = 'even' | 'asap';
+export type PlanStatus = 'active' | 'paused' | 'done' | 'archived';
+
+export interface Plan {
+  id: number;
+  title: string;
+  /** 用户新建时写的原话 */
+  goal: string;
+  emoji: string;
+  mode: PlanMode;
+  start_day: string;
+  /** 截止（空 = 没有） */
+  end_day: string;
+  /** 周一到周日每天能用多少分钟（0 = 那天不排） */
+  week_minutes: number[];
+  off_days: string[];
+  pace: PlanPace;
+  /** "HH:MM"，空 = 不固定 */
+  remind_at: string;
+  supervise: boolean;
+  /** 她的安排思路 */
+  strategy: string;
+  status: PlanStatus;
+  sort: number;
+  created_at: number;
+  updated_at: number;
+  /** 属于哪个计划书（是其中一条线；null = 单独的计划） */
+  goal_id?: number | null;
+  /** 在计划书里默认占几份 */
+  share?: number;
+}
+
+export interface PlanItem {
+  id: number;
+  plan_id: number;
+  title: string;
+  detail: string;
+  minutes: number;
+  status: 'todo' | 'done' | 'skipped';
+  sort: number;
+  done_at: number | null;
+  /** 属于计划书的哪个阶段 */
+  phase_id?: number | null;
+  /** 最早哪天开始 / 自己的截止 / 钉在哪天（空 = 没有） */
+  after_day?: string;
+  due_day?: string;
+  pin_day?: string;
+  /** 还是路线图里粗的一大块 */
+  rough?: boolean;
+}
+
+export interface PlanItemView extends PlanItem {
+  spent: number;
+  left: number;
+}
+
+export interface PlanTask {
+  id: number;
+  plan_id: number | null;
+  item_id: number | null;
+  day: string;
+  orig_day: string;
+  title: string;
+  minutes: number;
+  start: string;
+  status: 'todo' | 'done' | 'skipped';
+  spent: number;
+  finishes: boolean;
+  note: string;
+  source: 'auto' | 'user';
+  sort: number;
+  reminded: boolean;
+  done_at: number | null;
+  created_at: number;
+}
+
+export interface PlanTaskView extends PlanTask {
+  /** 计划的名字（带图标；单独的事情为空） */
+  label: string;
+}
+
+export interface PlanNote {
+  id: number;
+  plan_id: number | null;
+  day: string;
+  content: string;
+  created_at: number;
+}
+
+export interface PlanProgress {
+  total_minutes: number;
+  done_minutes: number;
+  items_total: number;
+  items_done: number;
+  percent: number;
+  /** 预计哪天做完 */
+  finish: string;
+  /** 到截止还差多少分钟 */
+  short_minutes: number;
+  overdue: boolean;
+  streak: number;
+  week_days: number;
+  week_done: number;
+}
+
+export interface PlanDayStat {
+  day: string;
+  planned: number;
+  done: number;
+  tasks: number;
+  tasks_done: number;
+  tasks_todo: number;
+}
+
+export interface PlanUpcomingEntry {
+  plan_id: number | null;
+  label: string;
+  title: string;
+  minutes: number;
+  /** 已经定下的（挪过去的、提前加的）；其余是推算的 */
+  stored: boolean;
+}
+
+export interface PlanUpcoming {
+  day: string;
+  entries: PlanUpcomingEntry[];
+}
+
+export interface PlanSummary {
+  plan: Plan;
+  progress: PlanProgress;
+}
+
+export interface PlanView {
+  plan: Plan;
+  items: PlanItemView[];
+  progress: PlanProgress;
+  upcoming: PlanUpcoming[];
+  history: PlanDayStat[];
+  notes: PlanNote[];
+}
+
+export interface PlanToday {
+  day: string;
+  tasks: PlanTaskView[];
+  notes: PlanNote[];
+  streak: number;
+  planned: number;
+  done: number;
+  upcoming: PlanUpcoming[];
+  plans: PlanSummary[];
+  /** 她对今天的一句话 */
+  say: string;
+}
+
+/** 统计页（后端 plans/stats.rs）：只统计到今天为止 */
+/** 日历上的一条（提前知道的事：作业截止、停课……），见 plans/agenda.rs */
+export interface AgendaEntry {
+  id: number;
+  /** YYYY-MM-DD */
+  day: string;
+  title: string;
+  note: string;
+  /** 搞定了（不再提醒） */
+  done: boolean;
+  done_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PlanStats {
+  today: string;
+  /** 热力图第一格的日子（周一）；heat 从这天起一天一格，到今天为止 */
+  heat_start: string;
+  heat: { day: string; minutes: number; done: number; total: number }[];
+  /** 堆叠柱里的颜色：p<计划 id> / other（其他计划）/ loose（随手的事） */
+  series: { key: string; label: string }[];
+  /** 最近 8 周，旧的在前，最后一个是本周 */
+  weeks: { start: string; minutes: number; parts: { key: string; minutes: number }[] }[];
+  numbers: {
+    week_minutes: number;
+    last_week_minutes: number;
+    /** 过去 28 天的完成率（百分数）；没安排过为 null */
+    rate: number | null;
+    rate_done: number;
+    rate_total: number;
+    streak: number;
+    best_streak: number;
+  };
+  plans: {
+    plan_id: number;
+    title: string;
+    emoji: string;
+    status: PlanStatus;
+    goal_id: number | null;
+    goal_title: string | null;
+    /** 最近 4 周每周做完的分钟，旧的在前 */
+    weeks: number[];
+    total_minutes: number;
+    done_items: number;
+  }[];
+  review: string;
+}
+
+/** 新建计划时用户已经定好的（模型不能改） */
+export interface PlanFixed {
+  title: string;
+  mode: PlanMode | null;
+  week_minutes: number[] | null;
+  end_day: string;
+  start_day: string;
+  remind_at: string;
+}
+
+export interface PlanPreview {
+  /** 前两周每天排什么：[日期, [[标题, 分钟]]] */
+  days: [string, [string, number][]][];
+  finish: string;
+  short_minutes: number;
+  total_minutes: number;
+  per_week: string;
+}
+
+export interface PlanDraft {
+  plan: Plan;
+  items: PlanItem[];
+  /** ai = 模型安排的，local = 本地规则拆的 */
+  source: 'ai' | 'local';
+  notes: string[];
+  preview: PlanPreview;
+}
+
+export type PlanStrictness = 'gentle' | 'normal' | 'strict';
+
+export interface PlanSettings {
+  supervise: boolean;
+  strictness: PlanStrictness;
+  start_remind: boolean;
+  distraction: boolean;
+  checkin: boolean;
+  checkin_at: string;
+  celebrate: boolean;
+  chat_context: boolean;
+  briefing: boolean;
+  focus_minutes: number;
+  /** 计划书：节点当天问达标没有 */
+  milestone_check: boolean;
+  /** 计划书：每周自查 */
+  review: boolean;
+  /** 节点、自查几点开始问 */
+  review_at: string;
+}
+
+export interface PlanBoot {
+  character: CharacterView;
+  /** 她的几张图（idle / happy / think …） */
+  images: Record<string, string>;
+  /** 先显示哪一页：today / new / new:<文字> / plan:<id> / settings */
+  view: string | null;
+  settings: PlanSettings;
+  today: string;
+}
+
+export interface PlanDoneEffect {
+  all_today: boolean;
+  plan_finished: boolean;
+}
+
+// ---------------- 计划书（src-tauri/src/plans/goal.rs） ----------------
+
+export interface GoalBuffer {
+  start: string;
+  end: string;
+  /** 按平时的百分之几排（0 = 不排） */
+  percent: number;
+  note: string;
+}
+
+export interface GoalResource {
+  title: string;
+  url: string;
+  note: string;
+  plan_id: number | null;
+  phase_id: number | null;
+}
+
+export interface GoalQa {
+  q: string;
+  a: string;
+}
+
+export interface Goal {
+  id: number;
+  title: string;
+  emoji: string;
+  summary: string;
+  /** 用户的原话 */
+  source: string;
+  /** 计划书原文（可以整段改） */
+  doc: string;
+  strategy: string;
+  start_day: string;
+  end_day: string;
+  /** 平时周一到周日每天一共能用多少分钟 */
+  week_minutes: number[];
+  off_days: string[];
+  buffers: GoalBuffer[];
+  resources: GoalResource[];
+  checklist: string[];
+  answers: GoalQa[];
+  remind_at: string;
+  /** 每周哪天自查（0 = 周一 … 6 = 周日；-1 = 不自查） */
+  review_day: number;
+  status: PlanStatus;
+  sort: number;
+  created_at: number;
+  updated_at: number;
+  expanded_until: string;
+}
+
+export interface GoalPhase {
+  id: number;
+  goal_id: number;
+  title: string;
+  start_day: string;
+  end_day: string;
+  objective: string;
+  criteria: string[];
+  /** 这个阶段每天一共多少分钟（null = 用计划书的） */
+  week_minutes: number[] | null;
+  /** 线的 id → 份额（空 = 用每条线自己的） */
+  shares: Record<string, number>;
+  sort: number;
+}
+
+export type MilestoneStatus = 'todo' | 'passed' | 'missed' | 'skipped';
+
+export interface GoalMilestone {
+  id: number;
+  goal_id: number;
+  phase_id: number | null;
+  plan_id: number | null;
+  title: string;
+  day: string;
+  criteria: string;
+  status: MilestoneStatus;
+  result: string;
+  checked_at: number | null;
+  sort: number;
+}
+
+export interface GoalTrack {
+  plan: Plan;
+  items: PlanItem[];
+}
+
+export interface GoalFull {
+  goal: Goal;
+  tracks: GoalTrack[];
+  phases: GoalPhase[];
+  milestones: GoalMilestone[];
+}
+
+/** 某条线在某个阶段的量 */
+export interface GoalCell {
+  plan_id: number;
+  share: number;
+  total: number;
+  done: number;
+  items: number;
+  items_done: number;
+  rough: number;
+  finish: string;
+}
+
+export interface GoalPhaseView {
+  phase: GoalPhase;
+  state: 'past' | 'current' | 'future';
+  cells: GoalCell[];
+  total: number;
+  done: number;
+  percent: number;
+  finish: string;
+}
+
+export interface GoalItemViz {
+  id: number;
+  phase_id: number | null;
+  title: string;
+  minutes: number;
+  spent: number;
+  status: 'todo' | 'done' | 'skipped';
+  rough: boolean;
+  pin_day: string;
+  due_day: string;
+  finish: string;
+}
+
+export interface GoalTrackViz {
+  plan_id: number;
+  routine: boolean;
+  total: number;
+  done: number;
+  percent: number;
+  finish: string;
+  /** 不属于任何阶段的内容 */
+  loose: GoalCell;
+  items: GoalItemViz[];
+}
+
+export interface GoalShort {
+  lane: number;
+  minutes: number;
+  by: string;
+}
+
+export interface GoalViz {
+  phases: GoalPhaseView[];
+  tracks: GoalTrackViz[];
+  short: GoalShort[];
+  /** 钉在已经过去的日子还没做的：[线, 条目] */
+  missed: [number, number][];
+  total: number;
+  done: number;
+  percent: number;
+  finish: string;
+  current_phase: number | null;
+  /** 往后两周：[日期, [线, 标题, 分钟][]] */
+  days: [string, [number, string, number][]][];
+}
+
+export interface GoalTrackWeek {
+  plan_id: number;
+  planned: number;
+  done: number;
+  tasks: number;
+  tasks_done: number;
+}
+
+export interface GoalWeekStat {
+  from: string;
+  to: string;
+  planned: number;
+  done: number;
+  tasks: number;
+  tasks_done: number;
+  tracks: GoalTrackWeek[];
+}
+
+export interface GoalView {
+  full: GoalFull;
+  viz: GoalViz;
+  week: GoalWeekStat;
+  notes: PlanNote[];
+}
+
+export interface GoalSummary {
+  goal: Goal;
+  percent: number;
+  tracks: number[];
+  phase: string;
+  /** 下一个节点：[名字, 日期] */
+  next: [string, string] | null;
+  short: boolean;
+}
+
+export interface GoalDraft {
+  full: GoalFull;
+  viz: GoalViz;
+  source: 'ai' | 'local';
+  notes: string[];
+}
+
+export interface PlanQuestion {
+  q: string;
+  options: string[];
+}
+
+/** 「让她来安排」的结果 */
+export type PlanThink =
+  | { kind: 'plan'; draft: PlanDraft }
+  | { kind: 'questions'; questions: PlanQuestion[] }
+  | { kind: 'goal'; draft: GoalDraft };

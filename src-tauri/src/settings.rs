@@ -126,6 +126,8 @@ pub struct Settings {
     pub web: crate::websearch::WebSettings,
     /// 语音输入（默认关闭）
     pub asr: crate::asr::AsrSettings,
+    /// 计划：她怎么监督（提醒、分心、晚上问一句、反应）
+    pub plans: crate::plans::supervise::PlanSettings,
 }
 
 impl Default for Settings {
@@ -161,6 +163,7 @@ impl Default for Settings {
             voice: Default::default(),
             asr: Default::default(),
             web: Default::default(),
+            plans: Default::default(),
         }
     }
 }
@@ -184,6 +187,7 @@ impl Settings {
         self.vision = std::mem::take(&mut self.vision).sanitize();
         self.update = std::mem::take(&mut self.update).sanitize();
         self.voice = std::mem::take(&mut self.voice).sanitize();
+        self.plans = std::mem::take(&mut self.plans).sanitize();
         if !self.vision.backend.is_empty()
             && !self.backends.iter().any(|b| b.id == self.vision.backend)
         {

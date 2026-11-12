@@ -291,6 +291,12 @@ pub fn create_pet(app: &AppHandle) -> tauri::Result<()> {
 
 /// 预先创建（隐藏的）聊天窗口，第一次点击时不用等
 pub fn ensure_chat(app: &AppHandle) -> tauri::Result<WebviewWindow> {
+    // 同时有两处要用聊天窗口（启动时后台预建 + 马上弹出的话）时，只能建一个（理由同 `radial::ensure`）
+    static BUILD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    if let Some(w) = chat(app) {
+        return Ok(w);
+    }
+    let _g = BUILD.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(w) = chat(app) {
         return Ok(w);
     }
@@ -623,6 +629,57 @@ pub fn open_settings(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// 打开计划窗口（`view`：先显示哪一页，today / new / plan:<id> / settings）。不要在主线程上直接调用。
+pub fn open_plans(app: &AppHandle, view: Option<String>) -> tauri::Result<()> {
+    if let Some(v) = view.filter(|v| valid_plans_view(v)) {
+        *app.state::<AppState>()
+            .plans
+            .view
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(v.clone());
+        let _ = app.emit_to("plans", "plans-view", v);
+    }
+    if let Some(w) = app.get_webview_window("plans") {
+        w.show()?;
+        w.unminimize()?;
+        return w.set_focus();
+    }
+    window_builder(app, "plans")?.build()?;
+    Ok(())
+}
+
+/// 计划窗口能跳到的页面
+pub fn valid_plans_view(v: &str) -> bool {
+    matches!(v, "today" | "new" | "settings" | "stats" | "calendar")
+        // 日历：calendar:<YYYY-MM-DD>，打开时先选中那一天
+        || v.strip_prefix("calendar:")
+            .is_some_and(|d| crate::plans::parse_day(d).is_some())
+        || v.strip_prefix("plan:")
+            .is_some_and(|id| id.parse::<i64>().is_ok())
+        // 计划书：goal:<id>，可以带上先打开哪一块（goal:<id>:week / goal:<id>:m<节点 id>）
+        || v.strip_prefix("goal:").is_some_and(|rest| {
+            let mut p = rest.splitn(2, ':');
+            p.next().is_some_and(|id| id.parse::<i64>().is_ok())
+                && p.next().is_none_or(|s| {
+                    s == "week"
+                        || s == "adjust"
+                        || s.strip_prefix('m').is_some_and(|m| m.parse::<i64>().is_ok())
+                })
+        })
+        || v.strip_prefix("new:")
+            .is_some_and(|t| t.chars().count() <= 500)
+}
+
+/// 打开计划窗口（菜单、托盘等在主线程上的回调用）
+pub fn open_plans_async(app: &AppHandle, view: Option<String>) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = open_plans(&app, view) {
+            log::warn!("打开计划窗口失败：{e}");
+        }
+    });
+}
+
 /// 设置变化后通知所有窗口刷新
 pub fn broadcast_settings_changed(app: &AppHandle) {
     let _ = app.emit("settings-changed", ());
@@ -666,7 +723,7 @@ fn build_menu(app: &AppHandle, for_tray: bool) -> tauri::Result<Menu<Wry>> {
         .iter()
         .map(|i| i as &dyn tauri::menu::IsMenuItem<Wry>)
         .collect();
-    // 软件不带角色，要用哪位得先下载：菜单里留一个去下载的入口（一个角色都没有时它是唯一的一项）
+    // 别的角色要先下载：菜单里留一个去下载的入口（万一一个角色都没有时它是唯一的一项）
     let char_sep = PredefinedMenuItem::separator(app)?;
     let char_more = MenuItem::with_id(app, "char_download", "下载更多角色…", true, None::<&str>)?;
     if !char_refs.is_empty() {
@@ -698,6 +755,7 @@ fn build_menu(app: &AppHandle, for_tray: bool) -> tauri::Result<Menu<Wry>> {
     let toggle = MenuItem::with_id(app, "toggle_pet", toggle_text, true, None::<&str>)?;
     let open_chat = MenuItem::with_id(app, "open_chat", "聊天", true, None::<&str>)?;
     let reminders = MenuItem::with_id(app, "reminders", "提醒…", true, None::<&str>)?;
+    let plans = MenuItem::with_id(app, "plans", "计划…", true, None::<&str>)?;
     let games = MenuItem::with_id(app, "games", "一起玩…", true, None::<&str>)?;
     let dnd = CheckMenuItem::with_id(app, "dnd", "勿扰模式", true, s.dnd, None::<&str>)?;
     let top = CheckMenuItem::with_id(
@@ -714,7 +772,16 @@ fn build_menu(app: &AppHandle, for_tray: bool) -> tauri::Result<Menu<Wry>> {
     if for_tray {
         Menu::with_items(
             app,
-            &[&toggle, &dnd, &characters, &sep, &settings, &sep2, &quit],
+            &[
+                &toggle,
+                &dnd,
+                &characters,
+                &sep,
+                &plans,
+                &settings,
+                &sep2,
+                &quit,
+            ],
         )
     } else {
         Menu::with_items(
@@ -722,6 +789,7 @@ fn build_menu(app: &AppHandle, for_tray: bool) -> tauri::Result<Menu<Wry>> {
             &[
                 &open_chat,
                 &games,
+                &plans,
                 &reminders,
                 &characters,
                 &corners,
@@ -799,6 +867,7 @@ fn handle_menu_now(app: &AppHandle, id: &str) {
             }
             "settings" => open_settings(app)?,
             "reminders" => open_settings_tab(app, Some("reminders".into()))?,
+            "plans" => open_plans(app, None)?,
             "char_download" => open_settings_tab(app, Some("characters".into()))?,
             "games" => {
                 show_chat(app, true)?;

@@ -75,6 +75,7 @@
     "allow-web-save",
     "allow-asr-save",
     "allow-asr-status",
-    "allow-asr-download"
+    "allow-asr-download",
+    "allow-plans-open"
   ]
 }

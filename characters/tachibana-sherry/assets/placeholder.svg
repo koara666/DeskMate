@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180">
+  <!-- 橘雪莉占位形象（原创几何图形，不是官方形象）：蓝色卷发 + 深蓝贝雷帽 + 深色外套 -->
+  <ellipse cx="80" cy="172" rx="50" ry="6" fill="#000" opacity="0.12"/>
+  <path d="M30 70 C28 30 132 30 130 70 L138 150 L22 150 Z" fill="#3f78e0"/>
+  <path d="M40 124 L120 124 L132 168 L28 168 Z" fill="#262d57"/>
+  <path d="M70 124 L80 146 L90 124 Z" fill="#2f6fe0"/>
+  <path d="M60 124 L80 150 L70 124 Z" fill="#f4f6fb"/>
+  <path d="M100 124 L80 150 L90 124 Z" fill="#f4f6fb"/>
+  <ellipse cx="80" cy="84" rx="38" ry="42" fill="#ffe6d5"/>
+  <path d="M42 80 C40 46 120 46 118 80 C108 62 94 58 80 66 C66 58 52 62 42 80 Z" fill="#3f78e0"/>
+  <path d="M36 58 C34 28 70 22 100 26 C128 30 130 48 124 58 C100 50 62 50 36 58 Z" fill="#222a55"/>
+  <circle cx="108" cy="34" r="7" fill="#2f6fe0"/>
+  <circle cx="108" cy="34" r="2.6" fill="#fff"/>
+  <ellipse cx="66" cy="90" rx="5.5" ry="7.5" fill="#d08a24"/>
+  <ellipse cx="94" cy="90" rx="5.5" ry="7.5" fill="#d08a24"/>
+  <circle cx="67.5" cy="87.5" r="2" fill="#fff"/>
+  <circle cx="95.5" cy="87.5" r="2" fill="#fff"/>
+  <path d="M60 79 L72 81" stroke="#1b2140" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M100 79 L88 81" stroke="#1b2140" stroke-width="2.5" stroke-linecap="round"/>
+  <ellipse cx="57" cy="103" rx="7" ry="4" fill="#ff9fa8" opacity="0.6"/>
+  <ellipse cx="103" cy="103" rx="7" ry="4" fill="#ff9fa8" opacity="0.6"/>
+  <path d="M75 108 Q80 110 85 107" stroke="#1b2140" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</svg>

@@ -32,6 +32,7 @@ pub mod memory;
 pub mod memory_cmds;
 pub mod notify;
 pub mod paths;
+pub mod plans;
 pub mod privacy;
 pub mod proactive;
 pub mod prompt;
@@ -86,8 +87,15 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let (conn, recovery_note) = memory::backup::open_with_recovery(&paths.db(), &paths.backups())?;
     let builtin = builtin_characters_dir(app);
     let state = AppState::new(paths, conn, builtin, Box::new(secrets::KeyringStore));
-    // 全新安装（用户还没做过任何选择）：安装包里没有角色，要先去设置里挑一位下载（见 charpacks.rs）
+    // 全新安装（用户还没做过任何选择）：先装上安装包里带的初始角色（七海千秋），打开就能看到她；
+    // 之后换角色、删掉都随用户（别的角色在设置里选了才下载，见 charpacks.rs）。装不上（开发版没放角色包）就照旧让用户去设置里挑
     let fresh_install = !state.settings().onboarded;
+    if fresh_install && state.characters().is_empty() {
+        match charpacks::install_bundled(&state) {
+            Ok(id) => log::info!("全新安装：装上了初始角色 {id}"),
+            Err(e) => log::warn!("全新安装：没装上初始角色（{e}），打开设置让用户挑"),
+        }
+    }
     // 第一次使用：桌宠出现后主动弹出气泡说明怎么用（只出现一次；测试实例不弹，免得干扰自动测试）
     // （测试实例设置 DESKMATE_TEST_ONBOARDING=1 时也弹，用来检查引导界面）
     let onboarding = (!paths::test_mode()
@@ -137,6 +145,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     daily::spawn(handle.clone());
     // 提醒：补上关机期间错过的，之后按下一个到期时间触发
     reminders::spawn(handle.clone());
+    // 计划：排好今天、到点提醒、分心提醒、晚上问一句、专注计时
+    plans::supervise::spawn(handle.clone());
+    plans::agenda::spawn(handle.clone());
     // 活动感知：前台窗口切换事件 + 每 30 秒看一眼
     activity::spawn(handle.clone());
     // 检查更新：1 分钟后查一次 GitHub（每天最多一次，可关）
@@ -360,6 +371,44 @@ pub fn run() {
             asr::asr_save,
             asr::asr_download,
             asr::asr_toggle,
+            plans::cmds::plans_open,
+            plans::cmds::plan_boot,
+            plans::cmds::plan_today,
+            plans::cmds::plan_list,
+            plans::cmds::plan_get,
+            plans::stats::plan_stats,
+            plans::agenda::agenda_range,
+            plans::agenda::agenda_save,
+            plans::agenda::agenda_delete,
+            plans::agenda::agenda_done,
+            plans::cmds::plan_draft,
+            plans::cmds::plan_replan,
+            plans::cmds::plan_preview,
+            plans::cmds::plan_apply,
+            plans::cmds::plan_set_status,
+            plans::cmds::plan_delete,
+            plans::cmds::plan_task_save,
+            plans::cmds::plan_task_done,
+            plans::cmds::plan_task_status,
+            plans::cmds::plan_task_move,
+            plans::cmds::plan_task_delete,
+            plans::cmds::plan_note_add,
+            plans::cmds::plan_note_delete,
+            plans::cmds::plan_settings_save,
+            plans::cmds::plan_focus_start,
+            plans::cmds::plan_focus_stop,
+            plans::cmds::plan_focus_state,
+            plans::goal_cmds::plan_think,
+            plans::goal_cmds::goal_preview,
+            plans::goal_cmds::goal_apply,
+            plans::goal_cmds::goal_get,
+            plans::goal_cmds::goal_list,
+            plans::goal_cmds::goal_set_status,
+            plans::goal_cmds::goal_delete,
+            plans::goal_cmds::goal_milestone_check,
+            plans::goal_cmds::goal_expand,
+            plans::goal_cmds::goal_rethink,
+            plans::goal_cmds::goal_render_doc,
         ])
         .build(tauri::generate_context!())
         .expect("DeskMate 启动失败");

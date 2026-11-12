@@ -123,7 +123,7 @@ pub struct Manifest {
 }
 
 /// 程序自带的界面皮肤（样式写在 `src/styles/skins/` 里，角色包只能选，不能带自己的样式代码）
-pub const SKINS: [&str; 3] = ["default", "arcade", "lab"];
+pub const SKINS: [&str; 4] = ["default", "arcade", "lab", "detective"];
 /// 角色包可以改的颜色
 pub const THEME_COLORS: [&str; 10] = [
     "accent",
@@ -141,7 +141,7 @@ pub const THEME_COLORS: [&str; 10] = [
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Theme {
-    /// 皮肤：default（通用）/ arcade（掌机像素风）/ lab（实验室终端风）
+    /// 皮肤：default（通用）/ arcade（掌机像素风）/ lab（实验室终端风）/ detective（侦探笔记本风）
     pub skin: String,
     /// 颜色变量名 → #rgb / #rrggbb / #rrggbbaa
     pub colors: BTreeMap<String, String>,
@@ -752,6 +752,37 @@ mod tests {
     }
 
     #[test]
+    fn sherry_has_her_own_chibi_set() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+        let dir = tempfile::tempdir().unwrap();
+        let chars = load_all(Some(&root), dir.path());
+        let c = chars
+            .iter()
+            .find(|c| c.manifest.id == "tachibana-sherry")
+            .unwrap();
+        let a = appearance(c);
+        assert!(!a.placeholder, "雪莉用自己的 Q 版形象");
+        // 内置的是代码画的 SVG；构建时放进了形象包就是 PNG（走图片协议）。两种都对
+        let ok = |u: &str| {
+            u.starts_with("data:image/svg+xml;base64,") || u.starts_with(image_url_base())
+        };
+        for k in STATES.iter().chain(POSES.iter()) {
+            assert!(a.images.get(*k).is_some_and(|u| ok(u)), "缺少 {k}");
+        }
+        for k in [
+            "idle_good",
+            "idle_low",
+            "idle_night",
+            "idle_rain",
+            "idle_winter",
+        ] {
+            assert!(a.images.contains_key(k), "缺少 {k}");
+        }
+        assert_eq!(c.manifest.theme.skin, "detective");
+        assert!(c.manifest.theme.sanitized().colors.len() >= 8);
+    }
+
+    #[test]
     fn every_registered_character_meets_the_same_bar() {
         // 完整角色同一套标准（登记在 scripts/builtin_characters.json）：以后新增角色登记后自动被查，不能各做各的
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
@@ -1108,8 +1139,12 @@ mod tests {
         let empty = tempfile::tempdir().unwrap();
         let all = load_all(Some(&root), empty.path());
         let ids: Vec<&str> = all.iter().map(|c| c.manifest.id.as_str()).collect();
-        // 现在只留两个做完整的角色；其余角色等做完整再加回来
-        assert_eq!(ids, ["nanami-chiaki", "makise-kurisu"], "按 order 排序");
+        // 现在只留三个做完整的角色；其余角色等做完整再加回来
+        assert_eq!(
+            ids,
+            ["nanami-chiaki", "makise-kurisu", "tachibana-sherry"],
+            "按 order 排序"
+        );
         for c in &all {
             let id = &c.manifest.id;
             assert!(c.persona.contains("示范对话"), "{id} 缺少示范对话");
@@ -1195,6 +1230,41 @@ mod tests {
         // 每个有声音的场景都写了日语版（语音包按日语查），日语版里不留占位符以外的奇怪字符
         let ja = crate::lines::Lines::load_dir(&root.join("makise-kurisu/lines")).all_ja();
         assert!(ja.len() > 200, "红莉栖的日语台词只有 {}", ja.len());
+        for j in &ja {
+            assert!(
+                !j.contains('@') && !j.contains('（') && !j.contains('('),
+                "{j}"
+            );
+        }
+    }
+
+    #[test]
+    fn sherry_ships_her_quote_library_and_japanese_lines() {
+        // 雪莉的台词库（characters/tachibana-sherry/quotes.md）：常驻部分没被预算砍掉，用户提到她的梗会想起相关台词
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../characters");
+        let empty = tempfile::tempdir().unwrap();
+        let all = load_all(Some(&root), empty.path());
+        let c = all
+            .iter()
+            .find(|c| c.manifest.id == "tachibana-sherry")
+            .unwrap();
+        assert!(
+            c.quotes.fixed_count >= 3,
+            "常驻片段 {}",
+            c.quotes.fixed_count
+        );
+        assert_eq!(c.quotes.fixed_dropped, 0, "有常驻片段超出预算被丢掉了");
+        assert!(
+            c.quotes.keyed.len() >= 10,
+            "按关键词取用的 {}",
+            c.quotes.keyed.len()
+        );
+        let hit = crate::quotes::recall(&c.quotes, "你叫我小仙子好不好");
+        assert!(hit.iter().any(|h| h.contains("小仙子")), "{hit:?}");
+        let hit = crate::quotes::recall(&c.quotes, "你的力气好大啊");
+        assert!(hit.iter().any(|h| h.contains("苹果")), "{hit:?}");
+        let ja = crate::lines::Lines::load_dir(&root.join("tachibana-sherry/lines")).all_ja();
+        assert!(ja.len() > 200, "雪莉的日语台词只有 {}", ja.len());
         for j in &ja {
             assert!(
                 !j.contains('@') && !j.contains('（') && !j.contains('('),

@@ -96,7 +96,7 @@ export function SettingsApp({ api }: { api: SettingsApi }) {
         ) : tab === 'companion' ? (
           <CompanionPage api={api} view={view} />
         ) : tab === 'reminders' ? (
-          <RemindersPage api={api} />
+          <RemindersPage api={api} onOpenPlans={() => api.plansOpen().catch(() => {})} />
         ) : tab === 'activity' ? (
           <ActivityPage api={api} view={view} />
         ) : tab === 'voice' ? (

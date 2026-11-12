@@ -1,5 +1,5 @@
 // 角色设置：下载并选择角色、放自己的角色图片、禁词与自定义要求（全局 + 每个角色）。
-// 软件本体不带任何角色：选了哪位才下载哪位（登记表编在程序里，没下载也能看到名字、简介和大小）。
+// 角色选了哪位才下载哪位（登记表编在程序里，没下载也能看到名字、简介和大小）；只有初始角色七海千秋随安装包带着，全新安装直接装上（也能删掉）。
 // 角色设定（persona）本身是只读的，这里不能修改。
 import { useEffect, useState } from 'preact/hooks';
 import type { UnlistenFn } from '@tauri-apps/api/event';
@@ -124,7 +124,7 @@ export function CharactersPage({ api }: { api: SettingsApi }) {
         <>
           <h2>下载角色</h2>
           <p class="muted">
-            软件本体不带角色，用哪位就下载哪位（每位约 5 MB，含 Q 版形象和预录语音）。不想要的可以随时删掉。
+            七海千秋是装好就有的，别的角色用哪位就下载哪位（每位 6～7 MB，含 Q 版形象和预录语音）。不想要的可以随时删掉（千秋也可以）。
           </p>
           <div class="char-grid" data-testid="pack-grid">
             {packs.map((p) => (

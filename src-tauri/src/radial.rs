@@ -71,6 +71,12 @@ pub fn items(dnd: bool, vision: bool, voice: Option<bool>, secret: bool) -> Vec<
             label: "提醒".into(),
             on: false,
         },
+        MenuItem {
+            id: "plans",
+            icon: "📋",
+            label: "计划".into(),
+            on: false,
+        },
     ];
     if vision {
         v.push(MenuItem {
@@ -173,12 +179,100 @@ fn menu_window(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window("menu")
 }
 
+/// 建菜单窗口的锁。启动时后台预建和第一次右键可能同时走到 `ensure`，
+/// 没有锁时两边都看到「还没有菜单窗口」，各建一个，结果叠出好几个同名窗口：
+/// 其中一个残留在最上面、空白透明、把气泡上的点击全吞掉（0.8.0 装完马上右键就会遇到）。
+static BUILD: Mutex<()> = Mutex::new(());
+
 /// 预先建好（藏着的）菜单窗口，第一次右键时不用等
 pub fn ensure(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     if let Some(w) = menu_window(app) {
         return Ok(w);
     }
+    let _g = BUILD.lock().unwrap_or_else(|e| e.into_inner());
+    // 等锁的时候别人可能已经建好了
+    if let Some(w) = menu_window(app) {
+        return Ok(w);
+    }
     desktop::build_window(app, "menu")
+}
+
+/// 把同名但不是「正牌」的菜单窗口藏起来（防止残留的空白透明窗口盖在气泡上吞掉点击）。
+/// 返回藏掉了几个。
+#[cfg(windows)]
+pub fn hide_strays(w: &WebviewWindow) -> usize {
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::System::Threading::GetCurrentProcessId;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, SW_HIDE, ShowWindow,
+    };
+    struct Ctx {
+        keep: isize,
+        title: Vec<u16>,
+        pid: u32,
+        hidden: usize,
+    }
+    unsafe extern "system" fn each(h: HWND, l: LPARAM) -> i32 {
+        let ctx = unsafe { &mut *(l as *mut Ctx) };
+        if h as isize == ctx.keep {
+            return 1;
+        }
+        let mut pid = 0u32;
+        unsafe { GetWindowThreadProcessId(h, &mut pid) };
+        if pid != ctx.pid {
+            return 1;
+        }
+        let mut buf = [0u16; 128];
+        let n = unsafe { GetWindowTextW(h, buf.as_mut_ptr(), buf.len() as i32) }.max(0) as usize;
+        if n > 0 && buf[..n] == ctx.title[..] && unsafe { IsWindowVisible(h) } != 0 {
+            unsafe { ShowWindow(h, SW_HIDE) };
+            ctx.hidden += 1;
+        }
+        1
+    }
+    let (Ok(keep), Ok(title)) = (w.hwnd(), w.title()) else {
+        return 0;
+    };
+    let mut ctx = Ctx {
+        keep: keep.0 as isize,
+        title: title.encode_utf16().collect(),
+        pid: unsafe { GetCurrentProcessId() },
+        hidden: 0,
+    };
+    unsafe { EnumWindows(Some(each), &mut ctx as *mut Ctx as LPARAM) };
+    if ctx.hidden > 0 {
+        log::warn!("藏掉了 {} 个多余的菜单窗口", ctx.hidden);
+    }
+    ctx.hidden
+}
+
+#[cfg(not(windows))]
+pub fn hide_strays(_w: &WebviewWindow) -> usize {
+    0
+}
+
+/// 把菜单窗口提到「总在最前」这一层的最上面（不抢焦点）。
+/// 桌宠、聊天窗口被点一下就会跳到它上面，把菜单压在下面，气泡就点不到了。
+fn raise(w: &WebviewWindow) {
+    #[cfg(windows)]
+    if let Ok(h) = w.hwnd() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
+        };
+        unsafe {
+            SetWindowPos(
+                h.0 as _,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = w;
 }
 
 fn place(app: &AppHandle, w: &WebviewWindow) -> tauri::Result<bool> {
@@ -217,6 +311,7 @@ pub fn position_if_open(app: &AppHandle) -> tauri::Result<()> {
 pub fn open(app: &AppHandle, hold: bool) -> tauri::Result<()> {
     let st = app.state::<AppState>();
     let w = ensure(app)?;
+    hide_strays(&w);
     let below = place(app, &w)?;
     let s = st.settings();
     let secret = crate::lines::seed() % 15 == 0;
@@ -236,6 +331,7 @@ pub fn open(app: &AppHandle, hold: bool) -> tauri::Result<()> {
     };
     let _ = app.emit_to("menu", "menu-show", show);
     crate::daily::show_no_activate(&w);
+    raise(&w);
     let generation = st.desktop.next_menu_gen();
     st.radial.holding.store(hold, Ordering::SeqCst);
     st.radial
@@ -295,6 +391,7 @@ pub fn close(app: &AppHandle, picked: bool, held_ms: i64) {
     st.desktop.next_menu_gen();
     if let Some(w) = menu_window(app) {
         let _ = desktop::hide_window(&w);
+        hide_strays(&w);
     }
     if picked {
         return;
@@ -321,6 +418,7 @@ pub fn close(app: &AppHandle, picked: bool, held_ms: i64) {
 /// 让菜单拿到焦点（右键单击后慢慢选：点别处就收起）
 pub fn focus(app: &AppHandle) {
     if let Some(w) = menu_window(app) {
+        raise(&w);
         let _ = w.set_focus();
     }
 }
@@ -355,6 +453,7 @@ pub fn pick(app: &AppHandle, id: &str) -> Result<(), String> {
                     .unwrap_or_else(|| "要我记着什么？直接说「X 点提醒我……」也可以。".into());
                 let _ = app.emit_to("chat", "chat-reminder-form", say);
             }
+            "plans" => desktop::open_plans_async(app, Some("today".into())),
             "look" => crate::vision::look_now(app, "用户点了「看一眼」，让你看一眼他正在看的窗口"),
             "dnd" => {
                 let on = !st.settings().dnd;
@@ -425,14 +524,16 @@ mod tests {
         let ids: Vec<_> = v.iter().map(|i| i.id).collect();
         assert_eq!(
             ids,
-            ["chat", "games", "remind", "dnd", "hide", "settings", "more"]
+            [
+                "chat", "games", "remind", "plans", "dnd", "hide", "settings", "more"
+            ]
         );
         let v = items(true, true, Some(true), true);
         assert!(v.iter().any(|i| i.id == "look"));
         assert!(v.iter().any(|i| i.id == "secret"));
         assert!(v.iter().find(|i| i.id == "dnd").unwrap().on);
         assert!(v.iter().find(|i| i.id == "voice").unwrap().on);
-        assert!(v.len() <= 11);
+        assert!(v.len() <= 12);
     }
 
     #[test]

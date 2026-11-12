@@ -1,5 +1,5 @@
 {
-  "_说明": "内置「完整角色」登记表：每个有 Q 版形象 + 日语声音的角色都在这里登记。软件里用户挑哪位角色就下载哪位的「角色包」（pack：设定 + 台词 + Q 版形象 + 预录语音，发布页 character-<短名>-v<N>，附件 <id>.tar.bz2），软件本体不带任何角色；形象包 art、语音包 voicepack 是打角色包的原料，声音模型 model 是想要每句都出声的人自己下的。地址按固定规则从这里推出来（scripts/builtin_characters.py）。新增角色只改这个文件，不要再往别处抄地址和校验值。",
+  "_说明": "内置「完整角色」登记表：每个有 Q 版形象 + 日语声音的角色都在这里登记。软件里用户挑哪位角色就下载哪位的「角色包」（pack：设定 + 台词 + Q 版形象 + 预录语音，发布页 character-<短名>-v<N>，附件 <id>.tar.bz2）；软件本体只带一位初始角色（bundled: true，构建时把它的角色包放进安装包，全新安装时直接装上，之后换、删都随用户），其余的选了才下载；形象包 art、语音包 voicepack 是打角色包的原料，声音模型 model 是想要每句都出声的人自己下的。地址按固定规则从这里推出来（scripts/builtin_characters.py）。新增角色只改这个文件，不要再往别处抄地址和校验值。",
   "nanami-chiaki": {
     "label": "千秋",
     "short": "chiaki",
@@ -8,8 +8,8 @@
       "sha256": "9ebba3cfb970f445c8f3af220c0e2120656ec37813f19cf6ad776bcd2b480bff"
     },
     "voicepack": {
-      "version": 1,
-      "sha256": "afe8561b7aaa860951fbbb17ad83f7d2a64dacef45e345d430d1184a0da22e80"
+      "version": 2,
+      "sha256": "834a8e2d5c04ef0ee2fbe0190edb1551feab959e220cb4c5dad768fb607e8efe"
     },
     "model": {
       "version": 1,
@@ -19,10 +19,11 @@
     "description": "超高校级的游戏玩家，说话慢吞吞、总是有点困，却总能温柔地给出关键提示。",
     "color": "#e88fb0",
     "order": 1,
+    "bundled": true,
     "pack": {
-      "version": 1,
-      "sha256": "994fe667218001aaf80d3a235e4f82ca4cb2d606a900ed00fb4ad48634cd9e25",
-      "size": 5022582
+      "version": 2,
+      "sha256": "27c05c8bb520ad8f71eb0738af86d5a99c9c308a08fa4d4651fbc196ef301b0a",
+      "size": 6396284
     }
   },
   "makise-kurisu": {
@@ -33,8 +34,8 @@
       "sha256": "92da038dcc2190552dabf04d46f5af4efe7c518cd69a77fa259f59f1643e1d16"
     },
     "voicepack": {
-      "version": 1,
-      "sha256": "a2876020b35974bc8f532333ef21a182df7cef3132cae2fa5b190b0a7c964bdb"
+      "version": 2,
+      "sha256": "ccee8fab4db4e717f8bfeb611fab020813e956f2406b5e41a4835c6025cbaddc"
     },
     "model": {
       "version": 1,
@@ -45,9 +46,34 @@
     "color": "#b8423a",
     "order": 2,
     "pack": {
+      "version": 2,
+      "sha256": "52898039b7e94010000ca9cff1f8b534abba5ba3ca2fbd3b785486ead23cfb66",
+      "size": 6144026
+    }
+  },
+  "tachibana-sherry": {
+    "label": "雪莉",
+    "short": "sherry",
+    "art": {
       "version": 1,
-      "sha256": "1423409e479b82496a7547df0041f5cc98a060f7bac563e44fafe0beccbebdf4",
-      "size": 5050840
+      "sha256": "fdf82164807f4b4c23edd9de007cc9e93569c1c8db79aee0a2c3cbc3c77fff6c"
+    },
+    "voicepack": {
+      "version": 2,
+      "sha256": "1810c7d8075b40d6379673884463bb1153ecfe278aa83c19ad74a8cb938f1463"
+    },
+    "model": {
+      "version": 1,
+      "sha256": "d18b71b7e52d1e815cd9d389ac57f708b789217d5ebe6efa7f7c061b428a5bad"
+    },
+    "name": "橘雪莉",
+    "description": "自称「名侦探」的悬疑迷，元气满满、好奇心爆棚，嘴上说着「交给我吧」，其实是个观察入微又力气很大的可靠搭档。",
+    "color": "#2f5fd0",
+    "order": 3,
+    "pack": {
+      "version": 2,
+      "sha256": "d1eb07f3db115bc33b86242018250da01957505154ececeaa0e4096303305391",
+      "size": 7358499
     }
   }
 }
